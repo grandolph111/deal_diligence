@@ -1,0 +1,218 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER & AUTH
+// ============================================
+
+model User {
+  id        String   @id @default(uuid())
+  auth0Id   String   @unique
+  email     String   @unique
+  name      String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  memberships   ProjectMember[]
+  assignedTasks TaskAssignee[]
+  createdTasks  Task[]          @relation("TaskCreator")
+}
+
+// ============================================
+// PROJECTS & MEMBERSHIP
+// ============================================
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  members   ProjectMember[]
+  tasks     Task[]
+  documents Document[]
+  tags      Tag[]
+}
+
+model ProjectMember {
+  id          String      @id @default(uuid())
+  projectId   String
+  userId      String
+  role        ProjectRole @default(VIEWER)
+  permissions Json?
+
+  invitedBy  String?
+  invitedAt  DateTime  @default(now())
+  acceptedAt DateTime?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+}
+
+enum ProjectRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+// ============================================
+// KANBAN TASKS
+// ============================================
+
+model Task {
+  id           String       @id @default(uuid())
+  projectId    String
+  title        String
+  description  String?
+  status       TaskStatus   @default(TODO)
+  priority     TaskPriority @default(MEDIUM)
+  riskCategory String?
+
+  assignedDate DateTime?
+  dueDate      DateTime?
+  timeEstimate Int?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy   User             @relation("TaskCreator", fields: [createdById], references: [id])
+  assignees   TaskAssignee[]
+  tags        TaskTag[]
+  attachments TaskAttachment[]
+
+  @@index([projectId])
+  @@index([projectId, status])
+  @@index([createdById])
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  COMPLETE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model TaskAssignee {
+  id         String   @id @default(uuid())
+  taskId     String
+  userId     String
+  assignedAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId])
+  @@index([taskId])
+  @@index([userId])
+}
+
+model Tag {
+  id        String @id @default(uuid())
+  projectId String
+  name      String
+  color     String @default("#6B7280")
+
+  project Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   TaskTag[]
+
+  @@unique([projectId, name])
+  @@index([projectId])
+}
+
+model TaskTag {
+  taskId String
+  tagId  String
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, tagId])
+}
+
+model TaskAttachment {
+  id         String @id @default(uuid())
+  taskId     String
+  documentId String
+
+  task     Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, documentId])
+}
+
+// ============================================
+// VIRTUAL DATA ROOM (Phase 2)
+// ============================================
+
+model Document {
+  id               String         @id @default(uuid())
+  projectId        String
+  name             String
+  s3Key            String
+  mimeType         String
+  sizeBytes        Int
+  documentType     String?
+  language         String?
+  currency         String?
+  region           String?
+  pageCount        Int?
+  extractedText    String?
+  processingStatus DocumentStatus @default(PENDING)
+
+  uploadedById String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskAttachments TaskAttachment[]
+  chunks          DocumentChunk[]
+
+  @@index([projectId, documentType])
+  @@index([projectId, processingStatus])
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  COMPLETE
+  FAILED
+}
+
+model DocumentChunk {
+  id         String @id @default(uuid())
+  documentId String
+  chunkIndex Int
+  content    String
+  pageNumber Int?
+  tokenCount Int?
+  // embedding  Unsupported("vector(1536)")  // Uncomment for pgvector
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, chunkIndex])
+}

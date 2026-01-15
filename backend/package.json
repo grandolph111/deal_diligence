@@ -1,0 +1,48 @@
+{
+  "name": "dealdiligence-backend",
+  "version": "1.0.0",
+  "description": "DealDiligence.ai Backend API",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:ui": "vitest --ui",
+    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:test:setup": "dotenv -e .env.test -- prisma db push",
+    "db:test:reset": "dotenv -e .env.test -- prisma migrate reset --force",
+    "db:local:start": "docker run -d --name dealdiligence-db -p 5432:5432 -e POSTGRES_PASSWORD=password -e POSTGRES_DB=dealdiligence -v dealdiligence-pgdata:/var/lib/postgresql/data postgres:16-alpine || docker start dealdiligence-db",
+    "db:local:stop": "docker stop dealdiligence-db",
+    "db:local:remove": "docker stop dealdiligence-db && docker rm dealdiligence-db && docker volume rm dealdiligence-pgdata"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "express-oauth2-jwt-bearer": "^1.6.0",
+    "helmet": "^8.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.9.0",
+    "@types/supertest": "^6.0.2",
+    "@vitest/coverage-v8": "^2.1.0",
+    "@vitest/ui": "^2.1.0",
+    "dotenv-cli": "^7.4.2",
+    "pg": "^8.17.1",
+    "prisma": "^5.22.0",
+    "supertest": "^7.0.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.0"
+  }
+}
