@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
 import { projectsService } from './projects.service';
-import { createProjectSchema, updateProjectSchema } from './projects.validators';
+import {
+  createProjectSchema,
+  updateProjectSchema,
+  createProjectWorkflowSchema,
+} from './projects.validators';
 import { ApiError } from '../../utils/ApiError';
 import { asyncHandler } from '../../utils/asyncHandler';
 
@@ -78,5 +82,20 @@ export const projectsController = {
     await projectsService.deleteProject(id);
 
     res.status(204).send();
+  }),
+
+  /**
+   * POST /projects/create-workflow
+   * Create a project with optional invites and document uploads
+   */
+  createProjectWorkflow: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      throw ApiError.unauthorized('User not found');
+    }
+
+    const data = createProjectWorkflowSchema.parse(req.body);
+    const result = await projectsService.createProjectWorkflow(data, req.user.id);
+
+    res.status(201).json(result);
   }),
 };

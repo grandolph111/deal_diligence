@@ -3,7 +3,6 @@ import {
   LayoutDashboard,
   FileText,
   Kanban,
-  CheckSquare,
   Users,
   Settings,
 } from 'lucide-react';
@@ -55,16 +54,6 @@ export function Sidebar({ projectId }: SidebarProps) {
             >
               <Kanban className="icon" size={20} />
               <span>Kanban Board</span>
-            </NavLink>
-
-            <NavLink
-              to={`/projects/${projectId}/tasks`}
-              className={({ isActive }) =>
-                `sidebar-link ${isActive ? 'active' : ''}`
-              }
-            >
-              <CheckSquare className="icon" size={20} />
-              <span>Tasks</span>
             </NavLink>
 
             <NavLink

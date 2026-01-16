@@ -31,11 +31,12 @@ export interface Project extends Timestamps {
   id: string;
   name: string;
   description: string | null;
-  _count?: {
-    members: number;
-    tasks: number;
-    documents: number;
-  };
+  // Counts returned from backend (flat properties)
+  memberCount?: number;
+  taskCount?: number;
+  documentCount?: number;
+  // User's role in project (only on list response)
+  role?: Role;
 }
 
 // Granular permissions for members

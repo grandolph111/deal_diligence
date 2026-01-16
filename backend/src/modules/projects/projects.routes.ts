@@ -17,6 +17,9 @@ router.get('/', projectsController.listProjects);
 // POST /api/v1/projects - Create a new project
 router.post('/', projectsController.createProject);
 
+// POST /api/v1/projects/create-workflow - Create project with invites and documents
+router.post('/create-workflow', projectsController.createProjectWorkflow);
+
 // Routes that require project membership
 router.use('/:id', loadProjectMembership);
 

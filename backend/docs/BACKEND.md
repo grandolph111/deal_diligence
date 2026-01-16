@@ -4,7 +4,7 @@
 
 DealDiligence.ai is a deal management platform with project-based collaboration, Kanban task management, and a Virtual Data Room (VDR). This document covers the backend API implementation.
 
-**Current Status**: Phase 1 complete (Projects, Members, Tasks, Tags)
+**Current Status**: Phase 1 in progress (Auth complete, Kanban board & project invites in development)
 
 ---
 
@@ -29,7 +29,8 @@ backend/
 ├── docs/                      # Documentation
 │   └── BACKEND.md            # This file
 ├── prisma/
-│   └── schema.prisma         # Database schema
+│   ├── schema.prisma         # Database schema
+│   └── migrations/           # Database migrations
 ├── src/
 │   ├── app.ts                # Express app configuration
 │   ├── server.ts             # Server entry point
@@ -42,9 +43,10 @@ backend/
 │   │   └── errorHandler.ts   # Global error handling
 │   ├── modules/
 │   │   ├── auth/             # Authentication & user sync
-│   │   ├── projects/         # Project CRUD
+│   │   ├── projects/         # Project CRUD & workflow
 │   │   ├── members/          # Project membership
-│   │   └── tasks/            # Kanban tasks & tags
+│   │   ├── tasks/            # Kanban tasks
+│   │   └── tags/             # Project tags (tags.routes.ts)
 │   ├── utils/
 │   │   ├── ApiError.ts       # Custom error class
 │   │   └── asyncHandler.ts   # Async route wrapper
@@ -206,12 +208,19 @@ Virtual Data Room file.
 | s3Key | String | S3 object key |
 | mimeType | String | File MIME type |
 | sizeBytes | Int | File size |
-| documentType | String? | Classification (contract, financial, etc.) |
+| documentType | String? | Classification (see Document Types below) |
 | language | String? | Detected language |
 | currency | String? | Primary currency mentioned |
 | region | String? | Jurisdiction/region |
+| pageCount | Int? | Number of pages |
 | extractedText | String? | Full text for search |
 | processingStatus | Enum | PENDING, PROCESSING, COMPLETE, FAILED |
+| uploadedById | UUID | User who uploaded the document |
+
+**Document Types:**
+```
+LEGAL, FINANCIAL, TAX, OPERATIONAL, HR, IP, COMMERCIAL, TECHNICAL, OTHER
+```
 
 #### DocumentChunk (Phase 3)
 Chunked content for semantic search.
@@ -237,6 +246,8 @@ Chunked content for semantic search.
 Authorization: Bearer <token>
 ```
 
+**Response Format**: Success responses return data directly (not wrapped). Error responses use a standardized format with `status`, `message`, `error`, and `code` fields.
+
 ### Health Check
 
 | Method | Endpoint | Auth | Description |
@@ -253,18 +264,13 @@ Authorization: Bearer <token>
 **GET /auth/me Response:**
 ```json
 {
-  "status": "success",
-  "data": {
-    "user": {
-      "id": "uuid",
-      "auth0Id": "auth0|123",
-      "email": "user@example.com",
-      "name": "John Doe",
-      "avatarUrl": "https://...",
-      "createdAt": "2024-01-01T00:00:00Z",
-      "updatedAt": "2024-01-01T00:00:00Z"
-    }
-  }
+  "id": "uuid",
+  "auth0Id": "auth0|123",
+  "email": "user@example.com",
+  "name": "John Doe",
+  "avatarUrl": "https://...",
+  "createdAt": "2024-01-01T00:00:00Z",
+  "updatedAt": "2024-01-01T00:00:00Z"
 }
 ```
 
@@ -274,6 +280,7 @@ Authorization: Bearer <token>
 |--------|----------|------|-------|-------------|
 | GET | `/projects` | Yes | Any | List user's projects |
 | POST | `/projects` | Yes | Any | Create project (becomes OWNER) |
+| POST | `/projects/create-workflow` | Yes | Any | Create project with invites & docs |
 | GET | `/projects/:id` | Yes | Member | Get project details |
 | PATCH | `/projects/:id` | Yes | OWNER, ADMIN | Update project |
 | DELETE | `/projects/:id` | Yes | OWNER | Delete project |
@@ -286,26 +293,50 @@ Authorization: Bearer <token>
 }
 ```
 
-**GET /projects Response:**
+**POST /projects/create-workflow Request:**
 ```json
 {
-  "status": "success",
-  "data": {
-    "projects": [
-      {
-        "id": "uuid",
-        "name": "Project Name",
-        "description": "...",
-        "role": "OWNER",
-        "memberCount": 5,
-        "taskCount": 12,
-        "documentCount": 0,
-        "createdAt": "2024-01-01T00:00:00Z",
-        "updatedAt": "2024-01-01T00:00:00Z"
+  "project": {
+    "name": "Project Name",
+    "description": "Optional description"
+  },
+  "invites": [
+    {
+      "email": "user@example.com",
+      "role": "MEMBER",
+      "permissions": {
+        "canAccessKanban": true,
+        "canAccessVDR": true,
+        "canUploadDocs": true
       }
-    ]
-  }
+    }
+  ],
+  "documents": [
+    {
+      "filename": "contract.pdf",
+      "mimeType": "application/pdf",
+      "sizeBytes": 102400,
+      "documentType": "LEGAL"
+    }
+  ]
 }
+```
+
+**GET /projects Response:**
+```json
+[
+  {
+    "id": "uuid",
+    "name": "Project Name",
+    "description": "...",
+    "role": "OWNER",
+    "memberCount": 5,
+    "taskCount": 12,
+    "documentCount": 0,
+    "createdAt": "2024-01-01T00:00:00Z",
+    "updatedAt": "2024-01-01T00:00:00Z"
+  }
+]
 ```
 
 ### Project Members
@@ -328,10 +359,19 @@ Authorization: Bearer <token>
   "permissions": {
     "canAccessKanban": true,
     "canAccessVDR": true,
-    "restrictedToTags": ["tag-id-1", "tag-id-2"]
+    "canUploadDocs": true,
+    "restrictedToTags": ["tag-id-1", "tag-id-2"],
+    "restrictedFolders": ["folder-id-1"]
   }
 }
 ```
+
+**Business Rules:**
+- User must exist before invitation (lookup by email)
+- Cannot invite as OWNER role
+- Cannot promote to OWNER role
+- ADMIN cannot modify other ADMINs
+- OWNER cannot leave without transferring ownership first
 
 ### Tasks
 
@@ -380,15 +420,10 @@ Authorization: Bearer <token>
 **GET /projects/:id/tasks/board Response:**
 ```json
 {
-  "status": "success",
-  "data": {
-    "board": {
-      "TODO": [...tasks],
-      "IN_PROGRESS": [...tasks],
-      "IN_REVIEW": [...tasks],
-      "COMPLETE": [...tasks]
-    }
-  }
+  "TODO": [...tasks],
+  "IN_PROGRESS": [...tasks],
+  "IN_REVIEW": [...tasks],
+  "COMPLETE": [...tasks]
 }
 ```
 
@@ -441,12 +476,15 @@ For MEMBER and VIEWER roles, granular access is controlled via the `permissions`
 
 ```typescript
 interface MemberPermissions {
-  canAccessKanban: boolean;      // Can view Kanban board
-  canAccessVDR: boolean;         // Can view Virtual Data Room
+  canAccessKanban: boolean;      // Can view Kanban board (default: true)
+  canAccessVDR: boolean;         // Can view Virtual Data Room (default: true)
+  canUploadDocs: boolean;        // Can upload documents to VDR (default: true)
   restrictedToTags?: string[];   // Only see tasks with these tags
   restrictedFolders?: string[];  // Only see docs in these folders (Phase 2)
 }
 ```
+
+**Note:** OWNER and ADMIN roles automatically have all permissions regardless of the `permissions` field.
 
 ---
 
@@ -458,10 +496,16 @@ interface MemberPermissions {
 {
   "status": "error",
   "message": "Human-readable error message",
+  "error": "Human-readable error message",
   "code": "ERROR_CODE",
-  "stack": "..." // Development only
+  "stack": "..."
 }
 ```
+
+**Notes:**
+- `error` is an alias of `message` for API compatibility
+- `stack` is only included in development mode
+- `code` provides a machine-readable error identifier
 
 ### HTTP Status Codes
 
@@ -535,21 +579,29 @@ npm run dev
 
 ---
 
-## Future Phases
+## Development Phases
+
+### Phase 1: Core Platform (In Progress)
+- ✅ Authentication (Auth0 integration, user sync)
+- 🔄 Kanban board implementation
+- 🔄 Project invites and membership
+- ⏳ Tags and task filtering
+- ⏳ Role-based task visibility (`restrictedToTags`)
 
 ### Phase 2: Virtual Data Room
 - S3 integration for file storage
 - Document upload with presigned URLs
+- Role-based file access (`restrictedFolders`)
+- File metadata and dashboard (scoped to accessible files)
 - Basic text extraction
-- File metadata and dashboard
 - Document search (full-text)
 
 ### Phase 3: AI-Powered Search
-- pgvector extension for embeddings
 - Document chunking pipeline
-- OpenAI/Cohere embedding generation
+- AI-assisted document search and retrieval
 - Semantic search implementation
-- RAG for document Q&A
+
+*Note: Phase 3 technical implementation is subject to change based on research into AI document processing approaches.*
 
 ---
 
@@ -576,4 +628,4 @@ npm run dev
 
 ---
 
-*Last updated: January 2025*
+*Last updated: January 2026*

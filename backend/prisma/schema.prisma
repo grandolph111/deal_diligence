@@ -38,10 +38,11 @@ model Project {
   updatedAt   DateTime @updatedAt
 
   // Relations
-  members   ProjectMember[]
-  tasks     Task[]
-  documents Document[]
-  tags      Tag[]
+  members            ProjectMember[]
+  pendingInvitations PendingInvitation[]
+  tasks              Task[]
+  documents          Document[]
+  tags               Tag[]
 }
 
 model ProjectMember {
@@ -68,6 +69,26 @@ enum ProjectRole {
   ADMIN
   MEMBER
   VIEWER
+}
+
+model PendingInvitation {
+  id          String      @id @default(uuid())
+  projectId   String
+  email       String
+  role        ProjectRole @default(VIEWER)
+  permissions Json?
+
+  token       String   @unique @default(uuid())
+  invitedBy   String
+  invitedAt   DateTime @default(now())
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, email])
+  @@index([email])
+  @@index([token])
 }
 
 // ============================================

@@ -10,6 +10,9 @@ import projectRoutes from './modules/projects/projects.routes';
 import memberRoutes from './modules/members/members.routes';
 import taskRoutes from './modules/tasks/tasks.routes';
 import tagRoutes from './modules/tasks/tags.routes';
+import documentRoutes from './modules/documents/documents.routes';
+import invitationRoutes from './modules/invitations/invitations.routes';
+import projectInvitationRoutes from './modules/invitations/project-invitations.routes';
 
 const app = express();
 
@@ -37,6 +40,9 @@ app.use('/api/v1/projects', projectRoutes);
 app.use('/api/v1/projects/:id/members', memberRoutes);
 app.use('/api/v1/projects/:id/tasks', taskRoutes);
 app.use('/api/v1/projects/:id/tags', tagRoutes);
+app.use('/api/v1/projects/:id/documents', documentRoutes);
+app.use('/api/v1/projects/:id/invitations', projectInvitationRoutes);
+app.use('/api/v1/invitations', invitationRoutes);
 
 // Error handling
 app.use(notFoundHandler);

@@ -6,6 +6,8 @@ import {
   CallbackPage,
   DashboardPage,
   NotFoundPage,
+  CreateProjectPage,
+  ProjectOverviewPage,
 } from './pages';
 
 /**
@@ -42,25 +44,22 @@ export const router = createBrowserRouter([
         path: 'dashboard',
         element: <DashboardPage />,
       },
-      // Project routes (placeholder for future implementation)
+      // Create new project
       {
         path: 'projects/new',
-        element: <div className="page-placeholder">Create Project (Coming Soon)</div>,
+        element: <CreateProjectPage />,
       },
+      // Project routes
       {
         path: 'projects/:projectId',
         children: [
           {
             index: true,
-            element: <div className="page-placeholder">Project Overview (Coming Soon)</div>,
+            element: <ProjectOverviewPage />,
           },
           {
             path: 'board',
             element: <div className="page-placeholder">Kanban Board (Coming Soon)</div>,
-          },
-          {
-            path: 'tasks',
-            element: <div className="page-placeholder">Tasks List (Coming Soon)</div>,
           },
           {
             path: 'members',

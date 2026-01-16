@@ -1,6 +1,15 @@
 import { prisma } from '../../config/database';
-import { Project, ProjectRole } from '@prisma/client';
-import { CreateProjectInput, UpdateProjectInput } from './projects.validators';
+import { Project, ProjectRole, ProjectMember, PendingInvitation } from '@prisma/client';
+import {
+  CreateProjectInput,
+  UpdateProjectInput,
+  CreateProjectWorkflowInput,
+  InviteInput,
+  DocumentUploadInput,
+} from './projects.validators';
+import { invitationsService } from '../invitations/invitations.service';
+import { documentsService, DocumentUploadResult } from '../documents/documents.service';
+import { s3Service } from '../../services/s3.service';
 
 export const projectsService = {
   /**
@@ -131,5 +140,106 @@ export const projectsService = {
       },
     });
     return membership?.role ?? null;
+  },
+
+  /**
+   * Create a project with optional invites and document upload requests.
+   * This is the main workflow endpoint for creating a new project.
+   */
+  async createProjectWorkflow(
+    data: CreateProjectWorkflowInput,
+    creatorId: string
+  ): Promise<{
+    project: Project;
+    members: {
+      added: ProjectMember[];
+      pending: PendingInvitation[];
+      failed: { email: string; reason: string }[];
+    };
+    documents: {
+      uploads: DocumentUploadResult[];
+      failed: { filename: string; reason: string }[];
+    };
+  }> {
+    // Step 1: Create project with creator as OWNER (transactional)
+    const project = await prisma.project.create({
+      data: {
+        name: data.project.name,
+        description: data.project.description,
+        members: {
+          create: {
+            userId: creatorId,
+            role: ProjectRole.OWNER,
+            acceptedAt: new Date(),
+          },
+        },
+      },
+    });
+
+    // Step 2: Process invites (best-effort)
+    const membersResult = {
+      added: [] as ProjectMember[],
+      pending: [] as PendingInvitation[],
+      failed: [] as { email: string; reason: string }[],
+    };
+
+    if (data.invites && data.invites.length > 0) {
+      const inviteResult = await invitationsService.createBulkInvitations(
+        project.id,
+        creatorId,
+        data.invites.map((invite) => ({
+          email: invite.email,
+          role: invite.role,
+          permissions: invite.permissions,
+        }))
+      );
+
+      membersResult.added = inviteResult.added;
+      membersResult.pending = inviteResult.pending;
+      membersResult.failed = inviteResult.failed;
+    }
+
+    // Step 3: Generate presigned URLs for documents (best-effort)
+    const documentsResult = {
+      uploads: [] as DocumentUploadResult[],
+      failed: [] as { filename: string; reason: string }[],
+    };
+
+    if (data.documents && data.documents.length > 0) {
+      // Check if S3 is configured
+      if (!s3Service.isConfigured()) {
+        documentsResult.failed = data.documents.map((doc) => ({
+          filename: doc.filename,
+          reason: 'S3 is not configured',
+        }));
+      } else {
+        for (const doc of data.documents) {
+          try {
+            const uploadResult = await documentsService.initiateUpload(
+              project.id,
+              creatorId,
+              {
+                filename: doc.filename,
+                mimeType: doc.mimeType,
+                sizeBytes: doc.sizeBytes,
+                documentType: doc.documentType,
+              }
+            );
+            documentsResult.uploads.push(uploadResult);
+          } catch (error) {
+            documentsResult.failed.push({
+              filename: doc.filename,
+              reason: error instanceof Error ? error.message : 'Unknown error',
+            });
+          }
+        }
+      }
+    }
+
+    return {
+      project,
+      members: membersResult,
+      documents: documentsResult,
+    };
   },
 };

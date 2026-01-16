@@ -73,6 +73,9 @@ export function clearMockUser(): void {
   currentMockUser = null;
 }
 
+// Auth0 custom claims namespace (must match auth.controller.ts)
+const AUTH0_NAMESPACE = 'https://api.dealdiligence.ai';
+
 /**
  * Mock Auth0 JWT validation middleware
  * This replaces express-oauth2-jwt-bearer in tests
@@ -91,14 +94,16 @@ export function mockAuthMiddleware(
   }
 
   // Attach the auth payload like the real middleware would
+  // Uses namespaced claims to match Auth0 Action configuration
   (req as any).auth = {
     payload: {
       sub: currentMockUser.sub,
       aud: process.env.AUTH0_AUDIENCE,
       iss: process.env.AUTH0_ISSUER_BASE_URL,
-      email: currentMockUser.email,
-      name: currentMockUser.name,
-      picture: currentMockUser.picture,
+      // Namespaced custom claims (set by Auth0 Action)
+      [`${AUTH0_NAMESPACE}/email`]: currentMockUser.email,
+      [`${AUTH0_NAMESPACE}/name`]: currentMockUser.name,
+      [`${AUTH0_NAMESPACE}/picture`]: currentMockUser.picture,
     },
   };
 

@@ -90,11 +90,11 @@ export function DashboardPage() {
                 <div className="project-stats">
                   <span>
                     <Users size={14} />
-                    {project._count?.members || 0} members
+                    {project.memberCount ?? 0} members
                   </span>
                   <span>
                     <CheckSquare size={14} />
-                    {project._count?.tasks || 0} tasks
+                    {project.taskCount ?? 0} tasks
                   </span>
                 </div>
               </Link>
