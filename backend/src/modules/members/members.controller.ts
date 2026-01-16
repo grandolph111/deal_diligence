@@ -14,10 +14,7 @@ export const membersController = {
 
     const members = await membersService.getProjectMembers(projectId);
 
-    res.json({
-      status: 'success',
-      data: { members },
-    });
+    res.json(members);
   }),
 
   /**
@@ -38,10 +35,7 @@ export const membersController = {
       data
     );
 
-    res.status(201).json({
-      status: 'success',
-      data: { member },
-    });
+    res.status(201).json(member);
   }),
 
   /**
@@ -57,10 +51,7 @@ export const membersController = {
       throw ApiError.notFound('Member not found');
     }
 
-    res.json({
-      status: 'success',
-      data: { member },
-    });
+    res.json(member);
   }),
 
   /**
@@ -81,10 +72,7 @@ export const membersController = {
       req.projectMember.role
     );
 
-    res.json({
-      status: 'success',
-      data: { member },
-    });
+    res.json(member);
   }),
 
   /**
@@ -100,10 +88,7 @@ export const membersController = {
 
     await membersService.removeMember(memberId, req.projectMember.role);
 
-    res.json({
-      status: 'success',
-      message: 'Member removed successfully',
-    });
+    res.status(204).send();
   }),
 
   /**
@@ -119,10 +104,7 @@ export const membersController = {
 
     await membersService.leaveProject(projectId, req.user.id);
 
-    res.json({
-      status: 'success',
-      message: 'Left project successfully',
-    });
+    res.status(204).send();
   }),
 
   /**
@@ -143,9 +125,6 @@ export const membersController = {
 
     await membersService.transferOwnership(projectId, req.user.id, newOwnerId);
 
-    res.json({
-      status: 'success',
-      message: 'Ownership transferred successfully',
-    });
+    res.json({ message: 'Ownership transferred successfully' });
   }),
 };

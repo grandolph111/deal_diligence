@@ -3,6 +3,9 @@ import { authService } from './auth.service';
 import { ApiError } from '../../utils/ApiError';
 import { asyncHandler } from '../../utils/asyncHandler';
 
+// Auth0 custom claims namespace (must match Auth0 Action)
+const AUTH0_NAMESPACE = 'https://api.dealdiligence.ai';
+
 export const authController = {
   /**
    * GET /auth/me
@@ -10,9 +13,10 @@ export const authController = {
    */
   getMe: asyncHandler(async (req: Request, res: Response) => {
     const auth0Id = req.auth?.payload.sub;
-    const email = req.auth?.payload.email as string | undefined;
-    const name = req.auth?.payload.name as string | undefined;
-    const picture = req.auth?.payload.picture as string | undefined;
+    // Read from namespaced custom claims (set by Auth0 Action)
+    const email = req.auth?.payload[`${AUTH0_NAMESPACE}/email`] as string | undefined;
+    const name = req.auth?.payload[`${AUTH0_NAMESPACE}/name`] as string | undefined;
+    const picture = req.auth?.payload[`${AUTH0_NAMESPACE}/picture`] as string | undefined;
 
     if (!auth0Id) {
       throw ApiError.unauthorized('No user identifier in token');
@@ -25,10 +29,7 @@ export const authController = {
       picture,
     });
 
-    res.json({
-      status: 'success',
-      data: { user },
-    });
+    res.json(user);
   }),
 
   /**
@@ -47,9 +48,6 @@ export const authController = {
       avatarUrl,
     });
 
-    res.json({
-      status: 'success',
-      data: { user },
-    });
+    res.json(user);
   }),
 };

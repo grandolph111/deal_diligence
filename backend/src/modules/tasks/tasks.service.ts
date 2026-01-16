@@ -212,6 +212,16 @@ export const tasksService = {
   },
 
   /**
+   * Get a task with raw assignees structure (for API responses that need nested user)
+   */
+  async getTaskWithRawAssignees(taskId: string) {
+    return prisma.task.findUnique({
+      where: { id: taskId },
+      include: taskInclude,
+    });
+  },
+
+  /**
    * Add an assignee to a task
    */
   async addAssignee(taskId: string, userId: string) {
@@ -232,7 +242,7 @@ export const tasksService = {
     });
 
     if (!membership) {
-      throw ApiError.badRequest('User is not a member of this project');
+      throw ApiError.notFound('User is not a member of this project');
     }
 
     return prisma.taskAssignee.create({
@@ -268,6 +278,20 @@ export const tasksService = {
    * Add a tag to a task
    */
   async addTag(taskId: string, tagId: string) {
+    // Verify tag exists
+    const tag = await prisma.tag.findUnique({ where: { id: tagId } });
+    if (!tag) {
+      throw ApiError.notFound('Tag not found');
+    }
+
+    // Check if tag is already on task
+    const existing = await prisma.taskTag.findUnique({
+      where: { taskId_tagId: { taskId, tagId } },
+    });
+    if (existing) {
+      throw ApiError.conflict('Tag is already added to this task');
+    }
+
     return prisma.taskTag.create({
       data: { taskId, tagId },
     });
@@ -306,6 +330,14 @@ export const tasksService = {
    * Create a new tag
    */
   async createTag(projectId: string, name: string, color?: string) {
+    // Check for duplicate tag name in the same project
+    const existing = await prisma.tag.findFirst({
+      where: { projectId, name },
+    });
+    if (existing) {
+      throw ApiError.conflict('A tag with this name already exists in the project');
+    }
+
     return prisma.tag.create({
       data: {
         projectId,

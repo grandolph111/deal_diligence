@@ -8,6 +8,7 @@ export const inviteMemberSchema = z.object({
     .object({
       canAccessKanban: z.boolean().default(true),
       canAccessVDR: z.boolean().default(true),
+      canUploadDocs: z.boolean().default(true),
       restrictedToTags: z.array(z.string()).optional(),
       restrictedFolders: z.array(z.string()).optional(),
     })
@@ -20,6 +21,7 @@ export const updateMemberSchema = z.object({
     .object({
       canAccessKanban: z.boolean().optional(),
       canAccessVDR: z.boolean().optional(),
+      canUploadDocs: z.boolean().optional(),
       restrictedToTags: z.array(z.string()).optional(),
       restrictedFolders: z.array(z.string()).optional(),
     })

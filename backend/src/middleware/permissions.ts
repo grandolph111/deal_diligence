@@ -29,6 +29,15 @@ export const loadProjectMembership = async (
       throw ApiError.unauthorized('User not found');
     }
 
+    // First check if project exists
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+    });
+
+    if (!project) {
+      throw ApiError.notFound('Project not found');
+    }
+
     const membership = await prisma.projectMember.findUnique({
       where: {
         projectId_userId: {

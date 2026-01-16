@@ -20,10 +20,7 @@ export const tasksController = {
 
     const tasks = await tasksService.getProjectTasks(projectId, filters);
 
-    res.json({
-      status: 'success',
-      data: { tasks },
-    });
+    res.json(tasks);
   }),
 
   /**
@@ -35,10 +32,7 @@ export const tasksController = {
 
     const board = await tasksService.getTasksByStatus(projectId);
 
-    res.json({
-      status: 'success',
-      data: { board },
-    });
+    res.json(board);
   }),
 
   /**
@@ -54,10 +48,7 @@ export const tasksController = {
       throw ApiError.notFound('Task not found');
     }
 
-    res.json({
-      status: 'success',
-      data: { task },
-    });
+    res.json(task);
   }),
 
   /**
@@ -77,10 +68,7 @@ export const tasksController = {
     // Fetch the full task with relations
     const fullTask = await tasksService.getTaskById(task.id);
 
-    res.status(201).json({
-      status: 'success',
-      data: { task: fullTask },
-    });
+    res.status(201).json(fullTask);
   }),
 
   /**
@@ -96,10 +84,7 @@ export const tasksController = {
     // Fetch updated task with relations
     const task = await tasksService.getTaskById(taskId);
 
-    res.json({
-      status: 'success',
-      data: { task },
-    });
+    res.json(task);
   }),
 
   /**
@@ -115,10 +100,7 @@ export const tasksController = {
     // Fetch updated task with relations
     const task = await tasksService.getTaskById(taskId);
 
-    res.json({
-      status: 'success',
-      data: { task },
-    });
+    res.json(task);
   }),
 
   /**
@@ -130,10 +112,7 @@ export const tasksController = {
 
     await tasksService.deleteTask(taskId);
 
-    res.json({
-      status: 'success',
-      message: 'Task deleted successfully',
-    });
+    res.status(204).send();
   }),
 
   /**
@@ -148,12 +127,12 @@ export const tasksController = {
       throw ApiError.badRequest('userId is required');
     }
 
-    const assignee = await tasksService.addAssignee(taskId, userId);
+    await tasksService.addAssignee(taskId, userId);
 
-    res.status(201).json({
-      status: 'success',
-      data: { assignee: assignee.user },
-    });
+    // Return the task with assignees
+    const task = await tasksService.getTaskWithRawAssignees(taskId);
+
+    res.status(201).json(task);
   }),
 
   /**
@@ -165,10 +144,7 @@ export const tasksController = {
 
     await tasksService.removeAssignee(taskId, userId);
 
-    res.json({
-      status: 'success',
-      message: 'Assignee removed successfully',
-    });
+    res.json({ message: 'Assignee removed successfully' });
   }),
 
   /**
@@ -185,10 +161,10 @@ export const tasksController = {
 
     await tasksService.addTag(taskId, tagId);
 
-    res.status(201).json({
-      status: 'success',
-      message: 'Tag added successfully',
-    });
+    // Return the task with tags
+    const task = await tasksService.getTaskWithRawAssignees(taskId);
+
+    res.status(201).json(task);
   }),
 
   /**
@@ -200,10 +176,7 @@ export const tasksController = {
 
     await tasksService.removeTag(taskId, tagId);
 
-    res.json({
-      status: 'success',
-      message: 'Tag removed successfully',
-    });
+    res.json({ message: 'Tag removed successfully' });
   }),
 
   /**
@@ -215,15 +188,12 @@ export const tasksController = {
 
     const tags = await tasksService.getProjectTags(projectId);
 
-    res.json({
-      status: 'success',
-      data: {
-        tags: tags.map((t) => ({
-          ...t,
-          taskCount: t._count.tasks,
-        })),
-      },
-    });
+    res.json(
+      tags.map((t) => ({
+        ...t,
+        taskCount: t._count.tasks,
+      }))
+    );
   }),
 
   /**
@@ -240,10 +210,7 @@ export const tasksController = {
 
     const tag = await tasksService.createTag(projectId, name, color);
 
-    res.status(201).json({
-      status: 'success',
-      data: { tag },
-    });
+    res.status(201).json(tag);
   }),
 
   /**
@@ -255,9 +222,6 @@ export const tasksController = {
 
     await tasksService.deleteTag(tagId);
 
-    res.json({
-      status: 'success',
-      message: 'Tag deleted successfully',
-    });
+    res.status(204).send();
   }),
 };

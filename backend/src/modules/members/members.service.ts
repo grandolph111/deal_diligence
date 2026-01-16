@@ -114,7 +114,7 @@ export const membersService = {
 
     // Cannot change OWNER role
     if (member.role === ProjectRole.OWNER) {
-      throw ApiError.forbidden('Cannot modify the project owner');
+      throw ApiError.badRequest('Cannot modify the project owner');
     }
 
     // Cannot promote to OWNER
@@ -192,7 +192,7 @@ export const membersService = {
 
     // OWNER cannot leave - must transfer ownership first
     if (member.role === ProjectRole.OWNER) {
-      throw ApiError.forbidden(
+      throw ApiError.badRequest(
         'Project owner cannot leave. Transfer ownership first.'
       );
     }

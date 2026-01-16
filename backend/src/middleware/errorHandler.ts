@@ -6,6 +6,7 @@ import { config } from '../config';
 interface ErrorResponse {
   status: 'error';
   message: string;
+  error: string;  // Alias for message for API compatibility
   code?: string;
   stack?: string;
 }
@@ -75,6 +76,7 @@ export const errorHandler = (
   const response: ErrorResponse = {
     status: 'error',
     message,
+    error: message,  // Alias for compatibility
     code,
   };
 

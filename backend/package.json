@@ -15,9 +15,10 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
+    "db:test:create": "docker exec dealdiligence-db psql -U postgres -c \"CREATE DATABASE dealdiligence_test;\" || echo Database already exists",
     "db:test:setup": "dotenv -e .env.test -- prisma db push",
     "db:test:reset": "dotenv -e .env.test -- prisma migrate reset --force",
-    "db:local:start": "docker run -d --name dealdiligence-db -p 5432:5432 -e POSTGRES_PASSWORD=password -e POSTGRES_DB=dealdiligence -v dealdiligence-pgdata:/var/lib/postgresql/data postgres:16-alpine || docker start dealdiligence-db",
+    "db:local:start": "docker run -d --name dealdiligence-db -p 5433:5432 -e POSTGRES_PASSWORD=password -e POSTGRES_DB=dealdiligence -v dealdiligence-pgdata:/var/lib/postgresql/data postgres:16-alpine || docker start dealdiligence-db",
     "db:local:stop": "docker stop dealdiligence-db",
     "db:local:remove": "docker stop dealdiligence-db && docker rm dealdiligence-db && docker volume rm dealdiligence-pgdata"
   },

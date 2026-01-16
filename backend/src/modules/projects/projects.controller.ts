@@ -16,10 +16,7 @@ export const projectsController = {
 
     const projects = await projectsService.getUserProjects(req.user.id);
 
-    res.json({
-      status: 'success',
-      data: { projects },
-    });
+    res.json(projects);
   }),
 
   /**
@@ -36,15 +33,10 @@ export const projectsController = {
     }
 
     res.json({
-      status: 'success',
-      data: {
-        project: {
-          ...project,
-          memberCount: project._count.members,
-          taskCount: project._count.tasks,
-          documentCount: project._count.documents,
-        },
-      },
+      ...project,
+      memberCount: project._count.members,
+      taskCount: project._count.tasks,
+      documentCount: project._count.documents,
     });
   }),
 
@@ -60,10 +52,7 @@ export const projectsController = {
     const data = createProjectSchema.parse(req.body);
     const project = await projectsService.createProject(data, req.user.id);
 
-    res.status(201).json({
-      status: 'success',
-      data: { project },
-    });
+    res.status(201).json(project);
   }),
 
   /**
@@ -76,10 +65,7 @@ export const projectsController = {
 
     const project = await projectsService.updateProject(id, data);
 
-    res.json({
-      status: 'success',
-      data: { project },
-    });
+    res.json(project);
   }),
 
   /**
@@ -91,9 +77,6 @@ export const projectsController = {
 
     await projectsService.deleteProject(id);
 
-    res.json({
-      status: 'success',
-      message: 'Project deleted successfully',
-    });
+    res.status(204).send();
   }),
 };
