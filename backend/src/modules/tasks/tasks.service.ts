@@ -32,7 +32,39 @@ const taskInclude = {
   _count: {
     select: {
       attachments: true,
+      comments: true,
+      subtasks: true,
     },
+  },
+};
+
+const taskDetailInclude = {
+  ...taskInclude,
+  comments: {
+    include: {
+      author: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          avatarUrl: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'asc' as const },
+  },
+  subtasks: {
+    include: {
+      assignee: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          avatarUrl: true,
+        },
+      },
+    },
+    orderBy: { order: 'asc' as const },
   },
 };
 
@@ -95,6 +127,8 @@ export const tasksService = {
       assignees: task.assignees.map((a) => a.user),
       tags: task.tags.map((t) => t.tag),
       attachmentCount: task._count.attachments,
+      commentCount: task._count.comments,
+      subtaskCount: task._count.subtasks,
     }));
   },
 
@@ -119,12 +153,12 @@ export const tasksService = {
   },
 
   /**
-   * Get a single task by ID
+   * Get a single task by ID with full details (comments, subtasks)
    */
   async getTaskById(taskId: string) {
     const task = await prisma.task.findUnique({
       where: { id: taskId },
-      include: taskInclude,
+      include: taskDetailInclude,
     });
 
     if (!task) return null;
@@ -134,6 +168,8 @@ export const tasksService = {
       assignees: task.assignees.map((a) => a.user),
       tags: task.tags.map((t) => t.tag),
       attachmentCount: task._count.attachments,
+      commentCount: task._count.comments,
+      subtaskCount: task._count.subtasks,
     };
   },
 

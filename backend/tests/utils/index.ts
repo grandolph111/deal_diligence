@@ -23,6 +23,8 @@ export {
   assignUserToTask,
   addTagToTask,
   seedTestScenario,
+  createTestComment,
+  createTestSubtask,
 } from './db-helpers';
 
 // Test app factory

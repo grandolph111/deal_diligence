@@ -13,6 +13,8 @@ import tagRoutes from './modules/tasks/tags.routes';
 import documentRoutes from './modules/documents/documents.routes';
 import invitationRoutes from './modules/invitations/invitations.routes';
 import projectInvitationRoutes from './modules/invitations/project-invitations.routes';
+import commentRoutes from './modules/comments/comments.routes';
+import subtaskRoutes from './modules/subtasks/subtasks.routes';
 
 const app = express();
 
@@ -43,6 +45,8 @@ app.use('/api/v1/projects/:id/tags', tagRoutes);
 app.use('/api/v1/projects/:id/documents', documentRoutes);
 app.use('/api/v1/projects/:id/invitations', projectInvitationRoutes);
 app.use('/api/v1/invitations', invitationRoutes);
+app.use('/api/v1/projects/:id/tasks/:taskId/comments', commentRoutes);
+app.use('/api/v1/projects/:id/tasks/:taskId/subtasks', subtaskRoutes);
 
 // Error handling
 app.use(notFoundHandler);

@@ -1,4 +1,4 @@
-import { PrismaClient, ProjectRole, TaskStatus, TaskPriority } from '@prisma/client';
+import { PrismaClient, ProjectRole, TaskStatus, TaskPriority, SubtaskStatus } from '@prisma/client';
 import { testUsers, MockUser } from './auth-mock';
 
 // Use a separate Prisma client for tests
@@ -12,6 +12,8 @@ export { prisma as testPrisma };
  */
 export async function cleanDatabase(): Promise<void> {
   // Delete in reverse order of dependencies
+  await prisma.taskComment.deleteMany();
+  await prisma.subtask.deleteMany();
   await prisma.taskTag.deleteMany();
   await prisma.taskAttachment.deleteMany();
   await prisma.taskAssignee.deleteMany();
@@ -257,4 +259,68 @@ export async function seedTestScenario() {
     tasks,
     tags,
   };
+}
+
+/**
+ * Create a test comment on a task
+ */
+export async function createTestComment(
+  taskId: string,
+  authorId: string,
+  data: { content?: string } = {}
+) {
+  return prisma.taskComment.create({
+    data: {
+      taskId,
+      authorId,
+      content: data.content || 'Test comment',
+    },
+    include: {
+      author: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          avatarUrl: true,
+        },
+      },
+    },
+  });
+}
+
+/**
+ * Create a test subtask
+ */
+export async function createTestSubtask(
+  taskId: string,
+  data: {
+    title?: string;
+    description?: string;
+    status?: SubtaskStatus;
+    assigneeId?: string;
+    dueDate?: Date;
+    order?: number;
+  } = {}
+) {
+  return prisma.subtask.create({
+    data: {
+      taskId,
+      title: data.title || 'Test Subtask',
+      description: data.description,
+      status: data.status || SubtaskStatus.TODO,
+      assigneeId: data.assigneeId,
+      dueDate: data.dueDate,
+      order: data.order ?? 0,
+    },
+    include: {
+      assignee: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          avatarUrl: true,
+        },
+      },
+    },
+  });
 }

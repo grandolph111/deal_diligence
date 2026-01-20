@@ -21,9 +21,11 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Relations
-  memberships   ProjectMember[]
-  assignedTasks TaskAssignee[]
-  createdTasks  Task[]          @relation("TaskCreator")
+  memberships      ProjectMember[]
+  assignedTasks    TaskAssignee[]
+  createdTasks     Task[]          @relation("TaskCreator")
+  comments         TaskComment[]   @relation("CommentAuthor")
+  assignedSubtasks Subtask[]       @relation("SubtaskAssignee")
 }
 
 // ============================================
@@ -118,6 +120,8 @@ model Task {
   assignees   TaskAssignee[]
   tags        TaskTag[]
   attachments TaskAttachment[]
+  comments    TaskComment[]
+  subtasks    Subtask[]
 
   @@index([projectId])
   @@index([projectId, status])
@@ -136,6 +140,12 @@ enum TaskPriority {
   MEDIUM
   HIGH
   URGENT
+}
+
+enum SubtaskStatus {
+  TODO
+  IN_PROGRESS
+  COMPLETE
 }
 
 model TaskAssignee {
@@ -173,6 +183,40 @@ model TaskTag {
   tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([taskId, tagId])
+}
+
+model TaskComment {
+  id        String   @id @default(uuid())
+  taskId    String
+  authorId  String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation("CommentAuthor", fields: [authorId], references: [id])
+
+  @@index([taskId])
+  @@index([taskId, createdAt])
+}
+
+model Subtask {
+  id          String        @id @default(uuid())
+  taskId      String
+  title       String
+  description String?
+  status      SubtaskStatus @default(TODO)
+  assigneeId  String?
+  dueDate     DateTime?
+  order       Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  task     Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  assignee User? @relation("SubtaskAssignee", fields: [assigneeId], references: [id])
+
+  @@index([taskId])
+  @@index([taskId, order])
 }
 
 model TaskAttachment {

@@ -8,6 +8,7 @@ import {
   NotFoundPage,
   CreateProjectPage,
   ProjectOverviewPage,
+  KanbanPage,
 } from './pages';
 
 /**
@@ -59,7 +60,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'board',
-            element: <div className="page-placeholder">Kanban Board (Coming Soon)</div>,
+            element: <KanbanPage />,
           },
           {
             path: 'members',

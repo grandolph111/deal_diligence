@@ -11,6 +11,9 @@ export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'COMPLETE';
 // Priority enum matching backend
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
+// Subtask status enum matching backend
+export type SubtaskStatus = 'TODO' | 'IN_PROGRESS' | 'COMPLETE';
+
 // Base timestamps
 export interface Timestamps {
   createdAt: string;
@@ -86,6 +89,32 @@ export interface TaskTag {
   tag: Tag;
 }
 
+// Comment model
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  authorId: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  author: Pick<User, 'id' | 'email' | 'name' | 'avatarUrl'>;
+}
+
+// Subtask model
+export interface Subtask {
+  id: string;
+  taskId: string;
+  title: string;
+  description: string | null;
+  status: SubtaskStatus;
+  assigneeId: string | null;
+  dueDate: string | null;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+  assignee: Pick<User, 'id' | 'email' | 'name' | 'avatarUrl'> | null;
+}
+
 // Task model
 export interface Task extends Timestamps {
   id: string;
@@ -102,6 +131,11 @@ export interface Task extends Timestamps {
   assignees: TaskAssignee[];
   tags: TaskTag[];
   createdBy: User;
+  comments?: TaskComment[];
+  subtasks?: Subtask[];
+  commentCount?: number;
+  subtaskCount?: number;
+  attachmentCount?: number;
 }
 
 // Kanban board response (tasks grouped by status)
@@ -182,4 +216,34 @@ export interface TaskFilters {
   search?: string;
   dueBefore?: string;
   dueAfter?: string;
+}
+
+// Comment DTOs
+export interface CreateCommentDto {
+  content: string;
+}
+
+export interface UpdateCommentDto {
+  content: string;
+}
+
+// Subtask DTOs
+export interface CreateSubtaskDto {
+  title: string;
+  description?: string;
+  status?: SubtaskStatus;
+  assigneeId?: string;
+  dueDate?: string;
+}
+
+export interface UpdateSubtaskDto {
+  title?: string;
+  description?: string | null;
+  status?: SubtaskStatus;
+  assigneeId?: string | null;
+  dueDate?: string | null;
+}
+
+export interface ReorderSubtasksDto {
+  subtaskIds: string[];
 }
