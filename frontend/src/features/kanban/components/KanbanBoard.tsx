@@ -9,12 +9,13 @@ import { useKanbanBoard } from '../hooks/useKanbanBoard';
 import { useTaskDetail } from '../hooks/useTaskDetail';
 import { useDragAndDrop } from '../hooks/useDragAndDrop';
 import { apiClient } from '../../../api';
-import type { Task, TaskStatus } from '../../../types/api';
+import type { Task, TaskStatus, ProjectMember } from '../../../types/api';
 
 interface KanbanBoardProps {
   projectId: string | undefined;
   currentUserId: string | undefined;
   isAdmin: boolean;
+  members?: ProjectMember[];
 }
 
 const columns: { status: TaskStatus; title: string }[] = [
@@ -24,13 +25,13 @@ const columns: { status: TaskStatus; title: string }[] = [
   { status: 'COMPLETE', title: 'Completed' },
 ];
 
-export function KanbanBoard({ projectId, currentUserId, isAdmin }: KanbanBoardProps) {
+export function KanbanBoard({ projectId, currentUserId, isAdmin, members = [] }: KanbanBoardProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createStatus, setCreateStatus] = useState<TaskStatus>('TODO');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   const { board, loading, error, fetchBoard, createTask, moveTask, deleteTask } = useKanbanBoard(projectId);
-  const { task: taskDetail, loading: taskLoading, fetchTask, updateTask, clearTask } = useTaskDetail(projectId);
+  const { task: taskDetail, loading: taskLoading, fetchTask, updateTask, clearTask, addAssignee, removeAssignee } = useTaskDetail(projectId);
   const { activeId, overId, handleDragStart, handleDragOver, handleDragEnd, handleDragCancel } = useDragAndDrop(moveTask);
 
   const sensors = useSensors(
@@ -132,6 +133,7 @@ export function KanbanBoard({ projectId, currentUserId, isAdmin }: KanbanBoardPr
               onAddTask={() => handleAddTask(status)}
               isOver={overId === status}
               activeTaskId={activeId}
+              currentUserId={currentUserId}
             />
           ))}
         </div>
@@ -152,6 +154,7 @@ export function KanbanBoard({ projectId, currentUserId, isAdmin }: KanbanBoardPr
         onClose={() => setShowCreateModal(false)}
         onCreate={createTask}
         initialStatus={createStatus}
+        members={members}
       />
 
       {selectedTask && (
@@ -161,10 +164,13 @@ export function KanbanBoard({ projectId, currentUserId, isAdmin }: KanbanBoardPr
           projectId={projectId}
           currentUserId={currentUserId}
           isAdmin={isAdmin}
+          members={members}
           onClose={handleCloseDrawer}
           onUpdate={updateTask}
           onDelete={deleteTask}
           onRefresh={handleRefresh}
+          onAddAssignee={addAssignee}
+          onRemoveAssignee={removeAssignee}
         />
       )}
     </div>

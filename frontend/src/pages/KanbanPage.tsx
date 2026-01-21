@@ -75,6 +75,7 @@ export function KanbanPage() {
         projectId={projectId}
         currentUserId={currentUserId}
         isAdmin={isAdmin}
+        members={members}
       />
 
       {projectId && (

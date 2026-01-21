@@ -8,9 +8,10 @@ interface TaskCardProps {
   task: Task;
   onClick: () => void;
   isDragging?: boolean;
+  currentUserId?: string;
 }
 
-export function TaskCard({ task, onClick, isDragging }: TaskCardProps) {
+export function TaskCard({ task, onClick, isDragging, currentUserId }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: task.id,
   });
@@ -30,6 +31,7 @@ export function TaskCard({ task, onClick, isDragging }: TaskCardProps) {
   };
 
   const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
+  const isAssignedToMe = currentUserId && task.assignees?.some(a => a.user?.id === currentUserId);
 
   return (
     <div
@@ -37,7 +39,7 @@ export function TaskCard({ task, onClick, isDragging }: TaskCardProps) {
       style={style}
       {...listeners}
       {...attributes}
-      className={`task-card ${isDragging ? 'dragging' : ''}`}
+      className={`task-card ${isDragging ? 'dragging' : ''} ${isAssignedToMe ? 'assigned-to-me' : ''}`}
       onClick={onClick}
     >
       <div className="task-card-header">
@@ -91,7 +93,7 @@ export function TaskCard({ task, onClick, isDragging }: TaskCardProps) {
             </span>
           )}
         </div>
-        <AssigneeAvatars assignees={(task.assignees || []).map(a => a.user)} maxDisplay={2} />
+        <AssigneeAvatars assignees={(task.assignees || []).map(a => a.user).filter(Boolean)} maxDisplay={2} />
       </div>
     </div>
   );

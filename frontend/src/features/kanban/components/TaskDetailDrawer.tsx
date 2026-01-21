@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
-import { X, Calendar, User, Tag, Trash2 } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { X, Calendar, User, Tag, Trash2, Plus } from 'lucide-react';
 import { PriorityBadge } from './PriorityBadge';
 import { CommentList } from './CommentList';
 import { SubtaskList } from './SubtaskList';
 import { useComments } from '../hooks/useComments';
 import { useSubtasks } from '../hooks/useSubtasks';
-import type { Task, Priority, TaskStatus, UpdateTaskDto, SubtaskStatus } from '../../../types/api';
+import type { Task, Priority, TaskStatus, UpdateTaskDto, SubtaskStatus, ProjectMember } from '../../../types/api';
 
 interface TaskDetailDrawerProps {
   task: Task | null;
@@ -13,10 +13,13 @@ interface TaskDetailDrawerProps {
   projectId: string | undefined;
   currentUserId: string | undefined;
   isAdmin: boolean;
+  members?: ProjectMember[];
   onClose: () => void;
   onUpdate: (taskId: string, data: UpdateTaskDto) => Promise<Task>;
   onDelete: (taskId: string) => Promise<void>;
   onRefresh: () => void;
+  onAddAssignee?: (taskId: string, userId: string) => Promise<void>;
+  onRemoveAssignee?: (taskId: string, userId: string) => Promise<void>;
 }
 
 export function TaskDetailDrawer({
@@ -25,10 +28,13 @@ export function TaskDetailDrawer({
   projectId,
   currentUserId,
   isAdmin,
+  members = [],
   onClose,
   onUpdate,
   onDelete,
   onRefresh,
+  onAddAssignee,
+  onRemoveAssignee,
 }: TaskDetailDrawerProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -39,6 +45,9 @@ export function TaskDetailDrawer({
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
+  const [assigneeLoading, setAssigneeLoading] = useState<string | null>(null);
+  const assigneeDropdownRef = useRef<HTMLDivElement>(null);
 
   const {
     comments,
@@ -69,6 +78,17 @@ export function TaskDetailDrawer({
       fetchSubtasks().catch(() => {});
     }
   }, [task, fetchComments, fetchSubtasks]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (assigneeDropdownRef.current && !assigneeDropdownRef.current.contains(event.target as Node)) {
+        setShowAssigneeDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   if (!task) return null;
 
@@ -116,6 +136,27 @@ export function TaskDetailDrawer({
     await updateSubtask(subtaskId, { status });
   };
 
+  const handleAddAssignee = async (userId: string) => {
+    if (!onAddAssignee) return;
+    setAssigneeLoading(userId);
+    try {
+      await onAddAssignee(task.id, userId);
+      setShowAssigneeDropdown(false);
+    } finally {
+      setAssigneeLoading(null);
+    }
+  };
+
+  const handleRemoveAssignee = async (userId: string) => {
+    if (!onRemoveAssignee) return;
+    setAssigneeLoading(userId);
+    try {
+      await onRemoveAssignee(task.id, userId);
+    } finally {
+      setAssigneeLoading(null);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -123,6 +164,11 @@ export function TaskDetailDrawer({
       day: 'numeric',
     });
   };
+
+  // Get list of members not already assigned
+  const availableMembers = members.filter(
+    member => member.user && !task.assignees?.some(a => a.user?.id === member.user.id)
+  );
 
   return (
     <div className="drawer-overlay" onClick={onClose}>
@@ -229,9 +275,9 @@ export function TaskDetailDrawer({
                   Assignees
                 </h4>
                 <div className="assignees-list">
-                  {task.assignees && task.assignees.length > 0 ? (
-                    task.assignees.map((taskAssignee) => (
-                      <div key={taskAssignee.user.id} className="assignee-chip">
+                  {task.assignees && task.assignees.filter(a => a.user).length > 0 ? (
+                    task.assignees.filter(a => a.user).map((taskAssignee) => (
+                      <div key={taskAssignee.user.id} className="assignee-chip-editable">
                         {taskAssignee.user.avatarUrl ? (
                           <img src={taskAssignee.user.avatarUrl} alt={taskAssignee.user.name || ''} />
                         ) : (
@@ -240,10 +286,67 @@ export function TaskDetailDrawer({
                           </span>
                         )}
                         <span>{taskAssignee.user.name || taskAssignee.user.email}</span>
+                        {onRemoveAssignee && (
+                          <button
+                            className="chip-remove-btn"
+                            onClick={() => handleRemoveAssignee(taskAssignee.user.id)}
+                            disabled={assigneeLoading === taskAssignee.user.id}
+                          >
+                            {assigneeLoading === taskAssignee.user.id ? (
+                              <div className="loading-spinner" style={{ width: 12, height: 12 }} />
+                            ) : (
+                              <X size={14} />
+                            )}
+                          </button>
+                        )}
                       </div>
                     ))
                   ) : (
                     <p className="no-assignees">No assignees</p>
+                  )}
+
+                  {/* Add Assignee Button */}
+                  {onAddAssignee && availableMembers.length > 0 && (
+                    <div className="add-assignee-container" ref={assigneeDropdownRef}>
+                      <button
+                        className="add-assignee-btn"
+                        onClick={() => setShowAssigneeDropdown(!showAssigneeDropdown)}
+                      >
+                        <Plus size={14} />
+                        Add
+                      </button>
+
+                      {showAssigneeDropdown && (
+                        <div className="add-assignee-dropdown">
+                          {availableMembers.map(member => (
+                            <div
+                              key={member.user.id}
+                              className="assignee-select-option"
+                              onClick={() => handleAddAssignee(member.user.id)}
+                            >
+                              <span className="assignee-avatar">
+                                {member.user.avatarUrl ? (
+                                  <img src={member.user.avatarUrl} alt="" />
+                                ) : (
+                                  (member.user.name || member.user.email || '?')[0].toUpperCase()
+                                )}
+                              </span>
+                              <div className="assignee-option-info">
+                                <div className="assignee-option-name">{member.user.name || member.user.email}</div>
+                                {member.user.name && <div className="assignee-option-email">{member.user.email}</div>}
+                              </div>
+                              {assigneeLoading === member.user.id && (
+                                <div className="loading-spinner" style={{ width: 16, height: 16 }} />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {onAddAssignee && availableMembers.length === 0 && task.assignees && task.assignees.filter(a => a.user).length > 0 && (
+                    <span className="no-members-available">All members assigned</span>
                   )}
                 </div>
               </div>

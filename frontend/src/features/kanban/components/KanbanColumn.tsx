@@ -11,6 +11,7 @@ interface KanbanColumnProps {
   onAddTask: () => void;
   isOver?: boolean;
   activeTaskId?: string | null;
+  currentUserId?: string;
 }
 
 const columnColors: Record<TaskStatus, string> = {
@@ -28,6 +29,7 @@ export function KanbanColumn({
   onAddTask,
   isOver,
   activeTaskId,
+  currentUserId,
 }: KanbanColumnProps) {
   const { setNodeRef } = useDroppable({
     id: status,
@@ -56,6 +58,7 @@ export function KanbanColumn({
             task={task}
             onClick={() => onTaskClick(task)}
             isDragging={activeTaskId === task.id}
+            currentUserId={currentUserId}
           />
         ))}
 

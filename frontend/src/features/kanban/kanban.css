@@ -880,3 +880,212 @@
 .button.danger:hover:not(:disabled) {
   background-color: #b91c1c;
 }
+
+/* Task Card - Assigned to Me Highlight */
+.task-card.assigned-to-me {
+  border-left: 3px solid var(--color-primary);
+  background-color: var(--color-primary-light);
+}
+
+.task-card.assigned-to-me:hover {
+  border-left-color: var(--color-primary);
+}
+
+/* Assignee Selection Dropdown */
+.assignee-select-container {
+  position: relative;
+}
+
+.assignee-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-primary);
+  cursor: pointer;
+  min-height: 40px;
+}
+
+.assignee-select-trigger:hover {
+  border-color: var(--border-secondary);
+}
+
+.assignee-select-placeholder {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.assignee-select-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: var(--space-1);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 50;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.assignee-select-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  transition: background-color var(--transition-base);
+}
+
+.assignee-select-option:hover {
+  background-color: var(--bg-secondary);
+}
+
+.assignee-select-option.selected {
+  background-color: var(--color-primary-light);
+}
+
+.assignee-select-option .assignee-avatar {
+  margin-left: 0;
+}
+
+.assignee-option-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.assignee-option-name {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assignee-option-email {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assignee-check {
+  color: var(--color-primary);
+}
+
+/* Selected Assignees Chips */
+.selected-assignees {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  flex: 1;
+}
+
+.selected-assignee-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px 2px 2px var(--space-2);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+}
+
+.selected-assignee-chip .assignee-avatar {
+  width: 18px;
+  height: 18px;
+  font-size: 8px;
+  margin-left: 0;
+}
+
+.chip-remove-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+  transition: all var(--transition-base);
+}
+
+.chip-remove-btn:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* Editable Assignee Chips in Drawer */
+.assignee-chip-editable {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+}
+
+.assignee-chip-editable img {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+}
+
+.assignee-chip-editable .chip-remove-btn {
+  width: 20px;
+  height: 20px;
+}
+
+/* Add Assignee Button */
+.add-assignee-container {
+  position: relative;
+  display: inline-block;
+}
+
+.add-assignee-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px dashed var(--border-secondary);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.add-assignee-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background-color: var(--color-primary-light);
+}
+
+.add-assignee-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: var(--space-1);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 50;
+  min-width: 250px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.no-members-available {
+  padding: var(--space-3);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}

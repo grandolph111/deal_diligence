@@ -124,8 +124,6 @@ export const tasksService = {
 
     return tasks.map((task) => ({
       ...task,
-      assignees: task.assignees.map((a) => a.user),
-      tags: task.tags.map((t) => t.tag),
       attachmentCount: task._count.attachments,
       commentCount: task._count.comments,
       subtaskCount: task._count.subtasks,
@@ -165,8 +163,6 @@ export const tasksService = {
 
     return {
       ...task,
-      assignees: task.assignees.map((a) => a.user),
-      tags: task.tags.map((t) => t.tag),
       attachmentCount: task._count.attachments,
       commentCount: task._count.comments,
       subtaskCount: task._count.subtasks,
@@ -279,6 +275,14 @@ export const tasksService = {
 
     if (!membership) {
       throw ApiError.notFound('User is not a member of this project');
+    }
+
+    // Check if assignee already exists
+    const existing = await prisma.taskAssignee.findUnique({
+      where: { taskId_userId: { taskId, userId } },
+    });
+    if (existing) {
+      throw ApiError.conflict('User is already assigned to this task');
     }
 
     return prisma.taskAssignee.create({

@@ -1,16 +1,17 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { TaskForm } from './TaskForm';
-import type { Task, TaskStatus, CreateTaskDto } from '../../../types/api';
+import type { Task, TaskStatus, CreateTaskDto, ProjectMember } from '../../../types/api';
 
 interface TaskCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreate: (data: CreateTaskDto) => Promise<Task>;
   initialStatus?: TaskStatus;
+  members?: ProjectMember[];
 }
 
-export function TaskCreateModal({ isOpen, onClose, onCreate, initialStatus }: TaskCreateModalProps) {
+export function TaskCreateModal({ isOpen, onClose, onCreate, initialStatus, members }: TaskCreateModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
@@ -37,6 +38,7 @@ export function TaskCreateModal({ isOpen, onClose, onCreate, initialStatus }: Ta
         <div className="modal-content">
           <TaskForm
             initialStatus={initialStatus}
+            members={members}
             onSubmit={handleCreate}
             onCancel={onClose}
             isSubmitting={isSubmitting}
