@@ -26,6 +26,11 @@ model User {
   createdTasks     Task[]          @relation("TaskCreator")
   comments         TaskComment[]   @relation("CommentAuthor")
   assignedSubtasks Subtask[]       @relation("SubtaskAssignee")
+
+  // VDR Relations
+  uploadedDocuments Document[]     @relation("DocumentUploader")
+  linkedDocuments   TaskDocument[] @relation("TaskDocumentLinker")
+  auditLogs         AuditLog[]     @relation("AuditLogUser")
 }
 
 // ============================================
@@ -47,6 +52,10 @@ model Project {
   tasks              Task[]
   documents          Document[]
   tags               Tag[]
+
+  // VDR Relations
+  folders   Folder[]
+  auditLogs AuditLog[]
 }
 
 model ProjectMember {
@@ -117,13 +126,14 @@ model Task {
   updatedAt   DateTime @updatedAt
 
   // Relations
-  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy   User             @relation("TaskCreator", fields: [createdById], references: [id])
-  assignees   TaskAssignee[]
-  tags        TaskTag[]
-  attachments TaskAttachment[]
-  comments    TaskComment[]
-  subtasks    Subtask[]
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy     User             @relation("TaskCreator", fields: [createdById], references: [id])
+  assignees     TaskAssignee[]
+  tags          TaskTag[]
+  attachments   TaskAttachment[]
+  comments      TaskComment[]
+  subtasks      Subtask[]
+  taskDocuments TaskDocument[]
 
   @@index([projectId])
   @@index([projectId, status])
@@ -236,29 +246,74 @@ model TaskAttachment {
 // VIRTUAL DATA ROOM (Phase 2)
 // ============================================
 
+model Folder {
+  id        String  @id @default(uuid())
+  projectId String
+  name      String
+  parentId  String?
+
+  // Standard DD category marker
+  categoryType String?
+
+  // Access control
+  isViewOnly Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent    Folder?    @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[]   @relation("FolderHierarchy")
+  documents Document[]
+
+  @@unique([projectId, parentId, name])
+  @@index([projectId])
+  @@index([parentId])
+}
+
 model Document {
-  id               String         @id @default(uuid())
-  projectId        String
-  name             String
-  s3Key            String
-  mimeType         String
-  sizeBytes        Int
-  documentType     String?
-  language         String?
-  currency         String?
-  region           String?
-  pageCount        Int?
-  extractedText    String?
+  id        String @id @default(uuid())
+  projectId String
+  folderId  String?
+
+  // File info
+  name      String
+  s3Key     String @unique
+  mimeType  String
+  sizeBytes Int
+
+  // BerryDB integration
+  berryDbId        String?        @unique
   processingStatus DocumentStatus @default(PENDING)
 
+  // Extracted metadata (synced from BerryDB)
+  documentType  String?
+  riskLevel     String?
+  pageCount     Int?
+  extractedText String? @db.Text
+  language      String?
+  currency      String?
+  region        String?
+
+  // Access control
+  isViewOnly Boolean @default(false)
+
+  // Audit
   uploadedById String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // Relations
   project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  folder          Folder?          @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  uploadedBy      User             @relation("DocumentUploader", fields: [uploadedById], references: [id])
   taskAttachments TaskAttachment[]
   chunks          DocumentChunk[]
+  taskDocuments   TaskDocument[]
 
+  @@index([projectId])
+  @@index([projectId, folderId])
   @@index([projectId, documentType])
   @@index([projectId, processingStatus])
 }
@@ -274,7 +329,7 @@ model DocumentChunk {
   id         String @id @default(uuid())
   documentId String
   chunkIndex Int
-  content    String
+  content    String @db.Text
   pageNumber Int?
   tokenCount Int?
   // embedding  Unsupported("vector(1536)")  // Uncomment for pgvector
@@ -282,4 +337,56 @@ model DocumentChunk {
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@index([documentId, chunkIndex])
+}
+
+// ============================================
+// TASK-DOCUMENT LINKING
+// ============================================
+
+model TaskDocument {
+  id         String @id @default(uuid())
+  taskId     String
+  documentId String
+
+  // Audit
+  linkedById String
+  linkedAt   DateTime @default(now())
+
+  // Relations
+  task     Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  linkedBy User     @relation("TaskDocumentLinker", fields: [linkedById], references: [id])
+
+  @@unique([taskId, documentId])
+  @@index([taskId])
+  @@index([documentId])
+}
+
+// ============================================
+// AUDIT LOGGING
+// ============================================
+
+model AuditLog {
+  id         String @id @default(uuid())
+  projectId  String
+  userId     String
+
+  action       String // upload, download, view, search, chat, delete, etc.
+  resourceType String // document, folder, chat, project, etc.
+  resourceId   String?
+
+  metadata  Json?   // Additional context (search query, etc.)
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation("AuditLogUser", fields: [userId], references: [id])
+
+  @@index([projectId])
+  @@index([projectId, createdAt])
+  @@index([projectId, action])
+  @@index([userId])
 }

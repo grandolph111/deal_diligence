@@ -13,6 +13,7 @@ import { invitationsService } from '../invitations/invitations.service';
 import { documentsService, DocumentUploadResult } from '../documents/documents.service';
 import { s3Service } from '../../services/s3.service';
 import { ApiError } from '../../utils/ApiError';
+import { seedDefaultFolders } from '../folders/folders.seed';
 
 export const projectsService = {
   /**
@@ -69,13 +70,14 @@ export const projectsService = {
   },
 
   /**
-   * Create a new project and set creator as OWNER
+   * Create a new project and set creator as OWNER.
+   * Also seeds the default VDR folder taxonomy.
    */
   async createProject(
     data: CreateProjectInput,
     creatorId: string
   ): Promise<Project> {
-    return prisma.project.create({
+    const project = await prisma.project.create({
       data: {
         name: data.name,
         description: data.description,
@@ -88,6 +90,16 @@ export const projectsService = {
         },
       },
     });
+
+    // Seed default VDR folder taxonomy (best-effort, non-blocking)
+    try {
+      await seedDefaultFolders(project.id);
+    } catch (error) {
+      // Log but don't fail project creation if folder seeding fails
+      console.error('Failed to seed default folders for project:', project.id, error);
+    }
+
+    return project;
   },
 
   /**
@@ -178,6 +190,14 @@ export const projectsService = {
         },
       },
     });
+
+    // Step 1.5: Seed default VDR folder taxonomy (best-effort)
+    try {
+      await seedDefaultFolders(project.id);
+    } catch (error) {
+      // Log but don't fail project creation if folder seeding fails
+      console.error('Failed to seed default folders for project:', project.id, error);
+    }
 
     // Step 2: Process invites (best-effort)
     const membersResult = {
