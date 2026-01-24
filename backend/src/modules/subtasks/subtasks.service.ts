@@ -78,6 +78,11 @@ export const subtasksService = {
       throw ApiError.notFound('Subtask not found');
     }
 
+    // Verify subtask belongs to this project (IDOR protection)
+    if (subtask.task.projectId !== projectId) {
+      throw ApiError.notFound('Subtask not found in this project');
+    }
+
     if (data.assigneeId) {
       const membership = await prisma.projectMember.findUnique({
         where: {
@@ -109,13 +114,19 @@ export const subtasksService = {
     });
   },
 
-  async deleteSubtask(subtaskId: string) {
+  async deleteSubtask(subtaskId: string, projectId: string) {
     const subtask = await prisma.subtask.findUnique({
       where: { id: subtaskId },
+      include: { task: true },
     });
 
     if (!subtask) {
       throw ApiError.notFound('Subtask not found');
+    }
+
+    // Verify subtask belongs to this project (IDOR protection)
+    if (subtask.task.projectId !== projectId) {
+      throw ApiError.notFound('Subtask not found in this project');
     }
 
     await prisma.subtask.delete({

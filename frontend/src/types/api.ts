@@ -34,6 +34,8 @@ export interface Project extends Timestamps {
   id: string;
   name: string;
   description: string | null;
+  isArchived?: boolean;
+  archivedAt?: string | null;
   // Counts returned from backend (flat properties)
   memberCount?: number;
   taskCount?: number;
@@ -44,8 +46,9 @@ export interface Project extends Timestamps {
 
 // Granular permissions for members
 export interface MemberPermissions {
-  canAccessKanban: boolean;
-  canAccessVDR: boolean;
+  canAccessKanban?: boolean;
+  canAccessVDR?: boolean;
+  canUploadDocs?: boolean;
   restrictedToTags?: string[];
   restrictedFolders?: string[];
 }
@@ -56,11 +59,37 @@ export interface ProjectMember extends Timestamps {
   projectId: string;
   userId: string;
   role: Role;
-  permissions: MemberPermissions;
+  permissions: MemberPermissions | null;
   invitedBy: string | null;
   invitedAt: string | null;
   acceptedAt: string | null;
   user: User;
+}
+
+// Pending invitation model
+export interface PendingInvitation {
+  id: string;
+  projectId: string;
+  email: string;
+  role: Role;
+  permissions: MemberPermissions | null;
+  token: string;
+  invitedBy: string;
+  invitedAt: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+  project?: {
+    id: string;
+    name: string;
+    description: string | null;
+  };
+}
+
+// Invitation result (returned when creating an invitation)
+export interface InvitationResult {
+  type: 'existing_user' | 'pending_invitation';
+  member?: ProjectMember;
+  invitation?: PendingInvitation;
 }
 
 // Tag model
@@ -173,6 +202,12 @@ export interface InviteMemberDto {
 
 export interface UpdateMemberDto {
   role?: Role;
+  permissions?: Partial<MemberPermissions>;
+}
+
+export interface CreateInvitationDto {
+  email: string;
+  role: Exclude<Role, 'OWNER'>;
   permissions?: Partial<MemberPermissions>;
 }
 

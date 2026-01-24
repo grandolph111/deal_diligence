@@ -28,5 +28,10 @@ export const updateMemberSchema = z.object({
     .optional(),
 });
 
+export const transferOwnershipSchema = z.object({
+  newOwnerId: z.string().uuid('Invalid user ID'),
+});
+
 export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
 export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
+export type TransferOwnershipInput = z.infer<typeof transferOwnershipSchema>;

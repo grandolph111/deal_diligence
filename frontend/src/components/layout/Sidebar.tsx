@@ -1,11 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import {
-  LayoutDashboard,
-  FileText,
-  Kanban,
-  Users,
-  Settings,
-} from 'lucide-react';
+import { LayoutDashboard, FileText, Kanban, Settings } from 'lucide-react';
 
 interface SidebarProps {
   projectId?: string;
@@ -54,16 +48,6 @@ export function Sidebar({ projectId }: SidebarProps) {
             >
               <Kanban className="icon" size={20} />
               <span>Kanban Board</span>
-            </NavLink>
-
-            <NavLink
-              to={`/projects/${projectId}/members`}
-              className={({ isActive }) =>
-                `sidebar-link ${isActive ? 'active' : ''}`
-              }
-            >
-              <Users className="icon" size={20} />
-              <span>Team</span>
             </NavLink>
 
             <NavLink

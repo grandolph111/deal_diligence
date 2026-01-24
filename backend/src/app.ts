@@ -1,8 +1,15 @@
+/// <reference path="./types/express.d.ts" />
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { config } from './config';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import {
+  requestIdMiddleware,
+  csrfProtection,
+  globalRateLimiter,
+  authRateLimiter,
+} from './middleware/security';
 
 // Import routes
 import authRoutes from './modules/auth/auth.routes';
@@ -18,8 +25,29 @@ import subtaskRoutes from './modules/subtasks/subtasks.routes';
 
 const app = express();
 
-// Security middleware
-app.use(helmet());
+// Request ID middleware - add unique ID to each request for tracing
+app.use(requestIdMiddleware);
+
+// Security middleware with enhanced configuration
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+      },
+    },
+    hsts: {
+      maxAge: 31536000, // 1 year
+      includeSubDomains: true,
+      preload: true,
+    },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  })
+);
+
 app.use(
   cors({
     origin: config.cors.frontendUrl,
@@ -27,17 +55,23 @@ app.use(
   })
 );
 
-// Body parsing
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Body parsing with size limits to prevent DoS
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// Health check (no auth required)
+// Global rate limiting
+app.use(globalRateLimiter);
+
+// CSRF protection for state-changing requests
+app.use(csrfProtection);
+
+// Health check (no auth required, minimal info)
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok' });
 });
 
-// API routes
-app.use('/api/v1/auth', authRoutes);
+// API routes with appropriate rate limiting
+app.use('/api/v1/auth', authRateLimiter, authRoutes);
 app.use('/api/v1/projects', projectRoutes);
 app.use('/api/v1/projects/:id/members', memberRoutes);
 app.use('/api/v1/projects/:id/tasks', taskRoutes);

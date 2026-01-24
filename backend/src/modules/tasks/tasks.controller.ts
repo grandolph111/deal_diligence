@@ -5,6 +5,9 @@ import {
   updateTaskSchema,
   updateTaskStatusSchema,
   taskFiltersSchema,
+  addAssigneeSchema,
+  addTagToTaskSchema,
+  createTagSchema,
 } from './tasks.validators';
 import { ApiError } from '../../utils/ApiError';
 import { asyncHandler } from '../../utils/asyncHandler';
@@ -40,7 +43,10 @@ export const tasksController = {
    * Get a single task
    */
   getTask: asyncHandler(async (req: Request, res: Response) => {
-    const { taskId } = req.params;
+    const { id: projectId, taskId } = req.params;
+
+    // Verify task belongs to this project (IDOR protection)
+    await tasksService.verifyTaskInProject(taskId, projectId);
 
     const task = await tasksService.getTaskById(taskId);
 
@@ -76,7 +82,10 @@ export const tasksController = {
    * Update a task
    */
   updateTask: asyncHandler(async (req: Request, res: Response) => {
-    const { taskId } = req.params;
+    const { id: projectId, taskId } = req.params;
+
+    // Verify task belongs to this project (IDOR protection)
+    await tasksService.verifyTaskInProject(taskId, projectId);
 
     const data = updateTaskSchema.parse(req.body);
     await tasksService.updateTask(taskId, data);
@@ -92,7 +101,10 @@ export const tasksController = {
    * Update task status (for drag-and-drop)
    */
   updateTaskStatus: asyncHandler(async (req: Request, res: Response) => {
-    const { taskId } = req.params;
+    const { id: projectId, taskId } = req.params;
+
+    // Verify task belongs to this project (IDOR protection)
+    await tasksService.verifyTaskInProject(taskId, projectId);
 
     const { status } = updateTaskStatusSchema.parse(req.body);
     await tasksService.updateTaskStatus(taskId, status);
@@ -108,7 +120,10 @@ export const tasksController = {
    * Delete a task
    */
   deleteTask: asyncHandler(async (req: Request, res: Response) => {
-    const { taskId } = req.params;
+    const { id: projectId, taskId } = req.params;
+
+    // Verify task belongs to this project (IDOR protection)
+    await tasksService.verifyTaskInProject(taskId, projectId);
 
     await tasksService.deleteTask(taskId);
 
@@ -120,12 +135,12 @@ export const tasksController = {
    * Add an assignee to a task
    */
   addAssignee: asyncHandler(async (req: Request, res: Response) => {
-    const { taskId } = req.params;
-    const { userId } = req.body;
+    const { id: projectId, taskId } = req.params;
 
-    if (!userId) {
-      throw ApiError.badRequest('userId is required');
-    }
+    // Verify task belongs to this project (IDOR protection)
+    await tasksService.verifyTaskInProject(taskId, projectId);
+
+    const { userId } = addAssigneeSchema.parse(req.body);
 
     await tasksService.addAssignee(taskId, userId);
 
@@ -140,7 +155,10 @@ export const tasksController = {
    * Remove an assignee from a task
    */
   removeAssignee: asyncHandler(async (req: Request, res: Response) => {
-    const { taskId, userId } = req.params;
+    const { id: projectId, taskId, userId } = req.params;
+
+    // Verify task belongs to this project (IDOR protection)
+    await tasksService.verifyTaskInProject(taskId, projectId);
 
     await tasksService.removeAssignee(taskId, userId);
 
@@ -152,12 +170,15 @@ export const tasksController = {
    * Add a tag to a task
    */
   addTag: asyncHandler(async (req: Request, res: Response) => {
-    const { taskId } = req.params;
-    const { tagId } = req.body;
+    const { id: projectId, taskId } = req.params;
 
-    if (!tagId) {
-      throw ApiError.badRequest('tagId is required');
-    }
+    // Verify task belongs to this project (IDOR protection)
+    await tasksService.verifyTaskInProject(taskId, projectId);
+
+    const { tagId } = addTagToTaskSchema.parse(req.body);
+
+    // Verify tag belongs to this project (IDOR protection)
+    await tasksService.verifyTagInProject(tagId, projectId);
 
     await tasksService.addTag(taskId, tagId);
 
@@ -172,7 +193,13 @@ export const tasksController = {
    * Remove a tag from a task
    */
   removeTag: asyncHandler(async (req: Request, res: Response) => {
-    const { taskId, tagId } = req.params;
+    const { id: projectId, taskId, tagId } = req.params;
+
+    // Verify task belongs to this project (IDOR protection)
+    await tasksService.verifyTaskInProject(taskId, projectId);
+
+    // Verify tag belongs to this project (IDOR protection)
+    await tasksService.verifyTagInProject(tagId, projectId);
 
     await tasksService.removeTag(taskId, tagId);
 
@@ -202,11 +229,8 @@ export const tasksController = {
    */
   createTag: asyncHandler(async (req: Request, res: Response) => {
     const { id: projectId } = req.params;
-    const { name, color } = req.body;
 
-    if (!name) {
-      throw ApiError.badRequest('name is required');
-    }
+    const { name, color } = createTagSchema.parse(req.body);
 
     const tag = await tasksService.createTag(projectId, name, color);
 
@@ -218,7 +242,10 @@ export const tasksController = {
    * Delete a tag
    */
   deleteTag: asyncHandler(async (req: Request, res: Response) => {
-    const { tagId } = req.params;
+    const { id: projectId, tagId } = req.params;
+
+    // Verify tag belongs to this project (IDOR protection)
+    await tasksService.verifyTagInProject(tagId, projectId);
 
     await tasksService.deleteTag(tagId);
 

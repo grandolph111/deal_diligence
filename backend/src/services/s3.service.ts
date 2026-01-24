@@ -5,7 +5,19 @@ import {
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import path from 'path';
 import { config } from '../config';
+
+/**
+ * Sanitize filename to prevent path traversal attacks
+ * Removes directory components and dangerous characters
+ */
+function sanitizeFilename(filename: string): string {
+  // Extract just the filename (remove any path components)
+  const baseName = path.basename(filename);
+  // Remove any remaining dangerous characters
+  return baseName.replace(/[<>:"|?*\\\/]/g, '_');
+}
 
 const s3Client = new S3Client({
   region: config.s3.region,
@@ -36,7 +48,9 @@ export const s3Service = {
     filename: string,
     mimeType: string
   ): Promise<PresignedUploadResult> {
-    const s3Key = `projects/${projectId}/documents/${documentId}/${filename}`;
+    // Sanitize filename to prevent path traversal attacks
+    const safeFilename = sanitizeFilename(filename);
+    const s3Key = `projects/${projectId}/documents/${documentId}/${safeFilename}`;
 
     const command = new PutObjectCommand({
       Bucket: config.s3.bucket,

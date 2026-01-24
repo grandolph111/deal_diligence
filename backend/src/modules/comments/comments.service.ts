@@ -45,13 +45,24 @@ export const commentsService = {
     });
   },
 
-  async updateComment(commentId: string, authorId: string, data: UpdateCommentInput) {
+  async updateComment(
+    commentId: string,
+    authorId: string,
+    projectId: string,
+    data: UpdateCommentInput
+  ) {
     const comment = await prisma.taskComment.findUnique({
       where: { id: commentId },
+      include: { task: true },
     });
 
     if (!comment) {
       throw ApiError.notFound('Comment not found');
+    }
+
+    // Verify comment belongs to this project (IDOR protection)
+    if (comment.task.projectId !== projectId) {
+      throw ApiError.notFound('Comment not found in this project');
     }
 
     if (comment.authorId !== authorId) {
@@ -65,13 +76,24 @@ export const commentsService = {
     });
   },
 
-  async deleteComment(commentId: string, userId: string, isAdmin: boolean) {
+  async deleteComment(
+    commentId: string,
+    userId: string,
+    projectId: string,
+    isAdmin: boolean
+  ) {
     const comment = await prisma.taskComment.findUnique({
       where: { id: commentId },
+      include: { task: true },
     });
 
     if (!comment) {
       throw ApiError.notFound('Comment not found');
+    }
+
+    // Verify comment belongs to this project (IDOR protection)
+    if (comment.task.projectId !== projectId) {
+      throw ApiError.notFound('Comment not found in this project');
     }
 
     if (comment.authorId !== userId && !isAdmin) {

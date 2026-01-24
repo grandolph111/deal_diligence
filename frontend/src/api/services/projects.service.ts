@@ -44,4 +44,18 @@ export const projectsService = {
   async deleteProject(id: string): Promise<void> {
     return apiClient.delete(`/projects/${id}`);
   },
+
+  /**
+   * Archive or unarchive a project
+   */
+  async archiveProject(id: string, isArchived: boolean): Promise<Project> {
+    return apiClient.post<Project>(`/projects/${id}/archive`, { isArchived });
+  },
+
+  /**
+   * Transfer project ownership to another member
+   */
+  async transferOwnership(id: string, newOwnerId: string): Promise<void> {
+    return apiClient.post(`/projects/${id}/transfer-ownership`, { newOwnerId });
+  },
 };

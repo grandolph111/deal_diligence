@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
 import { membersService } from './members.service';
-import { inviteMemberSchema, updateMemberSchema } from './members.validators';
+import {
+  inviteMemberSchema,
+  updateMemberSchema,
+  transferOwnershipSchema,
+} from './members.validators';
 import { ApiError } from '../../utils/ApiError';
 import { asyncHandler } from '../../utils/asyncHandler';
 
@@ -113,15 +117,12 @@ export const membersController = {
    */
   transferOwnership: asyncHandler(async (req: Request, res: Response) => {
     const { id: projectId } = req.params;
-    const { newOwnerId } = req.body;
 
     if (!req.user) {
       throw ApiError.unauthorized('User not found');
     }
 
-    if (!newOwnerId) {
-      throw ApiError.badRequest('newOwnerId is required');
-    }
+    const { newOwnerId } = transferOwnershipSchema.parse(req.body);
 
     await membersService.transferOwnership(projectId, req.user.id, newOwnerId);
 

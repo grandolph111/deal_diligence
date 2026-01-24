@@ -4,6 +4,8 @@ import {
   createProjectSchema,
   updateProjectSchema,
   createProjectWorkflowSchema,
+  archiveProjectSchema,
+  transferOwnershipSchema,
 } from './projects.validators';
 import { ApiError } from '../../utils/ApiError';
 import { asyncHandler } from '../../utils/asyncHandler';
@@ -97,5 +99,35 @@ export const projectsController = {
     const result = await projectsService.createProjectWorkflow(data, req.user.id);
 
     res.status(201).json(result);
+  }),
+
+  /**
+   * POST /projects/:id/archive
+   * Archive or unarchive a project (OWNER/ADMIN only)
+   */
+  archiveProject: asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const data = archiveProjectSchema.parse(req.body);
+
+    const project = await projectsService.archiveProject(id, data);
+
+    res.json(project);
+  }),
+
+  /**
+   * POST /projects/:id/transfer-ownership
+   * Transfer project ownership to another member (OWNER only)
+   */
+  transferOwnership: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      throw ApiError.unauthorized('User not found');
+    }
+
+    const { id } = req.params;
+    const data = transferOwnershipSchema.parse(req.body);
+
+    await projectsService.transferOwnership(id, req.user.id, data);
+
+    res.json({ message: 'Ownership transferred successfully' });
   }),
 };

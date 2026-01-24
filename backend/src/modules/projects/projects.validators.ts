@@ -47,8 +47,20 @@ export const createProjectWorkflowSchema = z.object({
   documents: z.array(documentUploadSchema).max(50).optional(),
 });
 
+// Archive project schema
+export const archiveProjectSchema = z.object({
+  isArchived: z.boolean(),
+});
+
+// Transfer ownership schema
+export const transferOwnershipSchema = z.object({
+  newOwnerId: z.string().uuid('Invalid user ID'),
+});
+
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 export type CreateProjectWorkflowInput = z.infer<typeof createProjectWorkflowSchema>;
 export type InviteInput = z.infer<typeof inviteSchema>;
 export type DocumentUploadInput = z.infer<typeof documentUploadSchema>;
+export type ArchiveProjectInput = z.infer<typeof archiveProjectSchema>;
+export type TransferOwnershipInput = z.infer<typeof transferOwnershipSchema>;

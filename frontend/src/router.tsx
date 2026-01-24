@@ -9,6 +9,7 @@ import {
   CreateProjectPage,
   ProjectOverviewPage,
   KanbanPage,
+  SettingsPage,
 } from './pages';
 
 /**
@@ -64,11 +65,11 @@ export const router = createBrowserRouter([
           },
           {
             path: 'members',
-            element: <div className="page-placeholder">Team Members (Coming Soon)</div>,
+            element: <Navigate to="settings?tab=team" replace />,
           },
           {
             path: 'settings',
-            element: <div className="page-placeholder">Project Settings (Coming Soon)</div>,
+            element: <SettingsPage />,
           },
         ],
       },

@@ -8,7 +8,6 @@ interface ErrorResponse {
   message: string;
   error: string;  // Alias for message for API compatibility
   code?: string;
-  stack?: string;
 }
 
 export const errorHandler = (
@@ -64,12 +63,13 @@ export const errorHandler = (
     code = 'VALIDATION_ERROR';
   }
 
-  // Log error in development
+  // Log error server-side only (never expose stack to client)
   if (config.isDev) {
     console.error('Error:', {
       message: err.message,
       stack: err.stack,
       statusCode,
+      requestId: (req as Request & { requestId?: string }).requestId,
     });
   }
 
@@ -80,11 +80,7 @@ export const errorHandler = (
     code,
   };
 
-  // Include stack trace in development
-  if (config.isDev) {
-    response.stack = err.stack;
-  }
-
+  // Never include stack trace in response, even in development
   res.status(statusCode).json(response);
 };
 

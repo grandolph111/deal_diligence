@@ -58,17 +58,4 @@ export const membersService = {
   async leaveProject(projectId: string): Promise<void> {
     return apiClient.post(`/projects/${projectId}/members/leave`);
   },
-
-  /**
-   * Transfer project ownership to another member
-   */
-  async transferOwnership(
-    projectId: string,
-    newOwnerId: string
-  ): Promise<ProjectMember> {
-    return apiClient.post<ProjectMember>(
-      `/projects/${projectId}/members/transfer-ownership`,
-      { newOwnerId }
-    );
-  },
 };

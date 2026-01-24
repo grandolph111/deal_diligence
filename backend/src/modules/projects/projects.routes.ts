@@ -40,4 +40,18 @@ router.delete(
   projectsController.deleteProject
 );
 
+// POST /api/v1/projects/:id/archive - Archive or unarchive project (OWNER/ADMIN)
+router.post(
+  '/:id/archive',
+  requireRole('OWNER', 'ADMIN'),
+  projectsController.archiveProject
+);
+
+// POST /api/v1/projects/:id/transfer-ownership - Transfer ownership (OWNER only)
+router.post(
+  '/:id/transfer-ownership',
+  requireRole('OWNER'),
+  projectsController.transferOwnership
+);
+
 export default router;

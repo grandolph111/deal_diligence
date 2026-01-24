@@ -12,10 +12,54 @@ export const documentTypeEnum = z.enum([
   'OTHER',
 ]);
 
+// Allowed MIME types for document uploads (security: prevent executable files)
+const ALLOWED_MIME_TYPES = [
+  // Documents
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'text/csv',
+  'application/rtf',
+  // Images
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/tiff',
+  // Archives (commonly used in M&A)
+  'application/zip',
+  'application/x-zip-compressed',
+] as const;
+
+// Maximum file size: 100MB
+const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
+
 export const initiateUploadSchema = z.object({
-  filename: z.string().min(1, 'Filename is required').max(255),
-  mimeType: z.string().min(1, 'MIME type is required'),
-  sizeBytes: z.number().int().positive('File size must be positive'),
+  filename: z
+    .string()
+    .min(1, 'Filename is required')
+    .max(255, 'Filename is too long')
+    .refine(
+      (name) => !name.includes('..') && !name.includes('/') && !name.includes('\\'),
+      'Filename contains invalid characters'
+    ),
+  mimeType: z
+    .string()
+    .min(1, 'MIME type is required')
+    .refine(
+      (type) => ALLOWED_MIME_TYPES.includes(type as (typeof ALLOWED_MIME_TYPES)[number]),
+      'File type not allowed. Supported types: PDF, Word, Excel, PowerPoint, images, and ZIP files.'
+    ),
+  sizeBytes: z
+    .number()
+    .int()
+    .positive('File size must be positive')
+    .max(MAX_FILE_SIZE_BYTES, 'File size exceeds maximum allowed (100MB)'),
   documentType: documentTypeEnum.optional(),
 });
 

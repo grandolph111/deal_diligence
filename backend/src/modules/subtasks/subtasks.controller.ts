@@ -39,9 +39,9 @@ export const subtasksController = {
   }),
 
   deleteSubtask: asyncHandler(async (req: Request, res: Response) => {
-    const { subtaskId } = req.params;
+    const { id: projectId, subtaskId } = req.params;
 
-    await subtasksService.deleteSubtask(subtaskId);
+    await subtasksService.deleteSubtask(subtaskId, projectId);
 
     res.status(204).send();
   }),

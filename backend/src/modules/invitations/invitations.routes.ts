@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { invitationsController } from './invitations.controller';
 import { requireAuth } from '../../middleware/auth';
+import { invitationRateLimiter } from '../../middleware/security';
 
 const router = Router();
 
@@ -8,7 +9,8 @@ const router = Router();
 router.get('/pending', requireAuth, invitationsController.listPendingForUser);
 
 // Public route - get invitation by token (for preview)
-router.get('/:token', invitationsController.getInvitationByToken);
+// Rate limited to prevent token enumeration
+router.get('/:token', invitationRateLimiter, invitationsController.getInvitationByToken);
 
 // POST /api/v1/invitations/:token/accept - Accept an invitation (authenticated)
 router.post('/:token/accept', requireAuth, invitationsController.acceptInvitation);

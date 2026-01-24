@@ -6,10 +6,13 @@ import {
   CreateProjectWorkflowInput,
   InviteInput,
   DocumentUploadInput,
+  ArchiveProjectInput,
+  TransferOwnershipInput,
 } from './projects.validators';
 import { invitationsService } from '../invitations/invitations.service';
 import { documentsService, DocumentUploadResult } from '../documents/documents.service';
 import { s3Service } from '../../services/s3.service';
+import { ApiError } from '../../utils/ApiError';
 
 export const projectsService = {
   /**
@@ -241,5 +244,72 @@ export const projectsService = {
       members: membersResult,
       documents: documentsResult,
     };
+  },
+
+  /**
+   * Archive or unarchive a project
+   */
+  async archiveProject(
+    projectId: string,
+    data: ArchiveProjectInput
+  ): Promise<Project> {
+    return prisma.project.update({
+      where: { id: projectId },
+      data: {
+        isArchived: data.isArchived,
+        archivedAt: data.isArchived ? new Date() : null,
+      },
+    });
+  },
+
+  /**
+   * Transfer project ownership to another member
+   */
+  async transferOwnership(
+    projectId: string,
+    currentOwnerId: string,
+    data: TransferOwnershipInput
+  ): Promise<void> {
+    // Verify current owner
+    const currentOwner = await prisma.projectMember.findUnique({
+      where: {
+        projectId_userId: {
+          projectId,
+          userId: currentOwnerId,
+        },
+      },
+    });
+
+    if (!currentOwner || currentOwner.role !== ProjectRole.OWNER) {
+      throw ApiError.forbidden('Only the owner can transfer ownership');
+    }
+
+    // Verify new owner is a member
+    const newOwner = await prisma.projectMember.findUnique({
+      where: {
+        projectId_userId: {
+          projectId,
+          userId: data.newOwnerId,
+        },
+      },
+    });
+
+    if (!newOwner) {
+      throw ApiError.notFound('New owner must be a project member');
+    }
+
+    // Transfer ownership in a transaction
+    await prisma.$transaction([
+      // Demote current owner to ADMIN
+      prisma.projectMember.update({
+        where: { id: currentOwner.id },
+        data: { role: ProjectRole.ADMIN },
+      }),
+      // Promote new owner
+      prisma.projectMember.update({
+        where: { id: newOwner.id },
+        data: { role: ProjectRole.OWNER },
+      }),
+    ]);
   },
 };

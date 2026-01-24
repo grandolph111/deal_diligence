@@ -26,20 +26,25 @@ export const commentsController = {
   }),
 
   updateComment: asyncHandler(async (req: Request, res: Response) => {
-    const { commentId } = req.params;
+    const { id: projectId, commentId } = req.params;
 
     if (!req.user) {
       throw ApiError.unauthorized('User not found');
     }
 
     const data = updateCommentSchema.parse(req.body);
-    const comment = await commentsService.updateComment(commentId, req.user.id, data);
+    const comment = await commentsService.updateComment(
+      commentId,
+      req.user.id,
+      projectId,
+      data
+    );
 
     res.json(comment);
   }),
 
   deleteComment: asyncHandler(async (req: Request, res: Response) => {
-    const { commentId } = req.params;
+    const { id: projectId, commentId } = req.params;
 
     if (!req.user) {
       throw ApiError.unauthorized('User not found');
@@ -48,7 +53,7 @@ export const commentsController = {
     const membership = req.projectMember;
     const isAdmin = membership?.role === 'OWNER' || membership?.role === 'ADMIN';
 
-    await commentsService.deleteComment(commentId, req.user.id, isAdmin);
+    await commentsService.deleteComment(commentId, req.user.id, projectId, isAdmin);
 
     res.status(204).send();
   }),

@@ -21,7 +21,15 @@ export const listPendingInvitationsQuerySchema = z.object({
   projectId: z.string().uuid('Invalid project ID').optional(),
 });
 
+// Create invitation schema
+export const createInvitationSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  role: projectRoleEnum,
+  permissions: memberPermissionsSchema.optional(),
+});
+
 export type MemberPermissions = z.infer<typeof memberPermissionsSchema>;
 export type AcceptInvitationInput = z.infer<typeof acceptInvitationSchema>;
 export type CancelInvitationInput = z.infer<typeof cancelInvitationSchema>;
 export type ListPendingInvitationsQuery = z.infer<typeof listPendingInvitationsQuerySchema>;
+export type CreateInvitationInput = z.infer<typeof createInvitationSchema>;

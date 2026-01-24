@@ -53,6 +53,7 @@ class ApiClient {
   private async buildHeaders(includeAuth: boolean = true): Promise<HeadersInit> {
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest', // CSRF protection
     };
 
     if (includeAuth) {

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { authService } from './auth.service';
+import { updateMeSchema } from './auth.validators';
 import { ApiError } from '../../utils/ApiError';
 import { asyncHandler } from '../../utils/asyncHandler';
 
@@ -41,12 +42,9 @@ export const authController = {
       throw ApiError.unauthorized('User not found');
     }
 
-    const { name, avatarUrl } = req.body;
+    const data = updateMeSchema.parse(req.body);
 
-    const user = await authService.updateUser(req.user.id, {
-      name,
-      avatarUrl,
-    });
+    const user = await authService.updateUser(req.user.id, data);
 
     res.json(user);
   }),

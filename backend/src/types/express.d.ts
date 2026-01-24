@@ -13,6 +13,7 @@ declare global {
       projectMember?: ProjectMember & {
         role: ProjectRole;
       };
+      requestId?: string;
     }
   }
 }

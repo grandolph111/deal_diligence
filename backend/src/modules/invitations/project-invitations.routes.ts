@@ -21,6 +21,13 @@ router.get(
   invitationsController.listPendingForProject
 );
 
+// POST /api/v1/projects/:projectId/invitations - Create an invitation (OWNER/ADMIN)
+router.post(
+  '/',
+  requireRole('OWNER', 'ADMIN'),
+  invitationsController.createProjectInvitation
+);
+
 // DELETE /api/v1/projects/:projectId/invitations/:invitationId - Cancel invitation (OWNER/ADMIN)
 router.delete(
   '/:invitationId',

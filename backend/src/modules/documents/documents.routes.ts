@@ -16,10 +16,10 @@ router.use(requireAuth);
 router.use(loadProjectMembership);
 
 // GET /api/v1/projects/:projectId/documents - List documents
-router.get('/', documentsController.listDocuments);
+router.get('/', requirePermission('canAccessVDR'), documentsController.listDocuments);
 
 // GET /api/v1/projects/:projectId/documents/:documentId - Get document
-router.get('/:documentId', documentsController.getDocument);
+router.get('/:documentId', requirePermission('canAccessVDR'), documentsController.getDocument);
 
 // POST /api/v1/projects/:projectId/documents/initiate-upload - Initiate upload
 router.post(

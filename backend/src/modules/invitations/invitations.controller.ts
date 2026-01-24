@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { invitationsService } from './invitations.service';
+import { createInvitationSchema } from './invitations.validators';
 import { ApiError } from '../../utils/ApiError';
 import { asyncHandler } from '../../utils/asyncHandler';
 
@@ -92,5 +93,26 @@ export const invitationsController = {
     );
 
     res.json(invitation);
+  }),
+
+  /**
+   * POST /projects/:id/invitations
+   * Create a new invitation for a project (OWNER/ADMIN only)
+   */
+  createProjectInvitation: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      throw ApiError.unauthorized('User not found');
+    }
+
+    const projectId = req.params.id as string;
+    const data = createInvitationSchema.parse(req.body);
+
+    const result = await invitationsService.createInvitation(
+      projectId,
+      req.user.id,
+      data
+    );
+
+    res.status(201).json(result);
   }),
 };

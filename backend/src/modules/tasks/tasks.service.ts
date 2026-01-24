@@ -70,6 +70,36 @@ const taskDetailInclude = {
 
 export const tasksService = {
   /**
+   * Verify a task belongs to a project (IDOR protection)
+   * @throws ApiError.notFound if task doesn't exist or doesn't belong to project
+   */
+  async verifyTaskInProject(taskId: string, projectId: string): Promise<Task> {
+    const task = await prisma.task.findFirst({
+      where: { id: taskId, projectId },
+    });
+
+    if (!task) {
+      throw ApiError.notFound('Task not found in this project');
+    }
+
+    return task;
+  },
+
+  /**
+   * Verify a tag belongs to a project (IDOR protection)
+   * @throws ApiError.notFound if tag doesn't exist or doesn't belong to project
+   */
+  async verifyTagInProject(tagId: string, projectId: string): Promise<void> {
+    const tag = await prisma.tag.findFirst({
+      where: { id: tagId, projectId },
+    });
+
+    if (!tag) {
+      throw ApiError.notFound('Tag not found in this project');
+    }
+  },
+
+  /**
    * Get all tasks for a project with optional filters
    */
   async getProjectTasks(projectId: string, filters: TaskFilters = {}) {
