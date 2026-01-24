@@ -25,6 +25,7 @@ export {
   seedTestScenario,
   createTestComment,
   createTestSubtask,
+  createTestFolder,
 } from './db-helpers';
 
 // Test app factory

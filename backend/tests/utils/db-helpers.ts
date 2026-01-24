@@ -1,4 +1,4 @@
-import { PrismaClient, ProjectRole, TaskStatus, TaskPriority, SubtaskStatus } from '@prisma/client';
+import { PrismaClient, ProjectRole, TaskStatus, TaskPriority, SubtaskStatus, Folder } from '@prisma/client';
 import { testUsers, MockUser } from './auth-mock';
 
 // Use a separate Prisma client for tests
@@ -17,10 +17,13 @@ export async function cleanDatabase(): Promise<void> {
   await prisma.taskTag.deleteMany();
   await prisma.taskAttachment.deleteMany();
   await prisma.taskAssignee.deleteMany();
+  await prisma.taskDocument.deleteMany();
   await prisma.task.deleteMany();
   await prisma.tag.deleteMany();
   await prisma.documentChunk.deleteMany();
   await prisma.document.deleteMany();
+  await prisma.folder.deleteMany();
+  await prisma.auditLog.deleteMany();
   await prisma.pendingInvitation.deleteMany();
   await prisma.projectMember.deleteMany();
   await prisma.project.deleteMany();
@@ -321,6 +324,29 @@ export async function createTestSubtask(
           avatarUrl: true,
         },
       },
+    },
+  });
+}
+
+/**
+ * Create a test folder
+ */
+export async function createTestFolder(
+  projectId: string,
+  data: {
+    name?: string;
+    parentId?: string;
+    categoryType?: string;
+    isViewOnly?: boolean;
+  } = {}
+): Promise<Folder> {
+  return prisma.folder.create({
+    data: {
+      projectId,
+      name: data.name || 'Test Folder',
+      parentId: data.parentId || null,
+      categoryType: data.categoryType,
+      isViewOnly: data.isViewOnly ?? false,
     },
   });
 }

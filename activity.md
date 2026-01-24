@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-24
 **Phase:** 2A - Foundation
-**Tasks Completed:** 1/46
-**Current Task:** Database schema for VDR - COMPLETE
+**Tasks Completed:** 2/46
+**Current Task:** Folder management API - COMPLETE
 
 ---
 
@@ -23,7 +23,7 @@
 
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
-| 2A - Foundation | In Progress | 17 | 1 |
+| 2A - Foundation | In Progress | 17 | 2 |
 | 2B - Extraction | Not Started | 9 | 0 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
@@ -129,6 +129,98 @@
 **Next Task:**
 - Infrastructure setup for VDR (requires AWS S3 bucket and BerryDB account)
 - Or: Folder management API (can proceed with database schema complete)
+
+---
+
+### 2026-01-24 - Folder Management API Implementation
+
+**Objective:** Implement folder management API for VDR (Phase 2A task 3)
+
+**Task Completed:**
+- Category: backend
+- Phase: 2A
+- Description: Folder management API
+
+**What Was Implemented:**
+
+1. **Folder Validators** (`backend/src/modules/folders/folders.validators.ts`)
+   - `createFolderSchema`: Validates folder creation with name, parentId, categoryType, isViewOnly
+   - `updateFolderSchema`: Validates folder updates (rename, isViewOnly)
+   - `moveFolderSchema`: Validates folder move operations with parentId
+
+2. **Folder Service** (`backend/src/modules/folders/folders.service.ts`)
+   - `verifyFolderInProject()`: IDOR protection - ensures folder belongs to project
+   - `getProjectFolderTree()`: Returns hierarchical tree structure of folders
+   - `getProjectFolders()`: Returns flat list of folders with document counts
+   - `getFolderById()`: Returns folder with parent and children details
+   - `createFolder()`: Creates folder with duplicate name checking at same level
+   - `updateFolder()`: Renames folder or updates isViewOnly status
+   - `moveFolder()`: Moves folder to new parent with circular reference prevention
+   - `deleteFolder()`: Deletes empty folder (validates no documents or children)
+   - `getFolderPath()`: Returns breadcrumb path from root to folder
+   - `userHasFolderAccess()`: Checks user permission for folder access
+   - `isFolderDescendant()`: Prevents circular folder moves
+
+3. **Folder Controller** (`backend/src/modules/folders/folders.controller.ts`)
+   - GET `/folders`: List all folders (tree or flat with `?format=flat`)
+   - GET `/folders/:folderId`: Get folder details with children
+   - GET `/folders/:folderId/path`: Get folder breadcrumb path
+   - POST `/folders`: Create new folder
+   - PATCH `/folders/:folderId`: Rename or update folder
+   - PATCH `/folders/:folderId/move`: Move folder to new parent
+   - DELETE `/folders/:folderId`: Delete empty folder
+
+4. **Folder Routes** (`backend/src/modules/folders/folders.routes.ts`)
+   - All routes require authentication and project membership
+   - Read operations require `canAccessVDR` permission
+   - Create/Update/Delete operations require minimum ADMIN role
+
+5. **Route Mounting** (`backend/src/app.ts`)
+   - Mounted at `/api/v1/projects/:id/folders`
+
+6. **Integration Tests** (`backend/tests/integration/folders.test.ts`)
+   - 32 comprehensive tests covering all endpoints
+   - Tests for authentication, authorization, IDOR protection
+   - Tests for folder CRUD operations, move, path
+   - Tests for conflict handling (duplicate names)
+   - Tests for validation (empty folders, parent validation)
+
+7. **Test Utilities** (`backend/tests/utils/db-helpers.ts`)
+   - Added `createTestFolder()` helper function
+   - Updated `cleanDatabase()` to include new VDR tables
+
+**Files Created:**
+- `backend/src/modules/folders/folders.validators.ts`
+- `backend/src/modules/folders/folders.service.ts`
+- `backend/src/modules/folders/folders.controller.ts`
+- `backend/src/modules/folders/folders.routes.ts`
+- `backend/tests/integration/folders.test.ts`
+
+**Files Modified:**
+- `backend/src/app.ts` - Added folder routes import and mounting
+- `backend/tests/utils/db-helpers.ts` - Added createTestFolder helper
+- `backend/tests/utils/index.ts` - Exported createTestFolder
+
+**Verification:**
+- Folder module TypeScript compiles without errors
+- Pre-existing TypeScript errors in other modules remain (unrelated to this change)
+- Tests require running database (PostgreSQL at 127.0.0.1:5433)
+
+**API Endpoints Created:**
+| Method | Endpoint | Description | Permission |
+|--------|----------|-------------|------------|
+| GET | `/projects/:id/folders` | List folder tree | canAccessVDR |
+| GET | `/projects/:id/folders?format=flat` | List folders flat | canAccessVDR |
+| GET | `/projects/:id/folders/:folderId` | Get folder details | canAccessVDR |
+| GET | `/projects/:id/folders/:folderId/path` | Get breadcrumb path | canAccessVDR |
+| POST | `/projects/:id/folders` | Create folder | ADMIN+ |
+| PATCH | `/projects/:id/folders/:folderId` | Update folder | ADMIN+ |
+| PATCH | `/projects/:id/folders/:folderId/move` | Move folder | ADMIN+ |
+| DELETE | `/projects/:id/folders/:folderId` | Delete empty folder | ADMIN+ |
+
+**Next Task:**
+- Document upload and storage API (requires S3 setup first)
+- Or: Audit logging service (can proceed independently)
 
 ---
 

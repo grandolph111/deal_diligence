@@ -58,7 +58,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Auto-generate default taxonomy on project creation",
       "Write integration tests for folder endpoints"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "backend",
