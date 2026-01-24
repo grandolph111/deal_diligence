@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-24
 **Phase:** 2A - Foundation
-**Tasks Completed:** 3/46
-**Current Task:** Audit logging service - COMPLETE
+**Tasks Completed:** 4/46
+**Current Task:** Document-task linking API - COMPLETE
 
 ---
 
@@ -23,7 +23,7 @@
 
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
-| 2A - Foundation | In Progress | 17 | 3 |
+| 2A - Foundation | In Progress | 17 | 4 |
 | 2B - Extraction | Not Started | 9 | 0 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
@@ -321,6 +321,95 @@
 **Next Task:**
 - Document upload and storage API (requires S3 setup first)
 - Or: Infrastructure setup for VDR (requires AWS S3 bucket and BerryDB account)
+
+---
+
+### 2026-01-24 - Document-Task Linking API Implementation
+
+**Objective:** Implement document-task linking API for VDR (Phase 2A task 9)
+
+**Task Completed:**
+- Category: backend
+- Phase: 2A
+- Description: Document-task linking API
+
+**What Was Implemented:**
+
+1. **Task-Documents Validators** (`backend/src/modules/task-documents/task-documents.validators.ts`)
+   - `linkDocumentSchema`: Validates document linking with documentId (UUID)
+   - `unlinkDocumentParamsSchema`: Validates unlink path params
+
+2. **Task-Documents Service** (`backend/src/modules/task-documents/task-documents.service.ts`)
+   - `verifyTaskInProject()`: IDOR protection - ensures task belongs to project
+   - `verifyDocumentInProject()`: IDOR protection - ensures document belongs to project
+   - `getTaskDocuments()`: Returns all documents linked to a task with linker info
+   - `linkDocument()`: Links a document to a task with conflict checking
+   - `unlinkDocument()`: Removes document-task link
+   - `getDocumentTasks()`: Returns all tasks linked to a document
+
+3. **Task-Documents Controller** (`backend/src/modules/task-documents/task-documents.controller.ts`)
+   - GET `/tasks/:taskId/documents`: List documents linked to task
+   - POST `/tasks/:taskId/documents`: Link document to task
+   - DELETE `/tasks/:taskId/documents/:documentId`: Unlink document from task
+   - All operations include audit logging
+
+4. **Task-Documents Routes** (`backend/src/modules/task-documents/task-documents.routes.ts`)
+   - All routes require authentication and project membership
+   - GET requires `canAccessKanban` permission
+   - POST/DELETE require minimum MEMBER role
+
+5. **Route Mounting** (`backend/src/app.ts`)
+   - Mounted at `/api/v1/projects/:id/tasks/:taskId/documents`
+
+6. **Integration Tests** (`backend/tests/integration/task-documents.test.ts`)
+   - 20 comprehensive tests covering:
+     - Authentication (401 for unauthenticated requests)
+     - Authorization (403 for VIEWER on write operations)
+     - IDOR protection (404 for cross-project access)
+     - Document linking and unlinking
+     - Duplicate link prevention (409)
+     - Audit log creation verification
+     - Multiple document linking
+
+7. **Test Utilities** (`backend/tests/utils/db-helpers.ts`)
+   - Added `createTestDocument()` helper function
+   - Added `linkDocumentToTask()` helper function
+
+**Files Created:**
+- `backend/src/modules/task-documents/task-documents.validators.ts`
+- `backend/src/modules/task-documents/task-documents.service.ts`
+- `backend/src/modules/task-documents/task-documents.controller.ts`
+- `backend/src/modules/task-documents/task-documents.routes.ts`
+- `backend/src/modules/task-documents/index.ts`
+- `backend/tests/integration/task-documents.test.ts`
+
+**Files Modified:**
+- `backend/src/app.ts` - Added task-documents routes import and mounting
+- `backend/tests/utils/db-helpers.ts` - Added createTestDocument and linkDocumentToTask helpers
+- `backend/tests/utils/index.ts` - Exported new test helpers
+
+**Verification:**
+- Task-documents module TypeScript compiles without errors
+- Pre-existing TypeScript errors in other modules remain (unrelated to this change)
+- Tests require running database (PostgreSQL at 127.0.0.1:5433)
+
+**API Endpoints Created:**
+| Method | Endpoint | Description | Permission |
+|--------|----------|-------------|------------|
+| GET | `/projects/:id/tasks/:taskId/documents` | List linked documents | canAccessKanban |
+| POST | `/projects/:id/tasks/:taskId/documents` | Link document to task | MEMBER+ |
+| DELETE | `/projects/:id/tasks/:taskId/documents/:documentId` | Unlink document | MEMBER+ |
+
+**Notes:**
+- Document-task links are tracked with `linkedById` and `linkedAt` for audit purposes
+- Links are ordered by linkedAt descending (most recent first)
+- Audit logs are created for both link and unlink operations
+- IDOR protection ensures documents and tasks belong to the same project
+
+**Next Task:**
+- Document upload and storage API (requires S3 setup first)
+- Or: Infrastructure setup for VDR (requires AWS S3 bucket and BerryDB account)
+- Or: VDR navigation and layout (frontend task, no external dependencies)
 
 ---
 

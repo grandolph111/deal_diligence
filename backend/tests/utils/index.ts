@@ -26,6 +26,8 @@ export {
   createTestComment,
   createTestSubtask,
   createTestFolder,
+  createTestDocument,
+  linkDocumentToTask,
 } from './db-helpers';
 
 // Test app factory

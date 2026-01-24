@@ -350,3 +350,47 @@ export async function createTestFolder(
     },
   });
 }
+
+/**
+ * Create a test document
+ */
+export async function createTestDocument(
+  projectId: string,
+  uploadedById: string,
+  data: {
+    name?: string;
+    folderId?: string;
+    s3Key?: string;
+    mimeType?: string;
+    sizeBytes?: number;
+  } = {}
+) {
+  return prisma.document.create({
+    data: {
+      projectId,
+      uploadedById,
+      name: data.name || 'test-document.pdf',
+      folderId: data.folderId || null,
+      s3Key: data.s3Key || `test-key-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      mimeType: data.mimeType || 'application/pdf',
+      sizeBytes: data.sizeBytes || 1024,
+    },
+  });
+}
+
+/**
+ * Link a document to a task
+ */
+export async function linkDocumentToTask(
+  taskId: string,
+  documentId: string,
+  linkedById: string
+) {
+  return prisma.taskDocument.create({
+    data: {
+      taskId,
+      documentId,
+      linkedById,
+    },
+  });
+}

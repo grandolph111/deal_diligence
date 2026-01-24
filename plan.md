@@ -157,7 +157,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Update task response to include linked documents",
       "Write tests for document-task linking"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "frontend",
