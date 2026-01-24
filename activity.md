@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-24
 **Phase:** 2A - Foundation
-**Tasks Completed:** 2/46
-**Current Task:** Folder management API - COMPLETE
+**Tasks Completed:** 3/46
+**Current Task:** Audit logging service - COMPLETE
 
 ---
 
@@ -23,7 +23,7 @@
 
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
-| 2A - Foundation | In Progress | 17 | 2 |
+| 2A - Foundation | In Progress | 17 | 3 |
 | 2B - Extraction | Not Started | 9 | 0 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
@@ -220,7 +220,107 @@
 
 **Next Task:**
 - Document upload and storage API (requires S3 setup first)
-- Or: Audit logging service (can proceed independently)
+- Or: Infrastructure setup for VDR (requires AWS S3 bucket and BerryDB account)
+
+---
+
+### 2026-01-24 - Audit Logging Service Implementation
+
+**Objective:** Implement audit logging service for VDR (Phase 2A task 5)
+
+**Task Completed:**
+- Category: backend
+- Phase: 2A
+- Description: Audit logging service
+
+**What Was Implemented:**
+
+1. **Audit Validators** (`backend/src/modules/audit/audit.validators.ts`)
+   - `AuditAction` constants for all auditable actions (document, folder, search, chat, etc.)
+   - `AuditResourceType` constants for resource types
+   - `createAuditLogSchema` for creating audit entries
+   - `queryAuditLogSchema` for querying audit logs with filters
+
+2. **Audit Service** (`backend/src/modules/audit/audit.service.ts`)
+   - `createLog()`: Create raw audit log entries
+   - `logFromRequest()`: Create audit log from Express request (auto-extracts IP/user-agent)
+   - Document logging: `logDocumentUpload`, `logDocumentDownload`, `logDocumentView`, `logDocumentDelete`, `logDocumentMove`
+   - Folder logging: `logFolderCreate`, `logFolderRename`, `logFolderMove`, `logFolderDelete`, `logFolderView`
+   - Search logging: `logSearch` (supports keyword, semantic, hybrid)
+   - Chat logging: `logChatMessage`, `logChatConversationCreate`, `logChatConversationDelete`
+   - Task-Document linking: `logTaskDocumentLink`, `logTaskDocumentUnlink`
+   - Query methods: `queryLogs`, `getResourceLogs`, `getUserActivity`
+
+3. **Audit Middleware** (`backend/src/modules/audit/audit.middleware.ts`)
+   - `auditFolderAccess()`: Logs folder view events
+   - `auditDocumentView()`: Logs document view events
+   - `auditDocumentDownload()`: Logs document download events
+   - `auditSearch()`: Logs search query events
+   - `createAuditMiddleware()`: Generic factory for custom audit logging
+
+4. **Audit Controller** (`backend/src/modules/audit/audit.controller.ts`)
+   - `queryLogs`: Query audit logs with filters (action, resourceType, date range, pagination)
+   - `getResourceLogs`: Get logs for a specific resource
+   - `getUserActivity`: Get activity for a specific user
+
+5. **Audit Routes** (`backend/src/modules/audit/audit.routes.ts`)
+   - All routes require ADMIN or OWNER role
+   - GET `/projects/:id/audit-logs` - Query audit logs
+   - GET `/projects/:id/audit-logs/resource/:resourceType/:resourceId` - Resource-specific logs
+   - GET `/projects/:id/audit-logs/user/:userId` - User activity logs
+
+6. **Integration Tests** (`backend/tests/integration/audit.test.ts`)
+   - 21 comprehensive tests covering:
+     - Audit service methods (createLog, queryLogs, getResourceLogs, getUserActivity)
+     - Route authentication and authorization (401, 403 for non-admin)
+     - Admin/Owner access to audit logs
+     - Filtering by action, date range
+     - Pagination
+     - Resource-specific and user-specific log queries
+   - Tests require running PostgreSQL database at 127.0.0.1:5433
+
+**Files Created:**
+- `backend/src/modules/audit/audit.validators.ts`
+- `backend/src/modules/audit/audit.service.ts`
+- `backend/src/modules/audit/audit.middleware.ts`
+- `backend/src/modules/audit/audit.controller.ts`
+- `backend/src/modules/audit/audit.routes.ts`
+- `backend/src/modules/audit/index.ts`
+- `backend/tests/integration/audit.test.ts`
+
+**Files Modified:**
+- `backend/src/app.ts` - Added audit routes import and mounting
+
+**Verification:**
+- Audit module TypeScript compiles without errors
+- Pre-existing TypeScript errors in other modules remain (unrelated to this change)
+- Tests require running database (PostgreSQL at 127.0.0.1:5433)
+
+**API Endpoints Created:**
+| Method | Endpoint | Description | Permission |
+|--------|----------|-------------|------------|
+| GET | `/projects/:id/audit-logs` | Query audit logs | ADMIN+ |
+| GET | `/projects/:id/audit-logs?action=...` | Filter by action | ADMIN+ |
+| GET | `/projects/:id/audit-logs/resource/:type/:id` | Resource logs | ADMIN+ |
+| GET | `/projects/:id/audit-logs/user/:userId` | User activity | ADMIN+ |
+
+**Audit Actions Supported:**
+- Document: upload, download, view, delete, move
+- Folder: create, rename, move, delete, view
+- Search: execute, semantic
+- Chat: message, conversation.create, conversation.delete
+- Task-Document: link, unlink
+- Annotation: verify, reject
+- Entity: merge, split
+
+**Notes:**
+- Middleware captures IP address and user agent for SOC 2 compliance
+- All audit logs include timestamp, userId, projectId, and optional metadata
+- Audit logs indexed for efficient queries by project, action, and date
+
+**Next Task:**
+- Document upload and storage API (requires S3 setup first)
+- Or: Infrastructure setup for VDR (requires AWS S3 bucket and BerryDB account)
 
 ---
 
