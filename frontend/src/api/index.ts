@@ -10,3 +10,4 @@ export { projectsService } from './services/projects.service';
 export { membersService } from './services/members.service';
 export { tasksService } from './services/tasks.service';
 export { tagsService } from './services/tags.service';
+export { foldersService } from './services/folders.service';

@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-24
 **Phase:** 2A - Foundation
-**Tasks Completed:** 4/46
-**Current Task:** Document-task linking API - COMPLETE
+**Tasks Completed:** 5/46
+**Current Task:** VDR navigation and layout - COMPLETE
 
 ---
 
@@ -23,7 +23,7 @@
 
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
-| 2A - Foundation | In Progress | 17 | 4 |
+| 2A - Foundation | In Progress | 17 | 5 |
 | 2B - Extraction | Not Started | 9 | 0 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
@@ -410,6 +410,127 @@
 - Document upload and storage API (requires S3 setup first)
 - Or: Infrastructure setup for VDR (requires AWS S3 bucket and BerryDB account)
 - Or: VDR navigation and layout (frontend task, no external dependencies)
+
+---
+
+### 2026-01-24 - VDR Navigation and Layout Implementation
+
+**Objective:** Implement VDR navigation and layout for frontend (Phase 2A task 10)
+
+**Task Completed:**
+- Category: frontend
+- Phase: 2A
+- Description: VDR navigation and layout
+
+**What Was Implemented:**
+
+1. **VDR Types** (`frontend/src/types/api.ts`)
+   - Added `DocumentStatus` type enum
+   - Added `Folder` and `FolderTreeNode` interfaces
+   - Added `Document` interface with all fields from schema
+   - Added `FolderPathItem` for breadcrumb navigation
+   - Added DTOs: `CreateFolderDto`, `UpdateFolderDto`, `MoveFolderDto`
+
+2. **Folders API Service** (`frontend/src/api/services/folders.service.ts`)
+   - `getFolderTree()` - Get hierarchical folder structure
+   - `getFoldersFlat()` - Get flat list with document counts
+   - `getFolder()` - Get single folder by ID
+   - `getFolderPath()` - Get breadcrumb path for a folder
+   - `createFolder()`, `updateFolder()`, `moveFolder()`, `deleteFolder()` - CRUD operations
+
+3. **useFolders Hook** (`frontend/src/features/vdr/hooks/useFolders.ts`)
+   - Manages folder tree state
+   - Handles folder selection and path tracking
+   - Provides folder CRUD operations with error handling
+   - Auto-fetches folders on mount (configurable)
+
+4. **FolderTree Component** (`frontend/src/features/vdr/components/FolderTree.tsx`)
+   - Recursive tree display with expand/collapse functionality
+   - "All Documents" root option
+   - Selected folder highlighting
+   - Create subfolder button (admin only)
+   - View-only folder indicator (lock icon)
+
+5. **DocumentList Component** (`frontend/src/features/vdr/components/DocumentList.tsx`)
+   - Grid and list view modes with toggle
+   - Document cards with status indicators (pending, processing, complete, failed)
+   - File size formatting and upload date display
+   - Document actions menu (view, download, delete)
+   - Empty state with upload prompt
+   - View-only document indicator
+
+6. **Breadcrumb Component** (`frontend/src/features/vdr/components/Breadcrumb.tsx`)
+   - Displays folder navigation path
+   - Clickable breadcrumb items for quick navigation
+   - "All Documents" root link
+
+7. **CreateFolderModal Component** (`frontend/src/features/vdr/components/CreateFolderModal.tsx`)
+   - Modal for creating new folders
+   - Name input with validation
+   - View-only checkbox option
+   - Parent folder indicator
+
+8. **VDRPage** (`frontend/src/pages/VDRPage.tsx`)
+   - Two-panel layout (folder sidebar + document area)
+   - Permission-based access control (canAccessVDR)
+   - Folder tree integration with selection state
+   - Breadcrumb navigation
+   - Document list/grid view
+   - Create folder modal integration
+   - Search placeholder (disabled until API ready)
+   - Document action placeholders (upload, view, download, delete)
+
+9. **VDR Styles** (`frontend/src/features/vdr/vdr.css`)
+   - Complete styling for VDR layout
+   - Folder tree styles with icons and indentation
+   - Document grid and list view styles
+   - Breadcrumb navigation styles
+   - Modal styles
+   - Responsive design for mobile (stacked layout at 768px)
+
+10. **Router Integration** (`frontend/src/router.tsx`)
+    - Added `/projects/:projectId/vdr` route
+    - Imported VDRPage component
+
+11. **Sidebar Navigation** (`frontend/src/components/layout/Sidebar.tsx`)
+    - Added "Data Room" tab with FolderOpen icon
+    - Positioned between Kanban Board and Settings
+
+**Files Created:**
+- `frontend/src/api/services/folders.service.ts`
+- `frontend/src/features/vdr/hooks/useFolders.ts`
+- `frontend/src/features/vdr/components/FolderTree.tsx`
+- `frontend/src/features/vdr/components/DocumentList.tsx`
+- `frontend/src/features/vdr/components/Breadcrumb.tsx`
+- `frontend/src/features/vdr/components/CreateFolderModal.tsx`
+- `frontend/src/features/vdr/index.ts`
+- `frontend/src/features/vdr/vdr.css`
+- `frontend/src/pages/VDRPage.tsx`
+
+**Files Modified:**
+- `frontend/src/types/api.ts` - Added VDR types
+- `frontend/src/api/index.ts` - Exported foldersService
+- `frontend/src/pages/index.ts` - Exported VDRPage
+- `frontend/src/router.tsx` - Added VDR route
+- `frontend/src/components/layout/Sidebar.tsx` - Added Data Room nav link
+
+**Verification:**
+- VDR module TypeScript compiles without errors
+- Pre-existing TypeScript errors in settings module remain (unrelated to this change)
+- Navigation tab shows in sidebar when viewing a project
+
+**Notes:**
+- Document-related functionality is placeholder until document upload API is implemented
+- Search is disabled until full-text search API is available
+- Folder CRUD operations use the backend API endpoints created in previous sessions
+- The VDR respects `canAccessVDR` permission for access control
+
+**Tasks Completed:** 5/46
+
+**Next Task:**
+- Folder management UI (Phase 2A task 11)
+- Or: Document upload UI (Phase 2A task 12) - requires S3/document API first
+- Or: Document upload and storage API (Phase 2A task 4) - requires S3 setup
 
 ---
 

@@ -6,3 +6,4 @@ export { CreateProjectPage } from './CreateProjectPage';
 export { ProjectOverviewPage } from './ProjectOverviewPage';
 export { KanbanPage } from './KanbanPage';
 export { SettingsPage } from './SettingsPage';
+export { VDRPage } from './VDRPage';

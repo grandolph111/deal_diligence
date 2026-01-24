@@ -282,3 +282,74 @@ export interface UpdateSubtaskDto {
 export interface ReorderSubtasksDto {
   subtaskIds: string[];
 }
+
+// ============================================
+// VIRTUAL DATA ROOM (VDR)
+// ============================================
+
+// Document processing status
+export type DocumentStatus = 'PENDING' | 'PROCESSING' | 'COMPLETE' | 'FAILED';
+
+// Folder model
+export interface Folder extends Timestamps {
+  id: string;
+  projectId: string;
+  name: string;
+  parentId: string | null;
+  categoryType: string | null;
+  isViewOnly: boolean;
+  // Nested children (for tree view)
+  children?: Folder[];
+  // Document count (for flat list)
+  _count?: {
+    documents: number;
+  };
+}
+
+// Folder tree node (recursive structure)
+export interface FolderTreeNode extends Folder {
+  children: FolderTreeNode[];
+}
+
+// Document model
+export interface Document extends Timestamps {
+  id: string;
+  projectId: string;
+  folderId: string | null;
+  name: string;
+  s3Key: string;
+  mimeType: string;
+  sizeBytes: number;
+  berryDbId: string | null;
+  processingStatus: DocumentStatus;
+  documentType: string | null;
+  riskLevel: string | null;
+  pageCount: number | null;
+  isViewOnly: boolean;
+  uploadedById: string;
+  uploadedBy?: Pick<User, 'id' | 'email' | 'name' | 'avatarUrl'>;
+  folder?: Pick<Folder, 'id' | 'name'>;
+}
+
+// Folder path breadcrumb
+export interface FolderPathItem {
+  id: string;
+  name: string;
+}
+
+// VDR DTOs
+export interface CreateFolderDto {
+  name: string;
+  parentId?: string | null;
+  categoryType?: string;
+  isViewOnly?: boolean;
+}
+
+export interface UpdateFolderDto {
+  name?: string;
+  isViewOnly?: boolean;
+}
+
+export interface MoveFolderDto {
+  parentId: string | null;
+}
