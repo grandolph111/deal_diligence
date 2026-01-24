@@ -204,7 +204,58 @@
   margin-left: 4px;
 }
 
-/* Folder Add Button */
+/* Folder Count Badge */
+.folder-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  background: var(--color-bg-hover);
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  margin-left: 4px;
+}
+
+.folder-row.selected .folder-count {
+  background: var(--color-primary);
+  color: white;
+}
+
+/* Folder Actions Container */
+.folder-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.folder-row:hover .folder-actions {
+  display: flex;
+}
+
+/* Folder Action Button */
+.folder-action-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  border-radius: 4px;
+}
+
+.folder-action-btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-primary);
+}
+
+/* Legacy folder add button (deprecated) */
 .folder-add-btn {
   background: none;
   border: none;
@@ -224,6 +275,45 @@
 .folder-add-btn:hover {
   background: var(--color-bg-hover);
   color: var(--color-primary);
+}
+
+/* Folder Context Menu */
+.folder-context-menu {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  min-width: 160px;
+  padding: 4px;
+  overflow: hidden;
+}
+
+.folder-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--color-text);
+  border-radius: 4px;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.folder-context-menu button:hover {
+  background: var(--color-bg-hover);
+}
+
+.folder-context-menu button.danger {
+  color: var(--color-error);
+}
+
+.folder-context-menu button.danger:hover {
+  background: var(--color-error-light, #fee2e2);
 }
 
 /* Folder Children */
@@ -742,6 +832,75 @@
   color: var(--color-error);
   border-radius: 6px;
   font-size: 14px;
+}
+
+/* Delete Modal Styles */
+.delete-warning,
+.delete-confirm {
+  text-align: center;
+  padding: 16px 0;
+}
+
+.delete-warning .warning-icon,
+.delete-confirm .warning-icon {
+  color: var(--color-warning, #f59e0b);
+  margin-bottom: 16px;
+}
+
+.delete-warning h3 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  color: var(--color-text);
+}
+
+.delete-warning p,
+.delete-confirm p {
+  margin: 0 0 12px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.delete-warning p strong,
+.delete-confirm p strong {
+  color: var(--color-text);
+}
+
+.warning-list {
+  text-align: left;
+  margin: 16px 0 0;
+  padding: 12px 16px 12px 32px;
+  background: var(--color-warning-light, #fef3c7);
+  border-radius: 6px;
+  list-style-type: disc;
+}
+
+.warning-list li {
+  margin: 4px 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.delete-note {
+  font-style: italic;
+  color: var(--color-text-muted) !important;
+}
+
+/* Danger Button */
+.button.danger {
+  background: var(--color-error);
+  color: white;
+  border: none;
+}
+
+.button.danger:hover {
+  background: var(--color-error-dark, #dc2626);
+}
+
+.button.danger:disabled {
+  background: var(--color-error);
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* ============================================

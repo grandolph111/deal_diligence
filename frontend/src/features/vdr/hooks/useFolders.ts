@@ -13,11 +13,13 @@ interface UseFoldersReturn {
   error: string | null;
   selectedFolderId: string | null;
   folderPath: FolderPathItem[];
+  documentCounts: Map<string, number>;
   setSelectedFolderId: (id: string | null) => void;
   fetchFolders: () => Promise<void>;
   createFolder: (data: CreateFolderDto) => Promise<FolderTreeNode | null>;
   renameFolder: (folderId: string, name: string) => Promise<boolean>;
   deleteFolder: (folderId: string) => Promise<boolean>;
+  clearError: () => void;
 }
 
 /**
@@ -29,16 +31,31 @@ export function useFolders({ projectId, autoFetch = true }: UseFoldersOptions): 
   const [error, setError] = useState<string | null>(null);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [folderPath, setFolderPath] = useState<FolderPathItem[]>([]);
+  const [documentCounts, setDocumentCounts] = useState<Map<string, number>>(new Map());
 
-  // Fetch folder tree
+  // Fetch folder tree and document counts
   const fetchFolders = useCallback(async () => {
     if (!projectId) return;
 
     try {
       setLoading(true);
       setError(null);
-      const tree = await foldersService.getFolderTree(projectId);
+
+      // Fetch both tree and flat list (for document counts) in parallel
+      const [tree, flatFolders] = await Promise.all([
+        foldersService.getFolderTree(projectId),
+        foldersService.getFoldersFlat(projectId),
+      ]);
+
       setFolderTree(tree);
+
+      // Build document counts map from flat folders
+      const counts = new Map<string, number>();
+      for (const folder of flatFolders) {
+        const count = folder._count?.documents ?? 0;
+        counts.set(folder.id, count);
+      }
+      setDocumentCounts(counts);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load folders';
       setError(message);
@@ -73,8 +90,7 @@ export function useFolders({ projectId, autoFetch = true }: UseFoldersOptions): 
       return newFolder as FolderTreeNode;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create folder';
-      setError(message);
-      return null;
+      throw new Error(message);
     }
   }, [projectId, fetchFolders]);
 
@@ -88,8 +104,7 @@ export function useFolders({ projectId, autoFetch = true }: UseFoldersOptions): 
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to rename folder';
-      setError(message);
-      return false;
+      throw new Error(message);
     }
   }, [projectId, fetchFolders]);
 
@@ -107,10 +122,14 @@ export function useFolders({ projectId, autoFetch = true }: UseFoldersOptions): 
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to delete folder';
-      setError(message);
-      return false;
+      throw new Error(message);
     }
   }, [projectId, fetchFolders, selectedFolderId]);
+
+  // Clear error
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
 
   // Auto-fetch on mount
   useEffect(() => {
@@ -130,10 +149,12 @@ export function useFolders({ projectId, autoFetch = true }: UseFoldersOptions): 
     error,
     selectedFolderId,
     folderPath,
+    documentCounts,
     setSelectedFolderId,
     fetchFolders,
     createFolder,
     renameFolder,
     deleteFolder,
+    clearError,
   };
 }

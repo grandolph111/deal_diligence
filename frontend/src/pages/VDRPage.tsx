@@ -6,6 +6,8 @@ import {
   DocumentList,
   Breadcrumb,
   CreateFolderModal,
+  RenameFolderModal,
+  DeleteFolderModal,
   useFolders,
 } from '../features/vdr';
 import { membersService, apiClient } from '../api';
@@ -32,6 +34,20 @@ function findFolderInTree(
   return null;
 }
 
+interface RenameFolderState {
+  isOpen: boolean;
+  folderId: string | null;
+  currentName: string;
+}
+
+interface DeleteFolderState {
+  isOpen: boolean;
+  folderId: string | null;
+  folderName: string;
+  hasChildren: boolean;
+  documentCount: number;
+}
+
 /**
  * Virtual Data Room page component
  */
@@ -50,9 +66,12 @@ export function VDRPage() {
     error: foldersError,
     selectedFolderId,
     folderPath,
+    documentCounts,
     setSelectedFolderId,
     fetchFolders,
     createFolder,
+    renameFolder,
+    deleteFolder,
   } = useFolders({ projectId, autoFetch: false });
 
   // Document state (placeholder - documents API not yet implemented)
@@ -62,9 +81,23 @@ export function VDRPage() {
   // View mode state
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  // Modal state
+  // Modal states
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null);
+
+  const [renameFolderState, setRenameFolderState] = useState<RenameFolderState>({
+    isOpen: false,
+    folderId: null,
+    currentName: '',
+  });
+
+  const [deleteFolderState, setDeleteFolderState] = useState<DeleteFolderState>({
+    isOpen: false,
+    folderId: null,
+    folderName: '',
+    hasChildren: false,
+    documentCount: 0,
+  });
 
   // Get current user's membership info
   const currentUserMember = members.find((m) => m.user?.email === user?.email);
@@ -133,6 +166,64 @@ export function VDRPage() {
     [createFolder, createFolderParentId]
   );
 
+  // Handle rename folder
+  const handleOpenRenameFolder = useCallback((folderId: string, currentName: string) => {
+    setRenameFolderState({
+      isOpen: true,
+      folderId,
+      currentName,
+    });
+  }, []);
+
+  const handleCloseRenameFolder = useCallback(() => {
+    setRenameFolderState({
+      isOpen: false,
+      folderId: null,
+      currentName: '',
+    });
+  }, []);
+
+  const handleRenameFolder = useCallback(
+    async (newName: string) => {
+      if (renameFolderState.folderId) {
+        await renameFolder(renameFolderState.folderId, newName);
+      }
+    },
+    [renameFolder, renameFolderState.folderId]
+  );
+
+  // Handle delete folder
+  const handleOpenDeleteFolder = useCallback((
+    folderId: string,
+    folderName: string,
+    hasChildren: boolean,
+    documentCount: number
+  ) => {
+    setDeleteFolderState({
+      isOpen: true,
+      folderId,
+      folderName,
+      hasChildren,
+      documentCount,
+    });
+  }, []);
+
+  const handleCloseDeleteFolder = useCallback(() => {
+    setDeleteFolderState({
+      isOpen: false,
+      folderId: null,
+      folderName: '',
+      hasChildren: false,
+      documentCount: 0,
+    });
+  }, []);
+
+  const handleDeleteFolder = useCallback(async () => {
+    if (deleteFolderState.folderId) {
+      await deleteFolder(deleteFolderState.folderId);
+    }
+  }, [deleteFolder, deleteFolderState.folderId]);
+
   // Handle document actions (placeholder)
   const handleUploadClick = useCallback(() => {
     // TODO: Implement document upload when API is available
@@ -179,7 +270,7 @@ export function VDRPage() {
     );
   }
 
-  // Get parent folder name for modal
+  // Get parent folder name for create modal
   const createFolderParentName = createFolderParentId
     ? findFolderInTree(folderTree, createFolderParentId)?.name
     : undefined;
@@ -219,7 +310,10 @@ export function VDRPage() {
               selectedFolderId={selectedFolderId}
               onSelectFolder={handleSelectFolder}
               onCreateFolder={isAdmin ? handleOpenCreateFolder : undefined}
+              onRenameFolder={isAdmin ? handleOpenRenameFolder : undefined}
+              onDeleteFolder={isAdmin ? handleOpenDeleteFolder : undefined}
               isAdmin={isAdmin}
+              documentCounts={documentCounts}
             />
           )}
         </aside>
@@ -256,6 +350,24 @@ export function VDRPage() {
         onClose={() => setShowCreateFolderModal(false)}
         onSubmit={handleCreateFolder}
         parentFolderName={createFolderParentName}
+      />
+
+      {/* Rename Folder Modal */}
+      <RenameFolderModal
+        isOpen={renameFolderState.isOpen}
+        onClose={handleCloseRenameFolder}
+        onSubmit={handleRenameFolder}
+        currentName={renameFolderState.currentName}
+      />
+
+      {/* Delete Folder Modal */}
+      <DeleteFolderModal
+        isOpen={deleteFolderState.isOpen}
+        onClose={handleCloseDeleteFolder}
+        onConfirm={handleDeleteFolder}
+        folderName={deleteFolderState.folderName}
+        hasChildren={deleteFolderState.hasChildren}
+        documentCount={deleteFolderState.documentCount}
       />
     </div>
   );

@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-24
 **Phase:** 2A - Foundation
-**Tasks Completed:** 5/46
-**Current Task:** VDR navigation and layout - COMPLETE
+**Tasks Completed:** 6/46
+**Current Task:** Folder management UI - COMPLETE
 
 ---
 
@@ -23,7 +23,7 @@
 
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
-| 2A - Foundation | In Progress | 17 | 5 |
+| 2A - Foundation | In Progress | 17 | 6 |
 | 2B - Extraction | Not Started | 9 | 0 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
@@ -530,6 +530,100 @@
 **Next Task:**
 - Folder management UI (Phase 2A task 11)
 - Or: Document upload UI (Phase 2A task 12) - requires S3/document API first
+- Or: Document upload and storage API (Phase 2A task 4) - requires S3 setup
+
+---
+
+### 2026-01-24 - Folder Management UI Implementation
+
+**Objective:** Implement folder management UI for VDR (Phase 2A task 11)
+
+**Task Completed:**
+- Category: frontend
+- Phase: 2A
+- Description: Folder management UI
+
+**What Was Implemented:**
+
+1. **RenameFolderModal Component** (`frontend/src/features/vdr/components/RenameFolderModal.tsx`)
+   - Modal for renaming folders with validation
+   - Pre-filled with current folder name
+   - Prevents submit if name unchanged
+   - Error handling for API failures
+
+2. **DeleteFolderModal Component** (`frontend/src/features/vdr/components/DeleteFolderModal.tsx`)
+   - Confirmation modal for deleting folders
+   - Shows warning if folder has children or documents
+   - Prevents deletion of non-empty folders
+   - Clear messaging about why deletion is blocked
+
+3. **FolderContextMenu Component** (`frontend/src/features/vdr/components/FolderContextMenu.tsx`)
+   - Context menu for folder actions (rename, delete, create subfolder)
+   - Positioned at click location with viewport boundary detection
+   - Closes on click outside or Escape key
+   - Admin-only visibility
+
+4. **Enhanced FolderTree Component** (`frontend/src/features/vdr/components/FolderTree.tsx`)
+   - Added document count badge next to folder names
+   - Added "More" button (MoreVertical icon) for actions menu
+   - Right-click context menu support
+   - Integrated context menu with rename/delete callbacks
+   - Total document count shown on "All Documents" option
+
+5. **Enhanced useFolders Hook** (`frontend/src/features/vdr/hooks/useFolders.ts`)
+   - Now fetches both folder tree and flat folder list in parallel
+   - Builds document counts map from flat folder data
+   - Exports `documentCounts` Map for components to use
+   - Added `clearError` method for error handling
+   - Error throwing instead of setting error state (for modal handling)
+
+6. **Updated VDRPage** (`frontend/src/pages/VDRPage.tsx`)
+   - Integrated RenameFolderModal and DeleteFolderModal
+   - State management for rename and delete modals
+   - Passes documentCounts to FolderTree
+   - Callbacks for rename/delete folder actions
+
+7. **New CSS Styles** (`frontend/src/features/vdr/vdr.css`)
+   - `.folder-count` - Document count badge styling
+   - `.folder-actions` - Action buttons container (shows on hover)
+   - `.folder-action-btn` - Individual action button styling
+   - `.folder-context-menu` - Context menu dropdown styling
+   - `.delete-warning` / `.delete-confirm` - Delete modal content styling
+   - `.warning-list` - Warning details list
+   - `.button.danger` - Danger/destructive button styling
+
+**Files Created:**
+- `frontend/src/features/vdr/components/RenameFolderModal.tsx`
+- `frontend/src/features/vdr/components/DeleteFolderModal.tsx`
+- `frontend/src/features/vdr/components/FolderContextMenu.tsx`
+
+**Files Modified:**
+- `frontend/src/features/vdr/components/FolderTree.tsx` - Added context menu, document counts, actions
+- `frontend/src/features/vdr/hooks/useFolders.ts` - Added document counts, parallel fetch
+- `frontend/src/features/vdr/index.ts` - Exported new components
+- `frontend/src/features/vdr/vdr.css` - Added new styles
+- `frontend/src/pages/VDRPage.tsx` - Integrated rename/delete modals
+
+**Verification:**
+- VDR module TypeScript compiles without errors
+- Pre-existing TypeScript errors in settings module remain (unrelated to this change)
+
+**Features Implemented:**
+| Feature | Implementation |
+|---------|---------------|
+| Folder tree with icons | Already done in previous session |
+| Folder selection state | Already done in previous session |
+| Create folder button/modal | Already done in previous session |
+| Folder rename functionality | NEW: RenameFolderModal component |
+| Folder delete with confirmation | NEW: DeleteFolderModal component |
+| Show folder document count | NEW: Document count badges |
+| Handle empty folder states | Empty tree state existed, delete prevents non-empty |
+
+**Tasks Completed:** 6/46
+
+**Next Task:**
+- Document upload UI (Phase 2A task 12) - requires S3/document API first
+- Or: Document list and grid view (Phase 2A task 13) - partial implementation exists
 - Or: Document upload and storage API (Phase 2A task 4) - requires S3 setup
 
 ---

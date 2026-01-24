@@ -1,5 +1,14 @@
 import { useState, useCallback } from 'react';
-import { FolderOpen, Folder, ChevronRight, ChevronDown, Plus, Lock } from 'lucide-react';
+import {
+  FolderOpen,
+  Folder,
+  ChevronRight,
+  ChevronDown,
+  Plus,
+  Lock,
+  MoreVertical,
+} from 'lucide-react';
+import { FolderContextMenu } from './FolderContextMenu';
 import type { FolderTreeNode } from '../../../types/api';
 
 interface FolderTreeProps {
@@ -7,7 +16,10 @@ interface FolderTreeProps {
   selectedFolderId: string | null;
   onSelectFolder: (folderId: string | null) => void;
   onCreateFolder?: (parentId: string | null) => void;
+  onRenameFolder?: (folderId: string, currentName: string) => void;
+  onDeleteFolder?: (folderId: string, folderName: string, hasChildren: boolean, documentCount: number) => void;
   isAdmin?: boolean;
+  documentCounts?: Map<string, number>;
 }
 
 interface FolderTreeItemProps {
@@ -18,7 +30,19 @@ interface FolderTreeItemProps {
   onSelectFolder: (folderId: string | null) => void;
   onToggleExpand: (folderId: string) => void;
   onCreateFolder?: (parentId: string | null) => void;
+  onRenameFolder?: (folderId: string, currentName: string) => void;
+  onDeleteFolder?: (folderId: string, folderName: string, hasChildren: boolean, documentCount: number) => void;
   isAdmin?: boolean;
+  documentCounts?: Map<string, number>;
+}
+
+interface ContextMenuState {
+  isOpen: boolean;
+  position: { x: number; y: number };
+  folderId: string | null;
+  folderName: string;
+  hasChildren: boolean;
+  documentCount: number;
 }
 
 /**
@@ -32,11 +56,24 @@ function FolderTreeItem({
   onSelectFolder,
   onToggleExpand,
   onCreateFolder,
+  onRenameFolder,
+  onDeleteFolder,
   isAdmin,
+  documentCounts,
 }: FolderTreeItemProps) {
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({
+    isOpen: false,
+    position: { x: 0, y: 0 },
+    folderId: null,
+    folderName: '',
+    hasChildren: false,
+    documentCount: 0,
+  });
+
   const hasChildren = folder.children && folder.children.length > 0;
   const isExpanded = expandedIds.has(folder.id);
   const isSelected = selectedFolderId === folder.id;
+  const documentCount = documentCounts?.get(folder.id) ?? 0;
 
   const handleClick = () => {
     onSelectFolder(folder.id);
@@ -52,12 +89,57 @@ function FolderTreeItem({
     onCreateFolder?.(folder.id);
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isAdmin) return;
+
+    setContextMenu({
+      isOpen: true,
+      position: { x: e.clientX, y: e.clientY },
+      folderId: folder.id,
+      folderName: folder.name,
+      hasChildren,
+      documentCount,
+    });
+  };
+
+  const handleMoreClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isAdmin) return;
+
+    const button = e.currentTarget as HTMLElement;
+    const rect = button.getBoundingClientRect();
+
+    setContextMenu({
+      isOpen: true,
+      position: { x: rect.right, y: rect.bottom },
+      folderId: folder.id,
+      folderName: folder.name,
+      hasChildren,
+      documentCount,
+    });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const handleRename = () => {
+    onRenameFolder?.(folder.id, folder.name);
+  };
+
+  const handleDelete = () => {
+    onDeleteFolder?.(folder.id, folder.name, hasChildren, documentCount);
+  };
+
   return (
     <div className="folder-tree-item">
       <div
         className={`folder-row ${isSelected ? 'selected' : ''}`}
         style={{ paddingLeft: `${level * 16 + 8}px` }}
         onClick={handleClick}
+        onContextMenu={handleContextMenu}
       >
         {/* Expand/Collapse Toggle */}
         <button
@@ -87,6 +169,13 @@ function FolderTreeItem({
           {folder.name}
         </span>
 
+        {/* Document count badge */}
+        {documentCount > 0 && (
+          <span className="folder-count" title={`${documentCount} document${documentCount === 1 ? '' : 's'}`}>
+            {documentCount}
+          </span>
+        )}
+
         {/* View-only indicator */}
         {folder.isViewOnly && (
           <span className="folder-lock" title="View-only folder">
@@ -94,17 +183,41 @@ function FolderTreeItem({
           </span>
         )}
 
-        {/* Create subfolder button (admin only) */}
-        {isAdmin && onCreateFolder && (
-          <button
-            className="folder-add-btn"
-            onClick={handleCreateSubfolder}
-            title="Create subfolder"
-          >
-            <Plus size={14} />
-          </button>
+        {/* Actions (admin only) */}
+        {isAdmin && (
+          <div className="folder-actions">
+            {/* Create subfolder button */}
+            {onCreateFolder && (
+              <button
+                className="folder-action-btn"
+                onClick={handleCreateSubfolder}
+                title="Create subfolder"
+              >
+                <Plus size={14} />
+              </button>
+            )}
+            {/* More actions menu */}
+            <button
+              className="folder-action-btn"
+              onClick={handleMoreClick}
+              title="More actions"
+            >
+              <MoreVertical size={14} />
+            </button>
+          </div>
         )}
       </div>
+
+      {/* Context Menu */}
+      <FolderContextMenu
+        isOpen={contextMenu.isOpen}
+        position={contextMenu.position}
+        onClose={closeContextMenu}
+        onRename={handleRename}
+        onDelete={handleDelete}
+        onCreateSubfolder={onCreateFolder ? () => onCreateFolder(folder.id) : undefined}
+        isAdmin={isAdmin ?? false}
+      />
 
       {/* Nested Children */}
       {hasChildren && isExpanded && (
@@ -119,7 +232,10 @@ function FolderTreeItem({
               onSelectFolder={onSelectFolder}
               onToggleExpand={onToggleExpand}
               onCreateFolder={onCreateFolder}
+              onRenameFolder={onRenameFolder}
+              onDeleteFolder={onDeleteFolder}
               isAdmin={isAdmin}
+              documentCounts={documentCounts}
             />
           ))}
         </div>
@@ -137,7 +253,10 @@ export function FolderTree({
   selectedFolderId,
   onSelectFolder,
   onCreateFolder,
+  onRenameFolder,
+  onDeleteFolder,
   isAdmin = false,
+  documentCounts,
 }: FolderTreeProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
     // Initially expand first level
@@ -159,6 +278,11 @@ export function FolderTree({
   const handleSelectAllDocuments = () => {
     onSelectFolder(null);
   };
+
+  // Calculate total document count
+  const totalDocumentCount = documentCounts
+    ? Array.from(documentCounts.values()).reduce((sum, count) => sum + count, 0)
+    : 0;
 
   return (
     <div className="folder-tree">
@@ -187,6 +311,11 @@ export function FolderTree({
             <FolderOpen size={18} />
           </span>
           <span className="folder-name">All Documents</span>
+          {totalDocumentCount > 0 && (
+            <span className="folder-count" title={`${totalDocumentCount} total document${totalDocumentCount === 1 ? '' : 's'}`}>
+              {totalDocumentCount}
+            </span>
+          )}
         </div>
 
         {/* Folder tree */}
@@ -213,7 +342,10 @@ export function FolderTree({
               onSelectFolder={onSelectFolder}
               onToggleExpand={handleToggleExpand}
               onCreateFolder={onCreateFolder}
+              onRenameFolder={onRenameFolder}
+              onDeleteFolder={onDeleteFolder}
               isAdmin={isAdmin}
+              documentCounts={documentCounts}
             />
           ))
         )}

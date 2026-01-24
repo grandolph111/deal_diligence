@@ -187,7 +187,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Show folder document count",
       "Handle empty folder states"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "frontend",
