@@ -3,8 +3,11 @@ import { X, Calendar, User, Tag, Trash2, Plus } from 'lucide-react';
 import { PriorityBadge } from './PriorityBadge';
 import { CommentList } from './CommentList';
 import { SubtaskList } from './SubtaskList';
+import { DocumentLinkingSection } from './DocumentLinkingSection';
+import { LinkDocumentModal } from './LinkDocumentModal';
 import { useComments } from '../hooks/useComments';
 import { useSubtasks } from '../hooks/useSubtasks';
+import { useTaskDocuments } from '../hooks/useTaskDocuments';
 import type { Task, Priority, TaskStatus, UpdateTaskDto, SubtaskStatus, ProjectMember } from '../../../types/api';
 
 interface TaskDetailDrawerProps {
@@ -13,6 +16,7 @@ interface TaskDetailDrawerProps {
   projectId: string | undefined;
   currentUserId: string | undefined;
   isAdmin: boolean;
+  isMember: boolean;
   members?: ProjectMember[];
   onClose: () => void;
   onUpdate: (taskId: string, data: UpdateTaskDto) => Promise<Task>;
@@ -20,6 +24,7 @@ interface TaskDetailDrawerProps {
   onRefresh: () => void;
   onAddAssignee?: (taskId: string, userId: string) => Promise<void>;
   onRemoveAssignee?: (taskId: string, userId: string) => Promise<void>;
+  onViewDocument?: (documentId: string, folderId: string | null) => void;
 }
 
 export function TaskDetailDrawer({
@@ -28,6 +33,7 @@ export function TaskDetailDrawer({
   projectId,
   currentUserId,
   isAdmin,
+  isMember,
   members = [],
   onClose,
   onUpdate,
@@ -35,6 +41,7 @@ export function TaskDetailDrawer({
   onRefresh,
   onAddAssignee,
   onRemoveAssignee,
+  onViewDocument,
 }: TaskDetailDrawerProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -46,6 +53,7 @@ export function TaskDetailDrawer({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
+  const [showLinkDocumentModal, setShowLinkDocumentModal] = useState(false);
   const [assigneeLoading, setAssigneeLoading] = useState<string | null>(null);
   const assigneeDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -67,6 +75,14 @@ export function TaskDetailDrawer({
     deleteSubtask,
   } = useSubtasks(projectId, task?.id);
 
+  const {
+    linkedDocuments,
+    loading: documentsLoading,
+    fetchTaskDocuments,
+    linkDocument,
+    unlinkDocument,
+  } = useTaskDocuments(projectId, task?.id);
+
   useEffect(() => {
     if (task) {
       setEditTitle(task.title);
@@ -76,8 +92,9 @@ export function TaskDetailDrawer({
       setEditDueDate(task.dueDate ? task.dueDate.split('T')[0] : '');
       fetchComments().catch(() => {});
       fetchSubtasks().catch(() => {});
+      fetchTaskDocuments().catch(() => {});
     }
-  }, [task, fetchComments, fetchSubtasks]);
+  }, [task, fetchComments, fetchSubtasks, fetchTaskDocuments]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -134,6 +151,20 @@ export function TaskDetailDrawer({
 
   const handleUpdateSubtask = async (subtaskId: string, status: SubtaskStatus) => {
     await updateSubtask(subtaskId, { status });
+  };
+
+  const handleLinkDocument = async (documentId: string) => {
+    await linkDocument(documentId);
+  };
+
+  const handleUnlinkDocument = async (documentId: string) => {
+    await unlinkDocument(documentId);
+  };
+
+  const handleViewDocument = (documentId: string, folderId: string | null) => {
+    if (onViewDocument) {
+      onViewDocument(documentId, folderId);
+    }
   };
 
   const handleAddAssignee = async (userId: string) => {
@@ -383,6 +414,19 @@ export function TaskDetailDrawer({
                 />
               </div>
 
+              {/* Linked Documents */}
+              <div className="task-section">
+                <DocumentLinkingSection
+                  linkedDocuments={linkedDocuments}
+                  loading={documentsLoading}
+                  onUnlink={handleUnlinkDocument}
+                  onAddClick={() => setShowLinkDocumentModal(true)}
+                  onViewDocument={onViewDocument ? handleViewDocument : undefined}
+                  canLink={isMember || isAdmin}
+                  canUnlink={isMember || isAdmin}
+                />
+              </div>
+
               {/* Comments */}
               <div className="task-section">
                 <CommentList
@@ -450,6 +494,17 @@ export function TaskDetailDrawer({
               </div>
             </div>
           </div>
+        )}
+
+        {/* Link Document Modal */}
+        {projectId && (
+          <LinkDocumentModal
+            isOpen={showLinkDocumentModal}
+            projectId={projectId}
+            alreadyLinkedDocumentIds={linkedDocuments.map((ld) => ld.documentId)}
+            onClose={() => setShowLinkDocumentModal(false)}
+            onLink={handleLinkDocument}
+          />
         )}
       </div>
     </div>

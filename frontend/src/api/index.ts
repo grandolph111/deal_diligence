@@ -11,3 +11,4 @@ export { membersService } from './services/members.service';
 export { tasksService } from './services/tasks.service';
 export { tagsService } from './services/tags.service';
 export { foldersService } from './services/folders.service';
+export { taskDocumentsService } from './services/task-documents.service';

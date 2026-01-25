@@ -353,3 +353,24 @@ export interface UpdateFolderDto {
 export interface MoveFolderDto {
   parentId: string | null;
 }
+
+// ============================================
+// TASK-DOCUMENT LINKING
+// ============================================
+
+// Linked document with linking metadata
+export interface LinkedDocument {
+  id: string;
+  documentId: string;
+  taskId: string;
+  linkedAt: string;
+  linkedBy: Pick<User, 'id' | 'email' | 'name'>;
+  document: Pick<Document, 'id' | 'name' | 'mimeType' | 'sizeBytes' | 'processingStatus' | 'folderId'> & {
+    folder?: Pick<Folder, 'id' | 'name'>;
+  };
+}
+
+// DTO for linking a document to a task
+export interface LinkDocumentDto {
+  documentId: string;
+}

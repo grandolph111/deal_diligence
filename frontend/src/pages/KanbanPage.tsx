@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, UserPlus } from 'lucide-react';
 import { KanbanBoard, InviteMemberModal } from '../features/kanban';
 import { membersService, apiClient } from '../api';
@@ -10,6 +10,7 @@ import '../features/kanban/kanban.css';
 export function KanbanPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const { user, isLoading: authLoading } = useAuth();
+  const navigate = useNavigate();
 
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,7 +20,19 @@ export function KanbanPage() {
   const currentUserMember = members.find((m) => m.user?.email === user?.email);
   const currentUserId = currentUserMember?.user?.id;
   const isAdmin = currentUserMember?.role === 'OWNER' || currentUserMember?.role === 'ADMIN';
+  const isMember = currentUserMember?.role === 'MEMBER' || isAdmin;
   const canInvite = isAdmin;
+
+  // Handler for viewing a linked document in VDR
+  const handleViewDocument = (documentId: string, folderId: string | null) => {
+    // Navigate to VDR page with query params to highlight the document
+    const params = new URLSearchParams();
+    if (folderId) {
+      params.set('folderId', folderId);
+    }
+    params.set('documentId', documentId);
+    navigate(`/projects/${projectId}/vdr?${params.toString()}`);
+  };
 
   useEffect(() => {
     if (authLoading || !apiClient.isReady() || !projectId) {
@@ -75,7 +88,9 @@ export function KanbanPage() {
         projectId={projectId}
         currentUserId={currentUserId}
         isAdmin={isAdmin}
+        isMember={isMember}
         members={members}
+        onViewDocument={handleViewDocument}
       />
 
       {projectId && (

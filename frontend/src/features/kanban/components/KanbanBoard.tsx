@@ -15,7 +15,9 @@ interface KanbanBoardProps {
   projectId: string | undefined;
   currentUserId: string | undefined;
   isAdmin: boolean;
+  isMember: boolean;
   members?: ProjectMember[];
+  onViewDocument?: (documentId: string, folderId: string | null) => void;
 }
 
 const columns: { status: TaskStatus; title: string }[] = [
@@ -25,7 +27,7 @@ const columns: { status: TaskStatus; title: string }[] = [
   { status: 'COMPLETE', title: 'Completed' },
 ];
 
-export function KanbanBoard({ projectId, currentUserId, isAdmin, members = [] }: KanbanBoardProps) {
+export function KanbanBoard({ projectId, currentUserId, isAdmin, isMember, members = [], onViewDocument }: KanbanBoardProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createStatus, setCreateStatus] = useState<TaskStatus>('TODO');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -164,6 +166,7 @@ export function KanbanBoard({ projectId, currentUserId, isAdmin, members = [] }:
           projectId={projectId}
           currentUserId={currentUserId}
           isAdmin={isAdmin}
+          isMember={isMember}
           members={members}
           onClose={handleCloseDrawer}
           onUpdate={updateTask}
@@ -171,6 +174,7 @@ export function KanbanBoard({ projectId, currentUserId, isAdmin, members = [] }:
           onRefresh={handleRefresh}
           onAddAssignee={addAssignee}
           onRemoveAssignee={removeAssignee}
+          onViewDocument={onViewDocument}
         />
       )}
     </div>

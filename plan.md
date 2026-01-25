@@ -267,7 +267,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Add unlink document action",
       "Update task detail sidebar with documents section"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "testing",

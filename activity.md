@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-24
 **Phase:** 2A - Foundation
-**Tasks Completed:** 6/46
-**Current Task:** Folder management UI - COMPLETE
+**Tasks Completed:** 7/46
+**Current Task:** Document-task linking UI - COMPLETE
 
 ---
 
@@ -23,7 +23,7 @@
 
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
-| 2A - Foundation | In Progress | 17 | 6 |
+| 2A - Foundation | In Progress | 17 | 7 |
 | 2B - Extraction | Not Started | 9 | 0 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
@@ -625,6 +625,122 @@
 - Document upload UI (Phase 2A task 12) - requires S3/document API first
 - Or: Document list and grid view (Phase 2A task 13) - partial implementation exists
 - Or: Document upload and storage API (Phase 2A task 4) - requires S3 setup
+
+---
+
+### 2026-01-24 - Document-Task Linking UI Implementation
+
+**Objective:** Implement document-task linking UI for VDR (Phase 2A task 16)
+
+**Task Completed:**
+- Category: frontend
+- Phase: 2A
+- Description: Document-task linking UI
+
+**What Was Implemented:**
+
+1. **API Types** (`frontend/src/types/api.ts`)
+   - Added `LinkedDocument` interface with linking metadata (documentId, taskId, linkedAt, linkedBy)
+   - Added `LinkDocumentDto` interface for API requests
+
+2. **Task-Documents API Service** (`frontend/src/api/services/task-documents.service.ts`)
+   - `getTaskDocuments()` - Get all documents linked to a task
+   - `linkDocument()` - Link a document to a task
+   - `unlinkDocument()` - Unlink a document from a task
+
+3. **useTaskDocuments Hook** (`frontend/src/features/kanban/hooks/useTaskDocuments.ts`)
+   - Manages linked documents state
+   - Provides fetch, link, and unlink operations
+   - Follows existing pattern from useComments hook
+
+4. **LinkedDocumentItem Component** (`frontend/src/features/kanban/components/LinkedDocumentItem.tsx`)
+   - Displays individual linked document with icon, name, folder, size, status
+   - Shows processing status indicator (pending, processing, complete, failed)
+   - Unlink button with loading state
+   - Click-to-view functionality for navigation to VDR
+
+5. **DocumentLinkingSection Component** (`frontend/src/features/kanban/components/DocumentLinkingSection.tsx`)
+   - Section header with "Documents" title and count
+   - "Attach" button to open document picker modal
+   - List of linked documents using LinkedDocumentItem
+   - Loading and empty states
+   - Permission-based show/hide of link/unlink actions
+
+6. **LinkDocumentModal Component** (`frontend/src/features/kanban/components/LinkDocumentModal.tsx`)
+   - Two-panel layout: folder tree on left, documents on right
+   - Folder navigation with expand/collapse
+   - Search input for filtering documents
+   - Document list with link/already-linked status
+   - Click to link with loading state
+   - Placeholder for when no documents exist yet (VDR documents API pending)
+
+7. **TaskDetailDrawer Integration** (`frontend/src/features/kanban/components/TaskDetailDrawer.tsx`)
+   - Added useTaskDocuments hook integration
+   - Added DocumentLinkingSection between Subtasks and Comments
+   - Added LinkDocumentModal with open/close state
+   - Added isMember prop for permission checks
+   - Added onViewDocument callback for navigation
+
+8. **KanbanBoard Updates** (`frontend/src/features/kanban/components/KanbanBoard.tsx`)
+   - Added isMember and onViewDocument props
+   - Passes props to TaskDetailDrawer
+
+9. **KanbanPage Updates** (`frontend/src/pages/KanbanPage.tsx`)
+   - Added handleViewDocument function to navigate to VDR
+   - Calculates isMember permission from current user role
+   - Passes new props to KanbanBoard
+
+10. **CSS Styles** (`frontend/src/features/kanban/kanban.css`)
+    - Document linking section styles
+    - Linked document item styles with hover states
+    - Link document modal with two-panel layout
+    - Folder picker styles
+    - Document picker styles
+    - Button variants and loading states
+
+**Files Created:**
+- `frontend/src/api/services/task-documents.service.ts`
+- `frontend/src/features/kanban/hooks/useTaskDocuments.ts`
+- `frontend/src/features/kanban/components/LinkedDocumentItem.tsx`
+- `frontend/src/features/kanban/components/DocumentLinkingSection.tsx`
+- `frontend/src/features/kanban/components/LinkDocumentModal.tsx`
+
+**Files Modified:**
+- `frontend/src/types/api.ts` - Added LinkedDocument and LinkDocumentDto types
+- `frontend/src/api/index.ts` - Exported taskDocumentsService
+- `frontend/src/features/kanban/components/TaskDetailDrawer.tsx` - Integrated document linking
+- `frontend/src/features/kanban/components/KanbanBoard.tsx` - Added new props
+- `frontend/src/features/kanban/index.ts` - Exported new components and hooks
+- `frontend/src/pages/KanbanPage.tsx` - Added view document handler
+- `frontend/src/features/kanban/kanban.css` - Added document linking styles
+
+**Verification:**
+- Document-task linking module TypeScript compiles without errors
+- Pre-existing TypeScript errors in settings module remain (unrelated to this change)
+- Pre-existing TypeScript errors in backend remain (unrelated to this change)
+
+**Features Implemented:**
+| Feature | Implementation |
+|---------|---------------|
+| Attach Document button | DocumentLinkingSection with "Attach" button |
+| Document picker modal | LinkDocumentModal with folder tree and document list |
+| Show linked documents | DocumentLinkingSection with LinkedDocumentItem list |
+| Click-to-view linked document | Navigation to VDR via onViewDocument callback |
+| Unlink document action | LinkedDocumentItem with unlink button |
+| Task detail documents section | DocumentLinkingSection integrated into TaskDetailDrawer |
+
+**Notes:**
+- Document picker modal shows empty state until Document Upload API is implemented
+- Click-to-view navigates to VDR with query params (folderId, documentId)
+- Permissions: isMember or isAdmin can link/unlink documents
+- All operations include loading states and error handling
+
+**Tasks Completed:** 7/46
+
+**Next Task:**
+- Document upload UI (Phase 2A task 12) - requires document upload API first
+- Or: Document list and grid view (Phase 2A task 13) - partial implementation exists
+- Or: Document viewer (Phase 2A task 14)
 
 ---
 

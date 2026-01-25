@@ -12,6 +12,9 @@ export { SubtaskItem } from './components/SubtaskItem';
 export { PriorityBadge } from './components/PriorityBadge';
 export { AssigneeAvatars } from './components/AssigneeAvatars';
 export { InviteMemberModal } from './components/InviteMemberModal';
+export { DocumentLinkingSection } from './components/DocumentLinkingSection';
+export { LinkedDocumentItem } from './components/LinkedDocumentItem';
+export { LinkDocumentModal } from './components/LinkDocumentModal';
 
 // Hooks
 export { useKanbanBoard } from './hooks/useKanbanBoard';
@@ -19,3 +22,4 @@ export { useDragAndDrop } from './hooks/useDragAndDrop';
 export { useTaskDetail } from './hooks/useTaskDetail';
 export { useComments } from './hooks/useComments';
 export { useSubtasks } from './hooks/useSubtasks';
+export { useTaskDocuments } from './hooks/useTaskDocuments';
