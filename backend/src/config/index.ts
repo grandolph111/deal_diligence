@@ -27,4 +27,13 @@ export const config = {
   invitations: {
     expiryDays: parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10),
   },
+
+  pythonService: {
+    url: process.env.PYTHON_SERVICE_URL || 'http://localhost:8000',
+  },
+
+  berrydb: {
+    apiKey: process.env.BERRYDB_API_KEY || '',
+    projectId: process.env.BERRYDB_PROJECT_ID || '',
+  },
 };
