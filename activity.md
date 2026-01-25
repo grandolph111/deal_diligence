@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-25
 **Phase:** 2A - Foundation
-**Tasks Completed:** 15/46
-**Current Task:** Document processing pipeline - COMPLETE
+**Tasks Completed:** 16/46
+**Current Task:** Full-text search API - COMPLETE
 
 ---
 
@@ -23,7 +23,7 @@
 
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
-| 2A - Foundation | In Progress | 17 | 15 |
+| 2A - Foundation | In Progress | 17 | 16 |
 | 2B - Extraction | Not Started | 9 | 0 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
@@ -1592,6 +1592,144 @@ The documents module was already partially implemented. This session enhanced it
 **Next Task:**
 - Full-text search API (Phase 2A task 8)
 - Or: Infrastructure setup for VDR (Phase 2A task 1) - requires AWS S3 bucket
+
+---
+
+### 2026-01-25 - Full-Text Search API Implementation
+
+**Objective:** Implement full-text search API for VDR (Phase 2A task 8)
+
+**Task Completed:**
+- Category: backend
+- Phase: 2A
+- Description: Full-text search API
+
+**What Was Implemented:**
+
+1. **Search Validators** (`backend/src/modules/search/search.validators.ts`)
+   - `searchQuerySchema`: Validates search queries with query text, searchType, filters
+   - `SearchType` constants: keyword, semantic, hybrid
+   - `DocumentType` constants for filtering: contract, financial, legal, corporate, technical, other
+   - `RiskLevel` constants for filtering: low, medium, high
+   - Interfaces: `SearchSnippet`, `SearchResult`, `SearchResponse`
+   - Support for folder filters, document type filters, date range filters
+   - Pagination support with page and limit
+
+2. **Search Service** (`backend/src/modules/search/search.service.ts`)
+   - `isPythonServiceAvailable()`: Health check for Python microservice
+   - `getAccessibleFolderIds()`: Gets folder IDs user can access based on permissions
+   - `searchViaBerryDB()`: Full search via Python microservice with BerryDB integration
+   - `searchViaPostgreSQL()`: Fallback search using PostgreSQL LIKE queries
+   - `enrichSearchResults()`: Enriches BerryDB results with PostgreSQL metadata
+   - `generateSimpleSnippets()`: Creates highlight snippets for PostgreSQL fallback
+   - `search()`: Main method that tries BerryDB first, falls back to PostgreSQL
+   - `findSimilar()`: Semantic similarity search for finding related documents
+   - Folder permission filtering respects `restrictedFolders` for MEMBER/VIEWER roles
+   - OWNER and ADMIN have full access to all folders
+
+3. **Search Controller** (`backend/src/modules/search/search.controller.ts`)
+   - `search`: POST /projects/:id/search - Main search endpoint
+   - `findSimilar`: POST /projects/:id/search/similar/:documentId - Similarity search
+   - Audit logging for all search queries
+
+4. **Search Routes** (`backend/src/modules/search/search.routes.ts`)
+   - All routes require authentication and project membership
+   - Routes require `canAccessVDR` permission
+
+5. **Route Mounting** (`backend/src/app.ts`)
+   - Mounted at `/api/v1/projects/:id/search`
+
+6. **Integration Tests** (`backend/tests/integration/search.test.ts`)
+   - 16 comprehensive tests covering:
+     - Authentication (401 for unauthenticated)
+     - Authorization (403 for members without VDR permission)
+     - Search results for project owner
+     - Pagination
+     - Folder filtering
+     - Document type filtering
+     - Query validation
+     - Empty results handling
+     - Folder restrictions for MEMBER role
+     - ADMIN access to all folders
+     - Non-existent project handling (404)
+     - Audit log creation
+     - Similar documents endpoint (401, 404, 200 scenarios)
+
+**Files Created:**
+- `backend/src/modules/search/search.validators.ts`
+- `backend/src/modules/search/search.service.ts`
+- `backend/src/modules/search/search.controller.ts`
+- `backend/src/modules/search/search.routes.ts`
+- `backend/src/modules/search/index.ts`
+- `backend/tests/integration/search.test.ts`
+
+**Files Modified:**
+- `backend/src/app.ts` - Added search routes import and mounting
+
+**Verification:**
+- Search module TypeScript compiles without errors
+- Pre-existing TypeScript errors in other modules remain (unrelated to this change)
+- Tests require running database (PostgreSQL at 127.0.0.1:5433)
+
+**API Endpoints Created:**
+| Method | Endpoint | Description | Permission |
+|--------|----------|-------------|------------|
+| POST | `/projects/:id/search` | Search documents | canAccessVDR |
+| POST | `/projects/:id/search/similar/:documentId` | Find similar documents | canAccessVDR |
+
+**Search Request Body:**
+```json
+{
+  "query": "search text",
+  "searchType": "hybrid",
+  "folderIds": ["uuid1", "uuid2"],
+  "documentTypes": ["contract", "legal"],
+  "dateFrom": "2024-01-01T00:00:00Z",
+  "dateTo": "2024-12-31T23:59:59Z",
+  "page": 1,
+  "limit": 20
+}
+```
+
+**Search Response:**
+```json
+{
+  "query": "search text",
+  "searchType": "hybrid",
+  "results": [
+    {
+      "documentId": "uuid",
+      "filename": "document.pdf",
+      "folderId": "uuid",
+      "folderName": "Legal",
+      "score": 0.95,
+      "snippets": [{ "text": "...", "pageNumber": 1, "highlights": [[0, 5]] }],
+      "documentType": "contract",
+      "riskLevel": "low",
+      "isRestricted": false
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 100,
+    "totalPages": 5
+  }
+}
+```
+
+**Notes:**
+- When Python microservice is unavailable, falls back to PostgreSQL LIKE search
+- PostgreSQL fallback only searches document names, not content
+- Folder permissions are enforced - restricted users only see documents in allowed folders
+- Restricted documents show `isRestricted: true` and have empty snippets
+- All search queries are logged to audit log for SOC 2 compliance
+
+**Tasks Completed:** 16/46
+
+**Next Task:**
+- Infrastructure setup for VDR (Phase 2A task 1) - requires AWS S3 bucket
+- Or: Phase 2B tasks (entity extraction, classification, etc.)
 
 ---
 

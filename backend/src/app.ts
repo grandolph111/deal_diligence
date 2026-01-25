@@ -29,6 +29,7 @@ import {
   processingWebhookRouter,
   processingProjectRouter,
 } from './modules/processing/processing.routes';
+import searchRoutes from './modules/search/search.routes';
 
 const app = express();
 
@@ -93,6 +94,7 @@ app.use('/api/v1/projects/:id/tasks/:taskId/subtasks', subtaskRoutes);
 app.use('/api/v1/projects/:id/tasks/:taskId/documents', taskDocumentsRoutes);
 app.use('/api/v1/processing', processingWebhookRouter);
 app.use('/api/v1/projects/:id/processing', processingProjectRouter);
+app.use('/api/v1/projects/:id/search', searchRoutes);
 
 // Error handling
 app.use(notFoundHandler);
