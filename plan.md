@@ -316,7 +316,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Update ingestion pipeline to run all extractors",
       "Write tests for extraction endpoints"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "backend",

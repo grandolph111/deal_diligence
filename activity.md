@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-25
 **Phase:** 2B - Intelligent Extraction (IN PROGRESS)
-**Tasks Completed:** 18/46
-**Current Task:** Database schema for intelligent extraction - COMPLETE
+**Tasks Completed:** 19/46
+**Current Task:** Python microservice - NER and classification - COMPLETE
 
 ---
 
@@ -24,7 +24,7 @@
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
 | 2A - Foundation | COMPLETE | 17 | 17 |
-| 2B - Extraction | IN PROGRESS | 9 | 1 |
+| 2B - Extraction | IN PROGRESS | 9 | 2 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
 | Cross-Cutting | Not Started | 3 | 0 |
@@ -1891,6 +1891,113 @@ The documents module was already partially implemented. This session enhanced it
 
 **Next Task:**
 - Python microservice - NER and classification (Phase 2B task 2)
+
+---
+
+### 2026-01-25 - Python Microservice NER and Classification
+
+**Objective:** Implement entity extraction, document classification, and clause detection endpoints in the Python microservice (Phase 2B task 2)
+
+**Task Completed:**
+- Category: backend
+- Phase: 2B
+- Description: Python microservice - NER and classification
+
+**What Was Implemented:**
+
+1. **Enhanced BerryDB Service** (`python-service/app/services/berrydb.py`)
+   - `extract_entities()` - Enhanced with realistic mock data generation for M&A documents
+   - `classify_document()` - Enhanced with document type profiles and risk patterns
+   - `detect_clauses()` - Enhanced with comprehensive contract clause templates
+   - `run_full_analysis()` - New method to run all extractors in parallel
+   - `_generate_mock_entities()` - Mock data for organizations, people, amounts, dates, percentages, locations
+   - `_generate_mock_classification()` - Mock data with weighted document types and risk profiles
+   - `_generate_mock_clauses()` - Mock data with 18 clause templates including risk flags
+
+2. **Analysis Endpoints** (`python-service/app/routers/analyze.py`)
+   - `POST /analyze/entities` - Extract named entities (NER)
+   - `POST /analyze/classify` - Document type and risk classification
+   - `POST /analyze/clauses` - Contract clause detection
+   - `POST /analyze/full` - Run all analysis in parallel (new)
+   - `POST /analyze/full/async` - Background analysis with callback (new)
+
+3. **Ingestion Pipeline Integration** (`python-service/app/routers/ingest.py`)
+   - Updated `POST /ingest` to trigger full analysis after ingestion
+   - Added `run_full_analysis_and_callback()` background task
+   - Added `send_callback()` for Node.js backend notification
+   - Added `POST /ingest/reprocess/{document_id}` endpoint for re-analysis
+
+4. **New Models** (`python-service/app/models.py`)
+   - `FullAnalysisRequest` - Request for comprehensive document analysis
+   - `FullAnalysisResponse` - Combined response with entities, classification, clauses
+
+5. **Comprehensive Tests** (`python-service/tests/test_analyze.py`)
+   - 26 test cases covering all analysis endpoints
+   - Tests for entity extraction (8 tests)
+   - Tests for document classification (6 tests)
+   - Tests for clause detection (6 tests)
+   - Tests for full analysis (5 tests)
+   - Tests for async analysis (2 tests)
+
+6. **Test Configuration** (`python-service/tests/conftest.py`)
+   - Shared fixtures for test client and sample data
+
+**Files Created:**
+- `python-service/tests/test_analyze.py` - Comprehensive analysis endpoint tests
+- `python-service/tests/conftest.py` - Shared pytest fixtures
+
+**Files Modified:**
+- `python-service/app/services/berrydb.py` - Enhanced NER, classification, clause detection
+- `python-service/app/routers/analyze.py` - Added /full and /full/async endpoints
+- `python-service/app/routers/ingest.py` - Integrated full analysis pipeline
+- `python-service/app/models.py` - Added FullAnalysisRequest/Response models
+
+**API Endpoints Created/Updated:**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/analyze/entities` | Extract named entities (enhanced) |
+| POST | `/analyze/classify` | Document classification (enhanced) |
+| POST | `/analyze/clauses` | Clause detection (enhanced) |
+| POST | `/analyze/full` | Run all analysis in parallel (NEW) |
+| POST | `/analyze/full/async` | Background analysis with callback (NEW) |
+| POST | `/ingest` | Now triggers full analysis pipeline |
+| POST | `/ingest/reprocess/{id}` | Re-run analysis on existing document (NEW) |
+
+**Entity Types Supported:**
+- PERSON (executives, signatories)
+- ORGANIZATION (companies, subsidiaries)
+- DATE (effective dates, deadlines)
+- MONEY (deal values, thresholds)
+- PERCENTAGE (ownership stakes)
+- LOCATION (jurisdictions)
+
+**Document Types Classified:**
+- CONTRACT (40% weight)
+- FINANCIAL (25% weight)
+- LEGAL (15% weight)
+- CORPORATE (10% weight)
+- TECHNICAL (7% weight)
+- OTHER (3% weight)
+
+**Clause Types Detected:**
+- TERMINATION, LIABILITY, INDEMNIFICATION
+- CONFIDENTIALITY, NON_COMPETE, CHANGE_OF_CONTROL
+- ASSIGNMENT, GOVERNING_LAW, DISPUTE_RESOLUTION
+- PAYMENT_TERMS, WARRANTY, INTELLECTUAL_PROPERTY
+
+**Notes:**
+- All endpoints return realistic mock data when BerryDB is not configured
+- Mock data is deterministic based on document_id hash for consistent testing
+- Analysis pipeline runs in parallel for better performance
+- Callback integration sends results to Node.js backend after processing
+- Risk flags include specific reasons for flagged clauses
+
+**Tasks Completed:** 19/46
+
+**Phase 2B Progress:** 2/9 tasks
+
+**Next Task:**
+- Entity extraction API (Phase 2B task 3)
 
 ---
 
