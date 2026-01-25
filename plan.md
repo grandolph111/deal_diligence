@@ -331,7 +331,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Implement entity search endpoint",
       "Write tests for entity endpoints"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "backend",

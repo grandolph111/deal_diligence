@@ -30,6 +30,10 @@ import {
   processingProjectRouter,
 } from './modules/processing/processing.routes';
 import searchRoutes from './modules/search/search.routes';
+import {
+  documentEntitiesRouter,
+  projectEntitiesRouter,
+} from './modules/entities/entities.routes';
 
 const app = express();
 
@@ -159,6 +163,8 @@ app.use('/api/v1/projects/:id/tasks/:taskId/documents', taskDocumentsRoutes);
 app.use('/api/v1/processing', processingWebhookRouter);
 app.use('/api/v1/projects/:id/processing', processingProjectRouter);
 app.use('/api/v1/projects/:id/search', searchRoutes);
+app.use('/api/v1/projects/:id/documents/:documentId/entities', documentEntitiesRouter);
+app.use('/api/v1/projects/:id/entities', projectEntitiesRouter);
 
 // Error handling
 app.use(notFoundHandler);

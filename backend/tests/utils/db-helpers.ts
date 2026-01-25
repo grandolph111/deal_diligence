@@ -1,4 +1,4 @@
-import { PrismaClient, ProjectRole, TaskStatus, TaskPriority, SubtaskStatus, Folder, DocumentStatus } from '@prisma/client';
+import { PrismaClient, ProjectRole, TaskStatus, TaskPriority, SubtaskStatus, Folder, DocumentStatus, DocumentEntity } from '@prisma/client';
 import { testUsers, MockUser } from './auth-mock';
 
 // Use a separate Prisma client for tests
@@ -20,6 +20,11 @@ export async function cleanDatabase(): Promise<void> {
   await prisma.taskDocument.deleteMany();
   await prisma.task.deleteMany();
   await prisma.tag.deleteMany();
+  // Phase 2B entities
+  await prisma.entityRelationship.deleteMany();
+  await prisma.documentEntity.deleteMany();
+  await prisma.documentAnnotation.deleteMany();
+  await prisma.masterEntity.deleteMany();
   await prisma.documentChunk.deleteMany();
   await prisma.document.deleteMany();
   await prisma.folder.deleteMany();
@@ -431,6 +436,39 @@ export async function linkDocumentToTask(
       taskId,
       documentId,
       linkedById,
+    },
+  });
+}
+
+/**
+ * Create a test document entity
+ */
+export async function createTestDocumentEntity(
+  documentId: string,
+  data: {
+    text?: string;
+    entityType?: string;
+    normalizedText?: string;
+    pageNumber?: number;
+    startOffset?: number;
+    endOffset?: number;
+    confidence?: number;
+    source?: string;
+    needsReview?: boolean;
+  } = {}
+): Promise<DocumentEntity> {
+  return prisma.documentEntity.create({
+    data: {
+      documentId,
+      text: data.text || 'Test Entity',
+      entityType: data.entityType || 'PERSON',
+      normalizedText: data.normalizedText,
+      pageNumber: data.pageNumber,
+      startOffset: data.startOffset ?? 0,
+      endOffset: data.endOffset ?? 10,
+      confidence: data.confidence ?? 0.95,
+      source: data.source || 'test',
+      needsReview: data.needsReview ?? false,
     },
   });
 }

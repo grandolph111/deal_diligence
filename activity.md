@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-25
 **Phase:** 2B - Intelligent Extraction (IN PROGRESS)
-**Tasks Completed:** 19/46
-**Current Task:** Python microservice - NER and classification - COMPLETE
+**Tasks Completed:** 20/46
+**Current Task:** Entity extraction API - COMPLETE
 
 ---
 
@@ -24,7 +24,7 @@
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
 | 2A - Foundation | COMPLETE | 17 | 17 |
-| 2B - Extraction | IN PROGRESS | 9 | 2 |
+| 2B - Extraction | IN PROGRESS | 9 | 3 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
 | Cross-Cutting | Not Started | 3 | 0 |
@@ -1998,6 +1998,123 @@ The documents module was already partially implemented. This session enhanced it
 
 **Next Task:**
 - Entity extraction API (Phase 2B task 3)
+
+---
+
+### 2026-01-25 - Entity Extraction API Implementation
+
+**Objective:** Implement Entity extraction API for VDR (Phase 2B task 3)
+
+**Task Completed:**
+- Category: backend
+- Phase: 2B
+- Description: Entity extraction API
+
+**What Was Implemented:**
+
+1. **Entity Validators** (`backend/src/modules/entities/entities.validators.ts`)
+   - `entityTypeEnum`: PERSON, ORGANIZATION, DATE, MONEY, PERCENTAGE, LOCATION, CONTRACT_TERM, CLAUSE_TYPE, JURISDICTION
+   - `listEntitiesQuerySchema`: Filter by entityType, needsReview, minConfidence, pagination
+   - `searchEntitiesQuerySchema`: Search entities with query text and type filter
+   - `syncEntitiesSchema`: Sync entities from Python microservice
+   - `createEntitySchema`: Manual entity creation
+   - `updateEntitySchema`: Update entity (text, normalizedText, entityType, needsReview)
+   - `LOW_CONFIDENCE_THRESHOLD`: 0.8 (entities below this are flagged for review)
+
+2. **Entity Service** (`backend/src/modules/entities/entities.service.ts`)
+   - `verifyDocumentInProject()`: IDOR protection - ensures document belongs to project
+   - `getDocumentEntities()`: List entities with filtering and pagination
+   - `getEntityById()`: Get single entity with master entity details
+   - `syncEntitiesFromPython()`: Sync extracted entities from Python service to PostgreSQL
+   - `extractEntitiesFromDocument()`: Call Python microservice to extract entities
+   - `createEntity()`: Manually create an entity
+   - `updateEntity()`: Update entity after human review
+   - `deleteEntity()`: Delete an entity
+   - `searchEntities()`: Search entities across all documents in project
+   - `getEntityStats()`: Get entity statistics (count by type, needs review count)
+   - `getEntitiesNeedingReview()`: List all low-confidence entities needing review
+   - `flagEntityForReview()`: Flag an entity as needing review
+   - `markEntityReviewed()`: Clear needsReview flag after review
+
+3. **Entity Controller** (`backend/src/modules/entities/entities.controller.ts`)
+   - All endpoints wrapped with `asyncHandler()` for error handling
+   - Zod validation for all request bodies and query parameters
+   - Returns appropriate status codes (200, 201, 204)
+
+4. **Entity Routes** (`backend/src/modules/entities/entities.routes.ts`)
+   - `documentEntitiesRouter`: Mounted at `/projects/:id/documents/:documentId/entities`
+   - `projectEntitiesRouter`: Mounted at `/projects/:id/entities`
+
+5. **Route Mounting** (`backend/src/app.ts`)
+   - Added document entities router
+   - Added project entities router
+
+6. **Integration Tests** (`backend/tests/integration/entities.test.ts`)
+   - 25+ comprehensive tests covering:
+     - Authentication (401 for unauthenticated)
+     - Authorization (403 for VIEWER on write operations)
+     - IDOR protection (404 for cross-project access)
+     - Entity CRUD operations
+     - Filtering by type, needsReview, confidence
+     - Pagination
+     - Entity search across project
+     - Entity statistics
+     - Review workflow (flag/mark reviewed)
+     - Sync from Python service with low-confidence flagging
+
+7. **Test Utilities** (`backend/tests/utils/db-helpers.ts`)
+   - Added `createTestDocumentEntity()` helper function
+   - Updated `cleanDatabase()` to include Phase 2B tables (DocumentEntity, DocumentAnnotation, MasterEntity, EntityRelationship)
+
+**Files Created:**
+- `backend/src/modules/entities/entities.validators.ts`
+- `backend/src/modules/entities/entities.service.ts`
+- `backend/src/modules/entities/entities.controller.ts`
+- `backend/src/modules/entities/entities.routes.ts`
+- `backend/src/modules/entities/index.ts`
+- `backend/tests/integration/entities.test.ts`
+
+**Files Modified:**
+- `backend/src/app.ts` - Added entity routes import and mounting
+- `backend/tests/utils/db-helpers.ts` - Added createTestDocumentEntity helper and cleaned up Phase 2B tables
+- `backend/tests/utils/index.ts` - Exported createTestDocumentEntity
+
+**API Endpoints Created:**
+
+| Method | Endpoint | Description | Permission |
+|--------|----------|-------------|------------|
+| GET | `/projects/:id/documents/:docId/entities` | List document entities | canAccessVDR |
+| GET | `/projects/:id/documents/:docId/entities/stats` | Get entity statistics | canAccessVDR |
+| GET | `/projects/:id/documents/:docId/entities/:entityId` | Get single entity | canAccessVDR |
+| POST | `/projects/:id/documents/:docId/entities` | Create manual entity | MEMBER+ |
+| POST | `/projects/:id/documents/:docId/entities/extract` | Trigger extraction | ADMIN+ |
+| POST | `/projects/:id/documents/:docId/entities/sync` | Sync from Python | ADMIN+ |
+| PATCH | `/projects/:id/documents/:docId/entities/:entityId` | Update entity | MEMBER+ |
+| DELETE | `/projects/:id/documents/:docId/entities/:entityId` | Delete entity | ADMIN+ |
+| POST | `/projects/:id/documents/:docId/entities/:entityId/flag` | Flag for review | MEMBER+ |
+| POST | `/projects/:id/documents/:docId/entities/:entityId/reviewed` | Mark reviewed | MEMBER+ |
+| GET | `/projects/:id/entities/search` | Search entities | canAccessVDR |
+| GET | `/projects/:id/entities/needs-review` | Entities needing review | canAccessVDR |
+
+**Key Features:**
+- Confidence scores stored for each entity (0.0 to 1.0)
+- Text positions tracked (start/end offset, page number)
+- Low-confidence entities (< 0.8) automatically flagged for review
+- Entities can be linked to MasterEntity for deduplication (Phase 2C)
+- Search entities across all documents in project
+- Project-level review queue for low-confidence entities
+
+**Notes:**
+- Pre-existing TypeScript errors in the codebase (unrelated to this change) continue to exist
+- Tests require running database (PostgreSQL at 127.0.0.1:5433)
+- Python service integration tested with sync endpoint
+
+**Tasks Completed:** 20/46
+
+**Phase 2B Progress:** 3/9 tasks
+
+**Next Task:**
+- Document classification API (Phase 2B task 4)
 
 ---
 
