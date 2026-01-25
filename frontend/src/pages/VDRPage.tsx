@@ -8,6 +8,7 @@ import {
   CreateFolderModal,
   RenameFolderModal,
   DeleteFolderModal,
+  DocumentViewer,
   useFolders,
 } from '../features/vdr';
 import { membersService, apiClient } from '../api';
@@ -98,6 +99,11 @@ export function VDRPage() {
     hasChildren: false,
     documentCount: 0,
   });
+
+  // Document viewer state
+  const [viewerDocument, setViewerDocument] = useState<Document | null>(null);
+  const [viewerPdfUrl, setViewerPdfUrl] = useState<string | null>(null);
+  const [showViewer, setShowViewer] = useState(false);
 
   // Get current user's membership info
   const currentUserMember = members.find((m) => m.user?.email === user?.email);
@@ -230,8 +236,19 @@ export function VDRPage() {
     alert('Document upload will be available once S3 is configured.');
   }, []);
 
-  const handleDocumentClick = useCallback((_document: Document) => {
-    // TODO: Open document viewer
+  const handleDocumentClick = useCallback((doc: Document) => {
+    setViewerDocument(doc);
+    // TODO: Fetch actual PDF URL from document download API when available
+    // For now, we'll use a placeholder - the viewer will show an error state
+    // until the document API is implemented
+    setViewerPdfUrl(null);
+    setShowViewer(true);
+  }, []);
+
+  const handleCloseViewer = useCallback(() => {
+    setShowViewer(false);
+    setViewerDocument(null);
+    setViewerPdfUrl(null);
   }, []);
 
   const handleDocumentDownload = useCallback((_document: Document) => {
@@ -390,6 +407,17 @@ export function VDRPage() {
         hasChildren={deleteFolderState.hasChildren}
         documentCount={deleteFolderState.documentCount}
       />
+
+      {/* Document Viewer */}
+      {showViewer && viewerDocument && (
+        <DocumentViewer
+          document={viewerDocument}
+          pdfUrl={viewerPdfUrl}
+          isViewOnly={viewerDocument.isViewOnly || selectedFolder?.isViewOnly}
+          onClose={handleCloseViewer}
+          onDownload={handleDocumentDownload}
+        />
+      )}
     </div>
   );
 }

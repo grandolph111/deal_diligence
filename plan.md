@@ -236,7 +236,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Handle view-only mode (disable download)",
       "Add back/close navigation"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "frontend",

@@ -6,6 +6,7 @@ export { CreateFolderModal } from './components/CreateFolderModal';
 export { RenameFolderModal } from './components/RenameFolderModal';
 export { DeleteFolderModal } from './components/DeleteFolderModal';
 export { FolderContextMenu } from './components/FolderContextMenu';
+export { DocumentViewer } from './components/DocumentViewer';
 
 // Hooks
 export { useFolders } from './hooks/useFolders';

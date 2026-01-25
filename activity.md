@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-24
 **Phase:** 2A - Foundation
-**Tasks Completed:** 8/46
-**Current Task:** Document list and grid view - COMPLETE
+**Tasks Completed:** 9/46
+**Current Task:** Document viewer - COMPLETE
 
 ---
 
@@ -835,6 +835,107 @@
 **Next Task:**
 - Document viewer (Phase 2A task 14)
 - Or: Document upload UI (Phase 2A task 12) - requires document upload API first
+
+---
+
+### 2026-01-24 - Document Viewer Implementation
+
+**Objective:** Implement document viewer with PDF.js integration for VDR (Phase 2A task 14)
+
+**Task Completed:**
+- Category: frontend
+- Phase: 2A
+- Description: Document viewer
+
+**What Was Implemented:**
+
+1. **pdfjs-dist Installation** (`frontend/package.json`)
+   - Added `pdfjs-dist@4.10.38` for in-browser PDF rendering
+
+2. **DocumentViewer Component** (`frontend/src/features/vdr/components/DocumentViewer.tsx`)
+   - Full-screen overlay modal for document viewing
+   - PDF.js integration with canvas rendering
+   - Page navigation with arrow keys and input field
+   - Zoom controls (50% - 300%) with +/- keyboard shortcuts
+   - Rotation support
+   - In-document search with highlighting and result navigation
+   - Text layer rendering for search functionality
+   - Metadata sidebar with document details
+   - Download button (disabled in view-only mode)
+   - View-only badge and notice
+   - Keyboard shortcuts (Escape to close, Ctrl+F for search, arrow keys for pages)
+   - Loading and error states
+
+3. **Document Viewer Features:**
+   - **Page Navigation**: Previous/Next buttons, page input, arrow keys
+   - **Zoom Controls**: Zoom in/out buttons, zoom level display (50-300%)
+   - **Rotation**: 90-degree rotation with button
+   - **In-Document Search**: Search input, result count, next/prev navigation, highlighting
+   - **Metadata Panel**: Document name, size, type, pages, upload date, uploader, folder, document type, risk level, processing status
+   - **Download Button**: Hidden in view-only mode
+   - **View-Only Mode**: Badge in header, download disabled, notice in sidebar
+   - **Back/Close Navigation**: X button, Escape key
+
+4. **CSS Styles** (`frontend/src/features/vdr/vdr.css`)
+   - Full-screen overlay styles
+   - Header/toolbar with controls
+   - Page navigation input and buttons
+   - Zoom controls display
+   - Search bar with results navigation
+   - Canvas container with dark background
+   - PDF page wrapper with shadow
+   - Metadata sidebar styles
+   - Processing status indicators
+   - Risk level badges
+   - View-only notice box
+   - Responsive design for mobile
+
+5. **VDRPage Integration** (`frontend/src/pages/VDRPage.tsx`)
+   - Added document viewer state (viewerDocument, viewerPdfUrl, showViewer)
+   - Updated handleDocumentClick to open viewer
+   - Added handleCloseViewer callback
+   - Conditional rendering of DocumentViewer component
+   - View-only mode detection from document or folder
+
+**Files Created:**
+- `frontend/src/features/vdr/components/DocumentViewer.tsx`
+
+**Files Modified:**
+- `frontend/package.json` - Added pdfjs-dist dependency
+- `frontend/src/features/vdr/index.ts` - Exported DocumentViewer
+- `frontend/src/features/vdr/vdr.css` - Added 400+ lines of viewer styles
+- `frontend/src/pages/VDRPage.tsx` - Integrated document viewer
+
+**Verification:**
+- Document viewer module TypeScript compiles without errors
+- Pre-existing TypeScript errors in settings module remain (unrelated to this change)
+- PDF.js worker configured correctly
+
+**Features Implemented per Task Steps:**
+| Step | Status |
+|------|--------|
+| Create document viewer page/modal | ✓ Full-screen overlay modal |
+| Integrate PDF.js for in-browser PDF rendering | ✓ Canvas rendering with text layer |
+| Implement page navigation controls | ✓ Buttons, input, keyboard shortcuts |
+| Implement zoom controls | ✓ 50%-300% with buttons and keyboard |
+| Add in-document search | ✓ Search with highlighting and navigation |
+| Create document details sidebar (metadata panel) | ✓ Collapsible sidebar with all metadata |
+| Implement download button | ✓ Header button with download callback |
+| Handle view-only mode (disable download) | ✓ Download hidden, badge and notice shown |
+| Add back/close navigation | ✓ X button and Escape key |
+
+**Notes:**
+- PDF URL is currently a placeholder (null) until Document API is implemented
+- Viewer shows graceful error state when no PDF URL provided
+- Search uses text layer rendering for match highlighting
+- All keyboard shortcuts documented in tooltips
+
+**Tasks Completed:** 9/46
+
+**Next Task:**
+- Search UI (Phase 2A task 15) - requires Full-text search API
+- Or: Document upload UI (Phase 2A task 12) - requires Document upload API
+- Or: Phase 2A integration testing (Phase 2A task 17) - requires infrastructure setup
 
 ---
 
