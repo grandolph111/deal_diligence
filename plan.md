@@ -219,7 +219,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Show 'Request Access' for restricted documents",
       "Implement document context menu (download, delete)"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "frontend",

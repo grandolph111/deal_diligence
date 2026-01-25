@@ -242,6 +242,23 @@ export function VDRPage() {
     // TODO: Implement delete when API is available
   }, []);
 
+  const handleDocumentMove = useCallback((_document: Document) => {
+    // TODO: Implement move when document API is available
+  }, []);
+
+  const handleBulkDelete = useCallback((_documents: Document[]) => {
+    // TODO: Implement bulk delete when API is available
+  }, []);
+
+  const handleBulkDownload = useCallback((_documents: Document[]) => {
+    // TODO: Implement bulk download when API is available
+  }, []);
+
+  const handleRequestAccess = useCallback((_document: Document) => {
+    // TODO: Implement request access functionality
+    alert('Access request functionality coming soon.');
+  }, []);
+
   // Loading state
   if (authLoading || membersLoading) {
     return (
@@ -336,6 +353,10 @@ export function VDRPage() {
               onDocumentClick={handleDocumentClick}
               onDocumentDownload={handleDocumentDownload}
               onDocumentDelete={isAdmin ? handleDocumentDelete : undefined}
+              onDocumentMove={isAdmin ? handleDocumentMove : undefined}
+              onBulkDelete={isAdmin ? handleBulkDelete : undefined}
+              onBulkDownload={handleBulkDownload}
+              onRequestAccess={handleRequestAccess}
               isAdmin={isAdmin}
               canUpload={canUpload}
               selectedFolderName={selectedFolderName}

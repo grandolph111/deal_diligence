@@ -477,6 +477,38 @@
   gap: 16px;
 }
 
+/* Bulk Action Toolbar */
+.bulk-action-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: var(--color-primary-light);
+  border-radius: 8px;
+  border: 1px solid var(--color-primary);
+}
+
+.bulk-action-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-primary);
+}
+
+.bulk-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.button.small {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
 /* Document Card */
 .document-card {
   display: flex;
@@ -488,6 +520,100 @@
   cursor: pointer;
   transition: all 0.15s ease;
   position: relative;
+}
+
+.document-card.selected {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+/* Restricted Document Card */
+.document-card.document-card-restricted {
+  cursor: default;
+  background: var(--color-bg-secondary);
+  border-style: dashed;
+}
+
+.document-card.document-card-restricted .document-card-icon {
+  color: var(--color-text-muted);
+}
+
+.document-card.document-card-restricted .document-name {
+  color: var(--color-text-secondary);
+}
+
+.document-restricted-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--color-warning-light, #fef3c7);
+  color: var(--color-warning, #d97706);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Document Selection Checkbox */
+.document-select-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.document-select-checkbox:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-primary);
+}
+
+.document-card .document-select-checkbox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+}
+
+.document-card.selected .document-select-checkbox {
+  color: var(--color-primary);
+}
+
+/* Document Select Header Cell */
+.document-select-header {
+  width: 40px;
+  padding: 12px 8px !important;
+}
+
+.document-select-cell {
+  width: 40px;
+  padding: 12px 8px;
+}
+
+/* Restricted Document Row */
+.document-row.document-row-restricted {
+  cursor: default;
+  background: var(--color-bg-secondary);
+}
+
+.document-row.document-row-restricted:hover {
+  background: var(--color-bg-secondary);
+}
+
+.document-row.document-row-restricted .document-name-cell svg {
+  color: var(--color-text-muted);
+}
+
+.document-row.selected {
+  background: var(--color-primary-light);
+}
+
+.document-row.selected:hover {
+  background: var(--color-primary-light);
 }
 
 .document-card:hover {

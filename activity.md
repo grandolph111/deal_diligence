@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-24
 **Phase:** 2A - Foundation
-**Tasks Completed:** 7/46
-**Current Task:** Document-task linking UI - COMPLETE
+**Tasks Completed:** 8/46
+**Current Task:** Document list and grid view - COMPLETE
 
 ---
 
@@ -23,7 +23,7 @@
 
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
-| 2A - Foundation | In Progress | 17 | 7 |
+| 2A - Foundation | In Progress | 17 | 8 |
 | 2B - Extraction | Not Started | 9 | 0 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
@@ -741,6 +741,100 @@
 - Document upload UI (Phase 2A task 12) - requires document upload API first
 - Or: Document list and grid view (Phase 2A task 13) - partial implementation exists
 - Or: Document viewer (Phase 2A task 14)
+
+---
+
+### 2026-01-24 - Document List and Grid View Enhancement
+
+**Objective:** Complete document list and grid view UI for VDR (Phase 2A task 13)
+
+**Task Completed:**
+- Category: frontend
+- Phase: 2A
+- Description: Document list and grid view
+
+**What Was Implemented:**
+
+1. **Document Selection for Bulk Actions** (`frontend/src/features/vdr/components/DocumentList.tsx`)
+   - Added selection state management with Set-based tracking
+   - Added checkbox to each document (grid card and list row)
+   - Added "Select All" checkbox in list view header
+   - Selection works for accessible (non-restricted) documents only
+
+2. **Bulk Action Toolbar** (`frontend/src/features/vdr/components/DocumentList.tsx`)
+   - Shows when documents are selected
+   - Displays count of selected documents
+   - "Clear selection" button (X icon)
+   - "Download" button for bulk download
+   - "Delete" button for bulk delete (admin only)
+
+3. **Request Access for Restricted Documents** (`frontend/src/features/vdr/components/DocumentList.tsx`)
+   - New `restrictedDocumentIds` prop for tracking restricted documents
+   - Restricted document card shows shield icon instead of file icon
+   - "Access Restricted" label displayed
+   - "Request Access" button on restricted documents
+   - Restricted documents are not clickable/selectable
+
+4. **Move Action in Context Menu** (`frontend/src/features/vdr/components/DocumentList.tsx`)
+   - Added `onDocumentMove` prop
+   - Added "Move" option in document card menu (admin only)
+   - Added move icon button in list view actions (admin only)
+
+5. **Enhanced Document Card States**
+   - `.selected` class for selected cards (blue border and background)
+   - `.document-card-restricted` class for restricted cards (dashed border, muted colors)
+
+6. **CSS Styles** (`frontend/src/features/vdr/vdr.css`)
+   - `.bulk-action-toolbar` - Toolbar for bulk actions
+   - `.bulk-action-info` - Selection count display
+   - `.bulk-action-buttons` - Action button container
+   - `.button.small` - Small button variant
+   - `.document-card.selected` - Selected card styles
+   - `.document-card-restricted` - Restricted card styles
+   - `.document-restricted-label` - Warning badge for restricted status
+   - `.document-select-checkbox` - Checkbox button styling
+   - `.document-select-header` / `.document-select-cell` - Table column for checkboxes
+   - `.document-row.selected` - Selected row styles
+
+7. **VDRPage Updates** (`frontend/src/pages/VDRPage.tsx`)
+   - Added `handleDocumentMove` placeholder callback
+   - Added `handleBulkDelete` placeholder callback
+   - Added `handleBulkDownload` placeholder callback
+   - Added `handleRequestAccess` placeholder callback
+   - Passed new props to DocumentList component
+
+**Files Modified:**
+- `frontend/src/features/vdr/components/DocumentList.tsx` - Added selection, bulk actions, Request Access
+- `frontend/src/features/vdr/vdr.css` - Added new styles
+- `frontend/src/pages/VDRPage.tsx` - Integrated new callbacks
+
+**Verification:**
+- No new TypeScript errors introduced
+- Pre-existing TypeScript errors in settings module remain (unrelated to this change)
+
+**Features Implemented per Task Steps:**
+| Step | Status |
+|------|--------|
+| Create document card component | ✓ (already done) |
+| Show document name, type badge, upload date | ✓ (already done) |
+| Show processing status indicator | ✓ (already done) |
+| Implement list view toggle | ✓ (already done) |
+| Implement grid view toggle | ✓ (already done) |
+| Add document selection (for bulk actions) | ✓ NEW |
+| Show 'Request Access' for restricted documents | ✓ NEW |
+| Implement document context menu (download, delete) | ✓ (already done, added Move) |
+
+**Notes:**
+- Bulk action handlers are placeholders until Document API is implemented
+- Request Access functionality shows alert placeholder until backend support
+- Selection is disabled for restricted documents
+- Move functionality placeholder until folder/document move API is available
+
+**Tasks Completed:** 8/46
+
+**Next Task:**
+- Document viewer (Phase 2A task 14)
+- Or: Document upload UI (Phase 2A task 12) - requires document upload API first
 
 ---
 
