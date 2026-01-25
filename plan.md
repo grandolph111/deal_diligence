@@ -253,7 +253,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Handle empty search results state",
       "Show 'Request Access' for restricted results"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "frontend",

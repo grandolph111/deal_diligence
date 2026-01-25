@@ -374,3 +374,64 @@ export interface LinkedDocument {
 export interface LinkDocumentDto {
   documentId: string;
 }
+
+// ============================================
+// VDR SEARCH
+// ============================================
+
+// Search type options
+export type SearchType = 'keyword' | 'semantic' | 'hybrid';
+
+// Search result snippet with highlighting
+export interface SearchSnippet {
+  text: string;
+  highlights: Array<{
+    start: number;
+    end: number;
+  }>;
+  pageNumber?: number;
+}
+
+// Search result item
+export interface SearchResult {
+  document: Pick<Document, 'id' | 'name' | 'mimeType' | 'sizeBytes' | 'processingStatus' | 'documentType' | 'riskLevel' | 'folderId' | 'uploadedBy' | 'createdAt'> & {
+    folder?: Pick<Folder, 'id' | 'name'>;
+  };
+  score: number;
+  snippets: SearchSnippet[];
+  matchedEntities?: string[];
+  isRestricted?: boolean;
+}
+
+// Search response from API
+export interface SearchResponse {
+  results: SearchResult[];
+  total: number;
+  page: number;
+  pageSize: number;
+  query: string;
+  searchType: SearchType;
+  filters: SearchFilters;
+}
+
+// Search filters
+export interface SearchFilters {
+  folderId?: string | null;
+  documentType?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  riskLevel?: string | null;
+}
+
+// Search request DTO
+export interface SearchRequestDto {
+  query: string;
+  searchType?: SearchType;
+  folderId?: string | null;
+  documentType?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  riskLevel?: string | null;
+  page?: number;
+  pageSize?: number;
+}

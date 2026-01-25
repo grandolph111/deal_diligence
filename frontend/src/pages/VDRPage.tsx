@@ -9,6 +9,7 @@ import {
   RenameFolderModal,
   DeleteFolderModal,
   DocumentViewer,
+  SearchPanel,
   useFolders,
 } from '../features/vdr';
 import { membersService, apiClient } from '../api';
@@ -104,6 +105,9 @@ export function VDRPage() {
   const [viewerDocument, setViewerDocument] = useState<Document | null>(null);
   const [viewerPdfUrl, setViewerPdfUrl] = useState<string | null>(null);
   const [showViewer, setShowViewer] = useState(false);
+
+  // Search panel state
+  const [showSearchPanel, setShowSearchPanel] = useState(false);
 
   // Get current user's membership info
   const currentUserMember = members.find((m) => m.user?.email === user?.email);
@@ -276,6 +280,31 @@ export function VDRPage() {
     alert('Access request functionality coming soon.');
   }, []);
 
+  // Handle request access from search (by document ID)
+  const handleRequestAccessById = useCallback((_documentId: string) => {
+    // TODO: Implement request access functionality
+    alert('Access request functionality coming soon.');
+  }, []);
+
+  // Handle search panel open/close
+  const handleOpenSearch = useCallback(() => {
+    setShowSearchPanel(true);
+  }, []);
+
+  const handleCloseSearch = useCallback(() => {
+    setShowSearchPanel(false);
+  }, []);
+
+  // Handle document click from search results
+  const handleSearchDocumentClick = useCallback((_documentId: string, folderId: string | null) => {
+    // Find the document in our documents list or navigate to folder
+    if (folderId) {
+      handleSelectFolder(folderId);
+    }
+    // TODO: When document API is available, fetch document and open viewer
+    // For now, just navigate to the folder
+  }, [handleSelectFolder]);
+
   // Loading state
   if (authLoading || membersLoading) {
     return (
@@ -318,9 +347,9 @@ export function VDRPage() {
           Back to Project
         </Link>
 
-        {/* Search placeholder */}
-        <div className="search-placeholder">
-          <button className="button secondary" disabled title="Search coming soon">
+        {/* Search button */}
+        <div className="search-trigger">
+          <button className="button secondary" onClick={handleOpenSearch}>
             <Search size={16} />
             Search Documents
           </button>
@@ -418,6 +447,16 @@ export function VDRPage() {
           onDownload={handleDocumentDownload}
         />
       )}
+
+      {/* Search Panel */}
+      <SearchPanel
+        projectId={projectId}
+        folders={folderTree}
+        isOpen={showSearchPanel}
+        onClose={handleCloseSearch}
+        onDocumentClick={handleSearchDocumentClick}
+        onRequestAccess={handleRequestAccessById}
+      />
     </div>
   );
 }
