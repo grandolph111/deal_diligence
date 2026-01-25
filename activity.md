@@ -3,9 +3,9 @@
 ## Current Status
 
 **Last Updated:** 2026-01-25
-**Phase:** 2A - Foundation (COMPLETE)
-**Tasks Completed:** 17/46
-**Current Task:** Infrastructure setup for VDR - COMPLETE
+**Phase:** 2B - Intelligent Extraction (IN PROGRESS)
+**Tasks Completed:** 18/46
+**Current Task:** Database schema for intelligent extraction - COMPLETE
 
 ---
 
@@ -24,7 +24,7 @@
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
 | 2A - Foundation | COMPLETE | 17 | 17 |
-| 2B - Extraction | Not Started | 9 | 0 |
+| 2B - Extraction | IN PROGRESS | 9 | 1 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
 | Cross-Cutting | Not Started | 3 | 0 |
@@ -1807,6 +1807,90 @@ The documents module was already partially implemented. This session enhanced it
 
 **Next Task:**
 - Phase 2B tasks (database schema for intelligent extraction)
+
+---
+
+### 2026-01-25 - Database Schema for Intelligent Extraction
+
+**Objective:** Implement database schema for Phase 2B intelligent extraction (entity extraction, deduplication, annotations)
+
+**Task Completed:**
+- Category: database
+- Phase: 2B
+- Description: Database schema for intelligent extraction
+
+**What Was Implemented:**
+
+1. **DocumentEntity Model** (`backend/prisma/schema.prisma`)
+   - Stores entities extracted from documents (companies, people, amounts, dates, jurisdictions, etc.)
+   - Fields: `entityType`, `text`, `normalizedText`, `pageNumber`, `startOffset`, `endOffset`
+   - Confidence scoring with `confidence` field (0.0-1.0)
+   - `needsReview` flag for low-confidence entities requiring human review
+   - `masterEntityId` foreign key for linking to canonical entity
+   - Indexes on `documentId`, `entityType`, `masterEntityId`, `needsReview`
+
+2. **MasterEntity Model** (`backend/prisma/schema.prisma`)
+   - Canonical/deduplicated entities across all documents in a project
+   - Fields: `entityType`, `canonicalName`, `aliases` (JSON array), `metadata`
+   - Unique constraint on `[projectId, entityType, canonicalName]`
+   - Supports knowledge graph with `relatedEntities` and `relatedFrom` relations
+   - Indexes on `projectId`, `entityType`
+
+3. **EntityRelationship Model** (`backend/prisma/schema.prisma`)
+   - Relationships between entities for knowledge graph
+   - Fields: `sourceEntityId`, `targetEntityId`, `relationshipType`, `documentId`, `confidence`
+   - Relationship types: PARTY_TO, REFERENCES, EMPLOYS, OWNS, etc.
+   - Unique constraint on `[sourceEntityId, targetEntityId, relationshipType]`
+   - Indexes on `sourceEntityId`, `targetEntityId`, `relationshipType`
+
+4. **DocumentAnnotation Model** (`backend/prisma/schema.prisma`)
+   - Annotations on documents (clauses, risk flags, manual notes)
+   - Fields: `annotationType`, `title`, `content`, `clauseType`, `riskLevel`
+   - Position tracking: `pageNumber`, `startOffset`, `endOffset`
+   - Human verification: `isVerified`, `verifiedById`, `verifiedAt`, `verificationNote`
+   - Rejection handling: `isRejected`, `rejectedById`, `rejectedAt`, `rejectionNote`
+   - Indexes on `documentId`, `annotationType`, `clauseType`, `riskLevel`, `isVerified`, `isRejected`
+
+5. **Model Relations Added:**
+   - `User.verifiedAnnotations` - Annotations verified by user
+   - `User.rejectedAnnotations` - Annotations rejected by user
+   - `Project.masterEntities` - All master entities in project
+   - `Document.entities` - Entities extracted from document
+   - `Document.annotations` - Annotations on document
+
+**Files Modified:**
+- `backend/prisma/schema.prisma` - Added 4 new models with comprehensive indexes
+
+**Verification:**
+- Prisma schema validates successfully
+- Database synced with `prisma db push`
+- Prisma client generated successfully
+- Pre-existing TypeScript errors in codebase remain (unrelated to this change)
+
+**Schema Entity Types Supported:**
+| Entity Type | Description |
+|-------------|-------------|
+| COMPANY | Business entities, corporations |
+| PERSON | Individuals, parties |
+| AMOUNT | Monetary values with currency |
+| DATE | Dates and date ranges |
+| CLAUSE | Contract clause references |
+| JURISDICTION | Legal jurisdictions |
+
+**Annotation Types Supported:**
+| Annotation Type | Description |
+|-----------------|-------------|
+| CLAUSE | Contract clauses (indemnification, termination, etc.) |
+| RISK_FLAG | Risk indicators (high risk clauses, issues) |
+| NOTE | Manual notes and comments |
+| VERIFICATION | Human verification records |
+
+**Tasks Completed:** 18/46
+
+**Phase 2B Progress:** 1/9 tasks
+
+**Next Task:**
+- Python microservice - NER and classification (Phase 2B task 2)
 
 ---
 
