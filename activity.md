@@ -2,10 +2,10 @@
 
 ## Current Status
 
-**Last Updated:** 2026-01-24
+**Last Updated:** 2026-01-25
 **Phase:** 2A - Foundation
-**Tasks Completed:** 11/46
-**Current Task:** Document upload and storage API - COMPLETE
+**Tasks Completed:** 12/46
+**Current Task:** Document upload UI - COMPLETE
 
 ---
 
@@ -23,7 +23,7 @@
 
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
-| 2A - Foundation | In Progress | 17 | 9 |
+| 2A - Foundation | In Progress | 17 | 10 |
 | 2B - Extraction | Not Started | 9 | 0 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
@@ -1153,6 +1153,127 @@ The documents module was already partially implemented. This session enhanced it
 **Next Task:**
 - Document upload UI (Phase 2A task 12) - frontend implementation
 - Or: Infrastructure setup for VDR (Phase 2A task 1) - requires AWS S3 bucket
+
+---
+
+### 2026-01-25 - Document Upload UI Implementation
+
+**Objective:** Implement document upload UI for VDR (Phase 2A task 12)
+
+**Task Completed:**
+- Category: frontend
+- Phase: 2A
+- Description: Document upload UI
+
+**What Was Implemented:**
+
+1. **Documents API Service** (`frontend/src/api/services/documents.service.ts`)
+   - `listDocuments()` - Fetch documents with folder filter, pagination
+   - `getDocument()` - Get single document by ID
+   - `getDocumentWithDownloadUrl()` - Get document with presigned download URL
+   - `initiateUpload()` - Initiate single file upload
+   - `initiateMultipleUploads()` - Initiate batch file uploads
+   - `uploadFileToS3()` - Direct S3 upload with XMLHttpRequest progress tracking
+   - `confirmUpload()` / `confirmMultipleUploads()` - Confirm uploads complete
+   - `deleteDocument()` - Delete document
+   - `moveDocument()` - Move document to folder
+   - `uploadFile()` - Full upload flow (initiate -> S3 -> confirm)
+   - `uploadFiles()` - Batch upload with progress callbacks
+   - `validateFile()` - Client-side file validation (type, size)
+   - `formatFileSize()` / `getFileTypeCategory()` - Display helpers
+
+2. **useDocuments Hook** (`frontend/src/features/vdr/hooks/useDocuments.ts`)
+   - Manages document list state with pagination
+   - Tracks upload progress per file
+   - Provides upload, delete, move operations
+   - Auto-refresh after uploads
+
+3. **UploadDropZone Component** (`frontend/src/features/vdr/components/UploadDropZone.tsx`)
+   - Drag-and-drop file upload area
+   - Click to open file picker
+   - Compact mode (button only) for header
+   - Full drop zone for empty folder state
+   - Client-side file validation with error display
+   - Keyboard accessible (Enter/Space to activate)
+   - Supported file types: PDF, Word, Excel, PowerPoint, images, ZIP (max 100MB)
+
+4. **UploadProgressModal Component** (`frontend/src/features/vdr/components/UploadProgressModal.tsx`)
+   - Shows upload progress for multiple files
+   - Stats summary (total, completed, failed, remaining)
+   - Individual file progress bars
+   - Status icons (pending, uploading, confirming, complete, failed)
+   - Error messages for failed uploads
+   - Close button when uploads complete
+
+5. **MoveDocumentModal Component** (`frontend/src/features/vdr/components/MoveDocumentModal.tsx`)
+   - Folder tree picker for destination selection
+   - Shows current folder with "Current" badge
+   - Prevents moving to same folder
+   - Loading state during move operation
+
+6. **VDRPage Integration** (`frontend/src/pages/VDRPage.tsx`)
+   - Integrated useDocuments hook for document state
+   - Upload button in header (compact drop zone)
+   - Full drop zone when folder is empty
+   - Upload progress modal on file selection
+   - Document list fetches on folder change
+   - Document click opens viewer with download URL
+   - Document download opens presigned URL in new tab
+   - Document delete with confirmation
+   - Document move with folder picker modal
+   - Bulk delete and bulk download support
+   - Folder counts refresh after document changes
+
+7. **CSS Styles** (`frontend/src/features/vdr/vdr.css`)
+   - Upload drop zone styles (full and compact)
+   - Drag-and-drop visual feedback
+   - Upload progress modal styles
+   - Progress bars and status indicators
+   - Move document modal styles
+   - Folder picker tree styles
+
+**Files Created:**
+- `frontend/src/api/services/documents.service.ts`
+- `frontend/src/features/vdr/hooks/useDocuments.ts`
+- `frontend/src/features/vdr/components/UploadDropZone.tsx`
+- `frontend/src/features/vdr/components/UploadProgressModal.tsx`
+- `frontend/src/features/vdr/components/MoveDocumentModal.tsx`
+
+**Files Modified:**
+- `frontend/src/api/index.ts` - Exported documentsService
+- `frontend/src/features/vdr/index.ts` - Exported new components and hook
+- `frontend/src/features/vdr/vdr.css` - Added upload and move styles
+- `frontend/src/pages/VDRPage.tsx` - Full integration of upload functionality
+
+**Verification:**
+- Document upload UI module TypeScript compiles without errors
+- Pre-existing TypeScript errors in settings module remain (unrelated to this change)
+- Pre-existing TypeScript errors in backend tasks module remain (unrelated to this change)
+
+**Features Implemented per Task Steps:**
+| Step | Status |
+|------|--------|
+| Create upload button component | ✓ UploadDropZone compact mode |
+| Implement drag-and-drop upload zone | ✓ UploadDropZone full mode |
+| Add file picker for single/multiple files | ✓ File input with multiple support |
+| Show upload progress indicator per file | ✓ UploadProgressModal with progress bars |
+| Display upload success/error states | ✓ Status icons and error messages |
+| Validate file type (PDF) before upload | ✓ Validation for PDF, Word, Excel, etc. |
+| Validate file size before upload | ✓ 100MB limit validation |
+| Refresh document list after upload | ✓ Auto-refresh via useDocuments |
+
+**Notes:**
+- Upload requires S3 to be configured in backend; will fail with "S3 is not configured" if missing
+- File validation happens client-side before initiating upload
+- Progress uses XMLHttpRequest upload events for real-time tracking
+- Multiple file uploads are processed in parallel where possible
+
+**Tasks Completed:** 12/46
+
+**Next Task:**
+- Infrastructure setup for VDR (Phase 2A task 1) - requires AWS S3 bucket
+- Or: Python microservice - BerryDB bridge (Phase 2A task 6) - requires BerryDB account
+- Or: Phase 2A integration testing (Phase 2A task 17) - requires infrastructure
 
 ---
 

@@ -10,9 +10,13 @@ import {
   DeleteFolderModal,
   DocumentViewer,
   SearchPanel,
+  UploadDropZone,
+  UploadProgressModal,
+  MoveDocumentModal,
   useFolders,
+  useDocuments,
 } from '../features/vdr';
-import { membersService, apiClient } from '../api';
+import { membersService, apiClient, documentsService } from '../api';
 import { useAuth } from '../auth';
 import type { ProjectMember, Document, FolderTreeNode } from '../types/api';
 import '../features/vdr/vdr.css';
@@ -50,6 +54,11 @@ interface DeleteFolderState {
   documentCount: number;
 }
 
+interface MoveDocumentState {
+  isOpen: boolean;
+  document: Document | null;
+}
+
 /**
  * Virtual Data Room page component
  */
@@ -76,9 +85,20 @@ export function VDRPage() {
     deleteFolder,
   } = useFolders({ projectId, autoFetch: false });
 
-  // Document state (placeholder - documents API not yet implemented)
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [documentsLoading] = useState(false);
+  // Document state
+  const {
+    documents,
+    loading: documentsLoading,
+    error: documentsError,
+    uploadProgress,
+    isUploading,
+    fetchDocuments,
+    uploadFiles,
+    deleteDocument,
+    moveDocument,
+    refreshDocuments,
+    clearUploadProgress,
+  } = useDocuments({ projectId });
 
   // View mode state
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -86,6 +106,7 @@ export function VDRPage() {
   // Modal states
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null);
+  const [showUploadProgress, setShowUploadProgress] = useState(false);
 
   const [renameFolderState, setRenameFolderState] = useState<RenameFolderState>({
     isOpen: false,
@@ -99,6 +120,11 @@ export function VDRPage() {
     folderName: '',
     hasChildren: false,
     documentCount: 0,
+  });
+
+  const [moveDocumentState, setMoveDocumentState] = useState<MoveDocumentState>({
+    isOpen: false,
+    document: null,
   });
 
   // Document viewer state
@@ -152,11 +178,16 @@ export function VDRPage() {
     }
   }, [membersLoading, canAccessVDR, projectId, fetchFolders]);
 
+  // Fetch documents when folder changes
+  useEffect(() => {
+    if (!membersLoading && canAccessVDR && projectId) {
+      fetchDocuments({ folderId: selectedFolderId });
+    }
+  }, [membersLoading, canAccessVDR, projectId, selectedFolderId, fetchDocuments]);
+
   // Handle folder selection
   const handleSelectFolder = useCallback((folderId: string | null) => {
     setSelectedFolderId(folderId);
-    // TODO: Fetch documents for selected folder when API is available
-    setDocuments([]);
   }, [setSelectedFolderId]);
 
   // Handle create folder
@@ -234,20 +265,41 @@ export function VDRPage() {
     }
   }, [deleteFolder, deleteFolderState.folderId]);
 
-  // Handle document actions (placeholder)
-  const handleUploadClick = useCallback(() => {
-    // TODO: Implement document upload when API is available
-    alert('Document upload will be available once S3 is configured.');
-  }, []);
+  // Handle file upload
+  const handleFilesSelected = useCallback(
+    async (files: File[]) => {
+      setShowUploadProgress(true);
+      await uploadFiles(files, selectedFolderId);
+      // Refresh folder counts after upload
+      fetchFolders();
+    },
+    [uploadFiles, selectedFolderId, fetchFolders]
+  );
 
-  const handleDocumentClick = useCallback((doc: Document) => {
+  const handleCloseUploadProgress = useCallback(() => {
+    setShowUploadProgress(false);
+    clearUploadProgress();
+  }, [clearUploadProgress]);
+
+  // Handle document click (view)
+  const handleDocumentClick = useCallback(async (doc: Document) => {
     setViewerDocument(doc);
-    // TODO: Fetch actual PDF URL from document download API when available
-    // For now, we'll use a placeholder - the viewer will show an error state
-    // until the document API is implemented
-    setViewerPdfUrl(null);
+
+    // Try to get download URL for PDF viewing
+    if (projectId && doc.mimeType === 'application/pdf') {
+      try {
+        const docWithUrl = await documentsService.getDocumentWithDownloadUrl(projectId, doc.id);
+        setViewerPdfUrl(docWithUrl.downloadUrl);
+      } catch {
+        // If we can't get the URL, viewer will show error state
+        setViewerPdfUrl(null);
+      }
+    } else {
+      setViewerPdfUrl(null);
+    }
+
     setShowViewer(true);
-  }, []);
+  }, [projectId]);
 
   const handleCloseViewer = useCallback(() => {
     setShowViewer(false);
@@ -255,25 +307,90 @@ export function VDRPage() {
     setViewerPdfUrl(null);
   }, []);
 
-  const handleDocumentDownload = useCallback((_document: Document) => {
-    // TODO: Implement download when API is available
+  // Handle document download
+  const handleDocumentDownload = useCallback(async (document: Document) => {
+    if (!projectId) return;
+
+    try {
+      const docWithUrl = await documentsService.getDocumentWithDownloadUrl(projectId, document.id);
+      // Open download URL in new tab
+      window.open(docWithUrl.downloadUrl, '_blank');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to download document');
+    }
+  }, [projectId]);
+
+  // Handle document delete
+  const handleDocumentDelete = useCallback(async (document: Document) => {
+    if (!confirm(`Are you sure you want to delete "${document.name}"?`)) {
+      return;
+    }
+
+    try {
+      await deleteDocument(document.id);
+      // Refresh folder counts after delete
+      fetchFolders();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete document');
+    }
+  }, [deleteDocument, fetchFolders]);
+
+  // Handle document move
+  const handleOpenMoveDocument = useCallback((document: Document) => {
+    setMoveDocumentState({
+      isOpen: true,
+      document,
+    });
   }, []);
 
-  const handleDocumentDelete = useCallback((_document: Document) => {
-    // TODO: Implement delete when API is available
+  const handleCloseMoveDocument = useCallback(() => {
+    setMoveDocumentState({
+      isOpen: false,
+      document: null,
+    });
   }, []);
 
-  const handleDocumentMove = useCallback((_document: Document) => {
-    // TODO: Implement move when document API is available
-  }, []);
+  const handleMoveDocument = useCallback(async (folderId: string | null) => {
+    if (!moveDocumentState.document) return;
 
-  const handleBulkDelete = useCallback((_documents: Document[]) => {
-    // TODO: Implement bulk delete when API is available
-  }, []);
+    await moveDocument(moveDocumentState.document.id, folderId);
+    // Refresh both documents and folder counts
+    refreshDocuments();
+    fetchFolders();
+  }, [moveDocumentState.document, moveDocument, refreshDocuments, fetchFolders]);
 
-  const handleBulkDownload = useCallback((_documents: Document[]) => {
-    // TODO: Implement bulk download when API is available
-  }, []);
+  // Handle bulk delete
+  const handleBulkDelete = useCallback(async (docs: Document[]) => {
+    if (!confirm(`Are you sure you want to delete ${docs.length} documents?`)) {
+      return;
+    }
+
+    for (const doc of docs) {
+      try {
+        await deleteDocument(doc.id);
+      } catch {
+        // Continue with other deletions
+      }
+    }
+
+    // Refresh folder counts after delete
+    fetchFolders();
+  }, [deleteDocument, fetchFolders]);
+
+  // Handle bulk download
+  const handleBulkDownload = useCallback(async (docs: Document[]) => {
+    if (!projectId) return;
+
+    // Download each document (opens in new tabs)
+    for (const doc of docs) {
+      try {
+        const docWithUrl = await documentsService.getDocumentWithDownloadUrl(projectId, doc.id);
+        window.open(docWithUrl.downloadUrl, '_blank');
+      } catch {
+        // Continue with other downloads
+      }
+    }
+  }, [projectId]);
 
   const handleRequestAccess = useCallback((_document: Document) => {
     // TODO: Implement request access functionality
@@ -296,14 +413,18 @@ export function VDRPage() {
   }, []);
 
   // Handle document click from search results
-  const handleSearchDocumentClick = useCallback((_documentId: string, folderId: string | null) => {
-    // Find the document in our documents list or navigate to folder
-    if (folderId) {
+  const handleSearchDocumentClick = useCallback((documentId: string, folderId: string | null) => {
+    // Navigate to the folder containing the document
+    if (folderId !== selectedFolderId) {
       handleSelectFolder(folderId);
     }
-    // TODO: When document API is available, fetch document and open viewer
-    // For now, just navigate to the folder
-  }, [handleSelectFolder]);
+
+    // Find and open the document
+    const doc = documents.find((d) => d.id === documentId);
+    if (doc) {
+      handleDocumentClick(doc);
+    }
+  }, [selectedFolderId, documents, handleSelectFolder, handleDocumentClick]);
 
   // Loading state
   if (authLoading || membersLoading) {
@@ -347,8 +468,17 @@ export function VDRPage() {
           Back to Project
         </Link>
 
-        {/* Search button */}
-        <div className="search-trigger">
+        <div className="documents-header-actions">
+          {/* Upload button (compact) */}
+          {canUpload && (
+            <UploadDropZone
+              onFilesSelected={handleFilesSelected}
+              disabled={isUploading}
+              compact
+            />
+          )}
+
+          {/* Search button */}
           <button className="button secondary" onClick={handleOpenSearch}>
             <Search size={16} />
             Search Documents
@@ -388,18 +518,36 @@ export function VDRPage() {
             <Breadcrumb path={folderPath} onNavigate={handleSelectFolder} />
           </div>
 
+          {/* Error display */}
+          {documentsError && (
+            <div className="error-banner">
+              <p>{documentsError}</p>
+              <button className="button small secondary" onClick={refreshDocuments}>
+                Retry
+              </button>
+            </div>
+          )}
+
           {/* Document List */}
           <div className="vdr-documents">
+            {/* Show drop zone when no documents and can upload */}
+            {!documentsLoading && !foldersLoading && documents.length === 0 && canUpload && (
+              <UploadDropZone
+                onFilesSelected={handleFilesSelected}
+                disabled={isUploading}
+              />
+            )}
+
             <DocumentList
               documents={documents}
               loading={documentsLoading || foldersLoading}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
-              onUploadClick={canUpload ? handleUploadClick : undefined}
+              onUploadClick={canUpload ? () => {} : undefined}
               onDocumentClick={handleDocumentClick}
               onDocumentDownload={handleDocumentDownload}
               onDocumentDelete={isAdmin ? handleDocumentDelete : undefined}
-              onDocumentMove={isAdmin ? handleDocumentMove : undefined}
+              onDocumentMove={isAdmin ? handleOpenMoveDocument : undefined}
               onBulkDelete={isAdmin ? handleBulkDelete : undefined}
               onBulkDownload={handleBulkDownload}
               onRequestAccess={handleRequestAccess}
@@ -435,6 +583,26 @@ export function VDRPage() {
         folderName={deleteFolderState.folderName}
         hasChildren={deleteFolderState.hasChildren}
         documentCount={deleteFolderState.documentCount}
+      />
+
+      {/* Move Document Modal */}
+      {moveDocumentState.document && (
+        <MoveDocumentModal
+          isOpen={moveDocumentState.isOpen}
+          onClose={handleCloseMoveDocument}
+          onSubmit={handleMoveDocument}
+          documentName={moveDocumentState.document.name}
+          currentFolderId={moveDocumentState.document.folderId}
+          folders={folderTree}
+        />
+      )}
+
+      {/* Upload Progress Modal */}
+      <UploadProgressModal
+        isOpen={showUploadProgress}
+        onClose={handleCloseUploadProgress}
+        uploadProgress={uploadProgress}
+        isUploading={isUploading}
       />
 
       {/* Document Viewer */}

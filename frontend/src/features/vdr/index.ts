@@ -8,6 +8,11 @@ export { DeleteFolderModal } from './components/DeleteFolderModal';
 export { FolderContextMenu } from './components/FolderContextMenu';
 export { DocumentViewer } from './components/DocumentViewer';
 
+// Upload components
+export { UploadDropZone } from './components/UploadDropZone';
+export { UploadProgressModal } from './components/UploadProgressModal';
+export { MoveDocumentModal } from './components/MoveDocumentModal';
+
 // Search components
 export { SearchBar } from './components/SearchBar';
 export { SearchFilters } from './components/SearchFilters';
@@ -18,3 +23,4 @@ export { SearchPanel } from './components/SearchPanel';
 // Hooks
 export { useFolders } from './hooks/useFolders';
 export { useSearch } from './hooks/useSearch';
+export { useDocuments } from './hooks/useDocuments';
