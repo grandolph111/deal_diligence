@@ -78,6 +78,70 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Detailed health check for infrastructure services
+app.get('/health/detailed', async (req, res) => {
+  const { s3Service } = await import('./services/s3.service');
+  const { prisma } = await import('./config/database');
+
+  const health: {
+    status: 'ok' | 'degraded' | 'unhealthy';
+    timestamp: string;
+    services: Record<string, unknown>;
+  } = {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    services: {},
+  };
+
+  // Check database connection
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    health.services.database = { status: 'connected' };
+  } catch (error) {
+    health.services.database = {
+      status: 'disconnected',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+    health.status = 'unhealthy';
+  }
+
+  // Check S3 status
+  const s3Status = await s3Service.getHealthStatus();
+  health.services.s3 = s3Status;
+  if (!s3Status.connected && s3Status.mode === 'real') {
+    health.status = health.status === 'unhealthy' ? 'unhealthy' : 'degraded';
+  }
+
+  // Check Python microservice
+  try {
+    const pythonUrl = config.pythonService?.url || 'http://localhost:8000';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+    const pythonRes = await fetch(`${pythonUrl}/health`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (pythonRes.ok) {
+      const pythonHealth = (await pythonRes.json()) as { berrydb_configured?: boolean };
+      health.services.pythonService = {
+        status: 'connected',
+        berrydb: pythonHealth.berrydb_configured ? 'configured' : 'not configured',
+      };
+    } else {
+      health.services.pythonService = { status: 'error', code: pythonRes.status };
+      health.status = health.status === 'unhealthy' ? 'unhealthy' : 'degraded';
+    }
+  } catch {
+    health.services.pythonService = { status: 'unavailable' };
+    health.status = health.status === 'unhealthy' ? 'unhealthy' : 'degraded';
+  }
+
+  const statusCode = health.status === 'ok' ? 200 : health.status === 'degraded' ? 200 : 503;
+  res.status(statusCode).json(health);
+});
+
 // API routes with appropriate rate limiting
 app.use('/api/v1/auth', authRateLimiter, authRoutes);
 app.use('/api/v1/projects', projectRoutes);
