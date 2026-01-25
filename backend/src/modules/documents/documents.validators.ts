@@ -60,6 +60,7 @@ export const initiateUploadSchema = z.object({
     .int()
     .positive('File size must be positive')
     .max(MAX_FILE_SIZE_BYTES, 'File size exceeds maximum allowed (100MB)'),
+  folderId: z.string().uuid('Invalid folder ID').nullable().optional(),
   documentType: documentTypeEnum.optional(),
 });
 
@@ -76,10 +77,15 @@ export const confirmMultipleUploadsSchema = z.object({
 });
 
 export const listDocumentsQuerySchema = z.object({
+  folderId: z.string().uuid('Invalid folder ID').optional(),
   documentType: documentTypeEnum.optional(),
   status: z.enum(['PENDING', 'PROCESSING', 'COMPLETE', 'FAILED']).optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
+});
+
+export const moveDocumentSchema = z.object({
+  folderId: z.string().uuid('Invalid folder ID').nullable(),
 });
 
 export type InitiateUploadInput = z.infer<typeof initiateUploadSchema>;
@@ -87,3 +93,4 @@ export type InitiateMultipleUploadsInput = z.infer<typeof initiateMultipleUpload
 export type ConfirmUploadInput = z.infer<typeof confirmUploadSchema>;
 export type ConfirmMultipleUploadsInput = z.infer<typeof confirmMultipleUploadsSchema>;
 export type ListDocumentsQuery = z.infer<typeof listDocumentsQuerySchema>;
+export type MoveDocumentInput = z.infer<typeof moveDocumentSchema>;

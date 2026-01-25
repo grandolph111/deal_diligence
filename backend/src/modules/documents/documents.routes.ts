@@ -56,4 +56,11 @@ router.delete(
   documentsController.deleteDocument
 );
 
+// PATCH /api/v1/projects/:projectId/documents/:documentId/move - Move document to folder
+router.patch(
+  '/:documentId/move',
+  requireMinRole('ADMIN'),
+  documentsController.moveDocument
+);
+
 export default router;

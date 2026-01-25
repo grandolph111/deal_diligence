@@ -6,6 +6,7 @@ import {
   confirmUploadSchema,
   confirmMultipleUploadsSchema,
   listDocumentsQuerySchema,
+  moveDocumentSchema,
 } from './documents.validators';
 import { ApiError } from '../../utils/ApiError';
 import { asyncHandler } from '../../utils/asyncHandler';
@@ -127,5 +128,19 @@ export const documentsController = {
     await documentsService.deleteDocument(documentId, projectId);
 
     res.status(204).send();
+  }),
+
+  /**
+   * PATCH /projects/:id/documents/:documentId/move
+   * Move a document to a different folder
+   */
+  moveDocument: asyncHandler(async (req: Request, res: Response) => {
+    const projectId = req.params.id as string;
+    const documentId = req.params.documentId as string;
+    const { folderId } = moveDocumentSchema.parse(req.body);
+
+    const document = await documentsService.moveDocument(documentId, projectId, folderId);
+
+    res.json(document);
   }),
 };

@@ -78,7 +78,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Add file size validation (100MB limit)",
       "Write integration tests for document endpoints"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "backend",

@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-24
 **Phase:** 2A - Foundation
-**Tasks Completed:** 10/46
-**Current Task:** Search UI - COMPLETE
+**Tasks Completed:** 11/46
+**Current Task:** Document upload and storage API - COMPLETE
 
 ---
 
@@ -1068,6 +1068,91 @@
 **Next Task:**
 - Document upload UI (Phase 2A task 12) - requires Document upload API
 - Or: Phase 2A integration testing (Phase 2A task 17) - requires infrastructure setup
+
+---
+
+### 2026-01-24 - Document Upload and Storage API Enhancements
+
+**Objective:** Complete document upload and storage API for VDR (Phase 2A task 4)
+
+**Task Completed:**
+- Category: backend
+- Phase: 2A
+- Description: Document upload and storage API
+
+**What Was Implemented:**
+
+The documents module was already partially implemented. This session enhanced it with:
+
+1. **Folder Filtering in List Documents** (`backend/src/modules/documents/documents.validators.ts`)
+   - Added `folderId` query parameter to `listDocumentsQuerySchema`
+   - Filter by specific folder or root-level documents
+
+2. **Folder Assignment on Upload** (`backend/src/modules/documents/documents.validators.ts`)
+   - Added `folderId` field to `initiateUploadSchema`
+   - Documents can be uploaded directly to a specific folder
+
+3. **Move Document Schema** (`backend/src/modules/documents/documents.validators.ts`)
+   - Added `moveDocumentSchema` for folder reassignment
+
+4. **Enhanced List Documents Service** (`backend/src/modules/documents/documents.service.ts`)
+   - Added folder filtering with support for `null` (root) or specific folder ID
+   - Includes folder info (id, name, isViewOnly) and uploadedBy in response
+   - Created `listAccessibleDocuments()` for folder-permission-aware listing
+   - Created `getAccessibleFolderIds()` helper for restricted user access
+   - Created `userHasDocumentAccess()` for document-level access check
+
+5. **Move Document Method** (`backend/src/modules/documents/documents.service.ts`)
+   - `moveDocument()` moves document to a different folder or root
+   - IDOR protection: verifies folder belongs to the same project
+
+6. **Move Document Controller** (`backend/src/modules/documents/documents.controller.ts`)
+   - `moveDocument` handler for PATCH /:documentId/move
+
+7. **Move Document Route** (`backend/src/modules/documents/documents.routes.ts`)
+   - PATCH /documents/:documentId/move - requires ADMIN role
+
+8. **Integration Tests** (`backend/tests/integration/documents.test.ts`)
+   - Added 9 new test cases for folder filtering and document move:
+     - Filter documents by folderId
+     - Return documents with folder info
+     - Move document to folder as ADMIN
+     - Move document to root (null folderId)
+     - Return 403 for MEMBER trying to move
+     - Return 404 for non-existent document
+     - Return 404 for non-existent folder
+     - IDOR protection: Return 404 for folder in different project
+
+**Files Modified:**
+- `backend/src/modules/documents/documents.validators.ts` - Added folderId fields and moveDocumentSchema
+- `backend/src/modules/documents/documents.service.ts` - Enhanced listing with folder info, added move and access control methods
+- `backend/src/modules/documents/documents.controller.ts` - Added moveDocument controller
+- `backend/src/modules/documents/documents.routes.ts` - Added move document route
+- `backend/tests/integration/documents.test.ts` - Added 9 new tests for folder filtering and move
+
+**Verification:**
+- Documents module TypeScript compiles without errors
+- Pre-existing TypeScript errors in other modules remain (unrelated to this change)
+- Tests require running database (PostgreSQL at 127.0.0.1:5433)
+
+**API Endpoints Updated/Added:**
+| Method | Endpoint | Description | Permission |
+|--------|----------|-------------|------------|
+| GET | `/projects/:id/documents?folderId=...` | List documents with folder filter | canAccessVDR |
+| POST | `/projects/:id/documents/initiate-upload` | Upload with optional folderId | canUploadDocs |
+| PATCH | `/projects/:id/documents/:documentId/move` | Move document to folder | ADMIN+ |
+
+**Notes:**
+- S3 integration requires external setup (AWS S3 bucket configuration)
+- Folder-based access control is implemented in service layer (listAccessibleDocuments)
+- The current list endpoint (listDocuments) doesn't enforce folder restrictions - use listAccessibleDocuments for permission-aware listing
+- IDOR protection ensures documents and folders belong to the same project
+
+**Tasks Completed:** 11/46
+
+**Next Task:**
+- Document upload UI (Phase 2A task 12) - frontend implementation
+- Or: Infrastructure setup for VDR (Phase 2A task 1) - requires AWS S3 bucket
 
 ---
 

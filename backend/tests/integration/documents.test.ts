@@ -11,6 +11,7 @@ import {
   createTestProject,
   addProjectMember,
   testPrisma,
+  createTestFolder,
 } from '../utils';
 
 describe('Documents Module', () => {
@@ -29,19 +30,20 @@ describe('Documents Module', () => {
   });
 
   // Helper to create a test document
-  async function createTestDocument(
+  async function createTestDocumentLocal(
     projectId: string,
     uploadedById: string,
-    data: { name?: string; status?: DocumentStatus } = {}
+    data: { name?: string; status?: DocumentStatus; folderId?: string } = {}
   ) {
     return testPrisma.document.create({
       data: {
         projectId,
         name: data.name || 'test-document.pdf',
-        s3Key: `projects/${projectId}/documents/test-key/test-document.pdf`,
+        s3Key: `projects/${projectId}/documents/${Date.now()}-${Math.random().toString(36).slice(2)}/test-document.pdf`,
         mimeType: 'application/pdf',
         sizeBytes: 1024,
         uploadedById,
+        folderId: data.folderId || null,
         processingStatus: data.status || 'COMPLETE',
       },
     });
@@ -79,8 +81,8 @@ describe('Documents Module', () => {
       const project = await createTestProject(owner.id);
       await addProjectMember(project.id, member.id, ProjectRole.MEMBER);
 
-      await createTestDocument(project.id, owner.id, { name: 'doc1.pdf' });
-      await createTestDocument(project.id, owner.id, { name: 'doc2.pdf' });
+      await createTestDocumentLocal(project.id, owner.id, { name: 'doc1.pdf' });
+      await createTestDocumentLocal(project.id, owner.id, { name: 'doc2.pdf' });
 
       setMockUser(testUsers.member);
 
@@ -153,7 +155,7 @@ describe('Documents Module', () => {
 
       // Create 5 documents
       for (let i = 0; i < 5; i++) {
-        await createTestDocument(project.id, owner.id, { name: `doc${i}.pdf` });
+        await createTestDocumentLocal(project.id, owner.id, { name: `doc${i}.pdf` });
       }
 
       setMockUser(testUsers.owner);
@@ -173,7 +175,7 @@ describe('Documents Module', () => {
     it('should return document details', async () => {
       const owner = await createTestUser(testUsers.owner);
       const project = await createTestProject(owner.id);
-      const document = await createTestDocument(project.id, owner.id, {
+      const document = await createTestDocumentLocal(project.id, owner.id, {
         name: 'test.pdf',
       });
 
@@ -204,7 +206,7 @@ describe('Documents Module', () => {
       const owner = await createTestUser(testUsers.owner);
       await createTestUser(testUsers.outsider);
       const project = await createTestProject(owner.id);
-      const document = await createTestDocument(project.id, owner.id);
+      const document = await createTestDocumentLocal(project.id, owner.id);
 
       setMockUser(testUsers.outsider);
 
@@ -291,7 +293,7 @@ describe('Documents Module', () => {
     it('should confirm upload and change status to COMPLETE', async () => {
       const owner = await createTestUser(testUsers.owner);
       const project = await createTestProject(owner.id);
-      const document = await createTestDocument(project.id, owner.id, {
+      const document = await createTestDocumentLocal(project.id, owner.id, {
         status: 'PENDING',
       });
 
@@ -309,7 +311,7 @@ describe('Documents Module', () => {
     it('should return 400 for already confirmed document', async () => {
       const owner = await createTestUser(testUsers.owner);
       const project = await createTestProject(owner.id);
-      const document = await createTestDocument(project.id, owner.id, {
+      const document = await createTestDocumentLocal(project.id, owner.id, {
         status: 'COMPLETE',
       });
 
@@ -342,7 +344,7 @@ describe('Documents Module', () => {
       const admin = await createTestUser(testUsers.admin);
       const project = await createTestProject(owner.id);
       await addProjectMember(project.id, admin.id, ProjectRole.ADMIN);
-      const document = await createTestDocument(project.id, owner.id);
+      const document = await createTestDocumentLocal(project.id, owner.id);
 
       setMockUser(testUsers.admin);
 
@@ -363,7 +365,7 @@ describe('Documents Module', () => {
       const member = await createTestUser(testUsers.member);
       const project = await createTestProject(owner.id);
       await addProjectMember(project.id, member.id, ProjectRole.MEMBER);
-      const document = await createTestDocument(project.id, owner.id);
+      const document = await createTestDocumentLocal(project.id, owner.id);
 
       setMockUser(testUsers.member);
 
@@ -382,6 +384,191 @@ describe('Documents Module', () => {
       await createTestApp()
         .delete(`/api/v1/projects/${project.id}/documents/00000000-0000-0000-0000-000000000000`)
         .set('Authorization', 'Bearer test-token')
+        .expect(404);
+    });
+  });
+
+  describe('GET /api/v1/projects/:id/documents with folderId filter', () => {
+    it('should filter documents by folderId', async () => {
+      const owner = await createTestUser(testUsers.owner);
+      const project = await createTestProject(owner.id);
+
+      // Create two folders
+      const folder1 = await createTestFolder(project.id, { name: 'Folder 1' });
+      const folder2 = await createTestFolder(project.id, { name: 'Folder 2' });
+
+      // Create documents in different folders
+      await createTestDocumentLocal(project.id, owner.id, {
+        name: 'doc-in-folder1.pdf',
+        folderId: folder1.id,
+      });
+      await createTestDocumentLocal(project.id, owner.id, {
+        name: 'doc-in-folder2.pdf',
+        folderId: folder2.id,
+      });
+      await createTestDocumentLocal(project.id, owner.id, {
+        name: 'doc-at-root.pdf',
+        folderId: undefined,
+      });
+
+      setMockUser(testUsers.owner);
+
+      // Filter by folder1
+      const response1 = await createTestApp()
+        .get(`/api/v1/projects/${project.id}/documents?folderId=${folder1.id}`)
+        .set('Authorization', 'Bearer test-token')
+        .expect(200);
+
+      expect(response1.body.documents).toHaveLength(1);
+      expect(response1.body.documents[0].name).toBe('doc-in-folder1.pdf');
+
+      // Filter by folder2
+      const response2 = await createTestApp()
+        .get(`/api/v1/projects/${project.id}/documents?folderId=${folder2.id}`)
+        .set('Authorization', 'Bearer test-token')
+        .expect(200);
+
+      expect(response2.body.documents).toHaveLength(1);
+      expect(response2.body.documents[0].name).toBe('doc-in-folder2.pdf');
+    });
+
+    it('should return documents with folder info', async () => {
+      const owner = await createTestUser(testUsers.owner);
+      const project = await createTestProject(owner.id);
+
+      const folder = await createTestFolder(project.id, { name: 'Test Folder' });
+      await createTestDocumentLocal(project.id, owner.id, {
+        name: 'doc.pdf',
+        folderId: folder.id,
+      });
+
+      setMockUser(testUsers.owner);
+
+      const response = await createTestApp()
+        .get(`/api/v1/projects/${project.id}/documents`)
+        .set('Authorization', 'Bearer test-token')
+        .expect(200);
+
+      expect(response.body.documents).toHaveLength(1);
+      expect(response.body.documents[0].folder).toBeDefined();
+      expect(response.body.documents[0].folder.id).toBe(folder.id);
+      expect(response.body.documents[0].folder.name).toBe('Test Folder');
+    });
+  });
+
+  describe('PATCH /api/v1/projects/:id/documents/:documentId/move', () => {
+    it('should move document to a folder as ADMIN', async () => {
+      const owner = await createTestUser(testUsers.owner);
+      const admin = await createTestUser(testUsers.admin);
+      const project = await createTestProject(owner.id);
+      await addProjectMember(project.id, admin.id, ProjectRole.ADMIN);
+
+      const folder = await createTestFolder(project.id, { name: 'Target Folder' });
+      const document = await createTestDocumentLocal(project.id, owner.id);
+
+      setMockUser(testUsers.admin);
+
+      const response = await createTestApp()
+        .patch(`/api/v1/projects/${project.id}/documents/${document.id}/move`)
+        .set('Authorization', 'Bearer test-token')
+        .send({ folderId: folder.id })
+        .expect(200);
+
+      expect(response.body.folderId).toBe(folder.id);
+      expect(response.body.folder.name).toBe('Target Folder');
+    });
+
+    it('should move document to root (null folderId)', async () => {
+      const owner = await createTestUser(testUsers.owner);
+      const project = await createTestProject(owner.id);
+
+      const folder = await createTestFolder(project.id, { name: 'Source Folder' });
+      const document = await createTestDocumentLocal(project.id, owner.id, {
+        folderId: folder.id,
+      });
+
+      setMockUser(testUsers.owner);
+
+      const response = await createTestApp()
+        .patch(`/api/v1/projects/${project.id}/documents/${document.id}/move`)
+        .set('Authorization', 'Bearer test-token')
+        .send({ folderId: null })
+        .expect(200);
+
+      expect(response.body.folderId).toBeNull();
+    });
+
+    it('should return 403 for MEMBER role', async () => {
+      const owner = await createTestUser(testUsers.owner);
+      const member = await createTestUser(testUsers.member);
+      const project = await createTestProject(owner.id);
+      await addProjectMember(project.id, member.id, ProjectRole.MEMBER);
+
+      const folder = await createTestFolder(project.id, { name: 'Folder' });
+      const document = await createTestDocumentLocal(project.id, owner.id);
+
+      setMockUser(testUsers.member);
+
+      await createTestApp()
+        .patch(`/api/v1/projects/${project.id}/documents/${document.id}/move`)
+        .set('Authorization', 'Bearer test-token')
+        .send({ folderId: folder.id })
+        .expect(403);
+    });
+
+    it('should return 404 for non-existent document', async () => {
+      const owner = await createTestUser(testUsers.owner);
+      const project = await createTestProject(owner.id);
+      const folder = await createTestFolder(project.id, { name: 'Folder' });
+
+      setMockUser(testUsers.owner);
+
+      await createTestApp()
+        .patch(`/api/v1/projects/${project.id}/documents/00000000-0000-0000-0000-000000000000/move`)
+        .set('Authorization', 'Bearer test-token')
+        .send({ folderId: folder.id })
+        .expect(404);
+    });
+
+    it('should return 404 for non-existent folder', async () => {
+      const owner = await createTestUser(testUsers.owner);
+      const project = await createTestProject(owner.id);
+      const document = await createTestDocumentLocal(project.id, owner.id);
+
+      setMockUser(testUsers.owner);
+
+      await createTestApp()
+        .patch(`/api/v1/projects/${project.id}/documents/${document.id}/move`)
+        .set('Authorization', 'Bearer test-token')
+        .send({ folderId: '00000000-0000-0000-0000-000000000000' })
+        .expect(404);
+    });
+
+    it('should return 404 for folder in different project (IDOR protection)', async () => {
+      const owner = await createTestUser(testUsers.owner);
+      const project1 = await createTestProject(owner.id, { name: 'Project 1' });
+      const project2 = await testPrisma.project.create({
+        data: {
+          name: 'Project 2',
+          members: {
+            create: {
+              userId: owner.id,
+              role: ProjectRole.OWNER,
+              acceptedAt: new Date(),
+            },
+          },
+        },
+      });
+
+      const folderInProject2 = await createTestFolder(project2.id, { name: 'Folder in P2' });
+      const document = await createTestDocumentLocal(project1.id, owner.id);
+
+      setMockUser(testUsers.owner);
+
+      await createTestApp()
+        .patch(`/api/v1/projects/${project1.id}/documents/${document.id}/move`)
+        .set('Authorization', 'Bearer test-token')
+        .send({ folderId: folderInProject2.id })
         .expect(404);
     });
   });
