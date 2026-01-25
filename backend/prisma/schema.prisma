@@ -287,6 +287,10 @@ model Document {
   berryDbId        String?        @unique
   processingStatus DocumentStatus @default(PENDING)
 
+  // Processing pipeline
+  retryCount Int?     @default(0)
+  lastError  String?
+
   // Extracted metadata (synced from BerryDB)
   documentType  String?
   riskLevel     String?

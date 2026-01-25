@@ -4,6 +4,7 @@ import { s3Service } from '../../services/s3.service';
 import { ApiError } from '../../utils/ApiError';
 import { InitiateUploadInput, ListDocumentsQuery } from './documents.validators';
 import { foldersService } from '../folders/folders.service';
+import { processingService } from '../../services/processing.service';
 
 export interface DocumentUploadResult {
   documentId: string;
@@ -181,7 +182,7 @@ export const documentsService = {
   },
 
   /**
-   * Confirm upload complete - marks document as ready for processing
+   * Confirm upload complete - triggers document processing pipeline
    */
   async confirmUpload(documentId: string, projectId: string): Promise<Document> {
     const document = await prisma.document.findFirst({
@@ -196,10 +197,16 @@ export const documentsService = {
       throw ApiError.badRequest('Document upload already confirmed');
     }
 
-    return prisma.document.update({
-      where: { id: documentId },
-      data: { processingStatus: 'COMPLETE' },
+    // Trigger processing pipeline (async - does not wait for completion)
+    // Processing will update status to PROCESSING -> COMPLETE/FAILED
+    processingService.triggerProcessing(documentId).catch((error) => {
+      // Log error but don't fail the request - processing can be retried
+      // eslint-disable-next-line no-console
+      console.error(`Failed to trigger processing for document ${documentId}:`, error);
     });
+
+    // Return the document (still in PENDING status, processing runs async)
+    return document;
   },
 
   /**

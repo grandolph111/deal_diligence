@@ -25,6 +25,10 @@ import projectInvitationRoutes from './modules/invitations/project-invitations.r
 import commentRoutes from './modules/comments/comments.routes';
 import subtaskRoutes from './modules/subtasks/subtasks.routes';
 import taskDocumentsRoutes from './modules/task-documents/task-documents.routes';
+import {
+  processingWebhookRouter,
+  processingProjectRouter,
+} from './modules/processing/processing.routes';
 
 const app = express();
 
@@ -87,6 +91,8 @@ app.use('/api/v1/invitations', invitationRoutes);
 app.use('/api/v1/projects/:id/tasks/:taskId/comments', commentRoutes);
 app.use('/api/v1/projects/:id/tasks/:taskId/subtasks', subtaskRoutes);
 app.use('/api/v1/projects/:id/tasks/:taskId/documents', taskDocumentsRoutes);
+app.use('/api/v1/processing', processingWebhookRouter);
+app.use('/api/v1/projects/:id/processing', processingProjectRouter);
 
 // Error handling
 app.use(notFoundHandler);

@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-25
 **Phase:** 2A - Foundation
-**Tasks Completed:** 14/46
-**Current Task:** Python microservice - BerryDB bridge - COMPLETE
+**Tasks Completed:** 15/46
+**Current Task:** Document processing pipeline - COMPLETE
 
 ---
 
@@ -23,7 +23,7 @@
 
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
-| 2A - Foundation | In Progress | 17 | 14 |
+| 2A - Foundation | In Progress | 17 | 15 |
 | 2B - Extraction | Not Started | 9 | 0 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
@@ -1479,6 +1479,119 @@ The documents module was already partially implemented. This session enhanced it
 **Next Task:**
 - Infrastructure setup for VDR (Phase 2A task 1) - requires AWS S3 bucket
 - Or: Document processing pipeline (Phase 2A task 7) - requires Python microservice running
+
+---
+
+### 2026-01-25 - Document Processing Pipeline Implementation
+
+**Objective:** Implement document processing pipeline for VDR (Phase 2A task 7)
+
+**Task Completed:**
+- Category: backend
+- Phase: 2A
+- Description: Document processing pipeline
+
+**What Was Implemented:**
+
+1. **Prisma Schema Update** (`backend/prisma/schema.prisma`)
+   - Added `retryCount` field to Document model for tracking processing retries
+   - Added `lastError` field to Document model for storing processing error messages
+
+2. **Processing Service** (`backend/src/services/processing.service.ts`)
+   - `triggerProcessing()` - Triggers BerryDB ingestion via Python microservice
+   - `simulateProcessing()` - Mock processing when Python service unavailable
+   - `handleCallback()` - Handles webhook callbacks from Python service
+   - `handleProcessingError()` - Error handling with automatic retry (max 3 retries)
+   - `retryProcessing()` - Retry logic with exponential backoff
+   - `manualRetry()` - Admin-triggered retry for failed documents
+   - `getProcessingStatus()` - Get processing status for a document
+   - `getPendingDocuments()` / `getFailedDocuments()` - Query documents by status
+   - `processPendingDocuments()` - Batch process all pending documents
+
+3. **Processing Validators** (`backend/src/modules/processing/processing.validators.ts`)
+   - `processingCallbackSchema` - Validates callback payload from Python service
+   - `retryDocumentSchema` - Validates manual retry request
+
+4. **Processing Controller** (`backend/src/modules/processing/processing.controller.ts`)
+   - `handleCallback` - POST /api/v1/processing/callback (webhook endpoint)
+   - `getStatus` - GET /projects/:id/processing/status/:documentId
+   - `retryDocument` - POST /projects/:id/processing/retry
+   - `getPendingDocuments` - GET /projects/:id/processing/pending
+   - `getFailedDocuments` - GET /projects/:id/processing/failed
+   - `processAllPending` - POST /projects/:id/processing/process-all
+
+5. **Processing Routes** (`backend/src/modules/processing/processing.routes.ts`)
+   - Webhook router (no auth) for Python service callbacks
+   - Project router (auth required) for admin operations
+
+6. **Documents Service Update** (`backend/src/modules/documents/documents.service.ts`)
+   - `confirmUpload()` now triggers processing pipeline instead of setting status to COMPLETE
+   - Processing runs asynchronously - upload confirmation returns immediately
+
+7. **Integration Tests** (`backend/tests/integration/processing.test.ts`)
+   - 12 comprehensive tests covering:
+     - Processing status retrieval
+     - Pending documents listing
+     - Failed documents listing
+     - Manual retry functionality
+     - Webhook callbacks (success and failure)
+     - Batch processing
+     - Permission checks (ADMIN required)
+
+8. **Test Utilities Update** (`backend/tests/utils/db-helpers.ts`)
+   - `createTestDocument()` now supports `processingStatus` parameter
+   - Backwards-compatible with both old and new signature
+
+**Files Created:**
+- `backend/src/services/processing.service.ts`
+- `backend/src/modules/processing/processing.validators.ts`
+- `backend/src/modules/processing/processing.controller.ts`
+- `backend/src/modules/processing/processing.routes.ts`
+- `backend/src/modules/processing/index.ts`
+- `backend/tests/integration/processing.test.ts`
+
+**Files Modified:**
+- `backend/prisma/schema.prisma` - Added retryCount and lastError fields
+- `backend/src/modules/documents/documents.service.ts` - Trigger processing on confirmUpload
+- `backend/src/app.ts` - Mounted processing routes
+- `backend/tests/utils/db-helpers.ts` - Updated createTestDocument
+
+**Verification:**
+- Processing module TypeScript compiles without errors
+- Database schema synced with `prisma db push`
+- Pre-existing TypeScript errors in other modules remain (unrelated to this change)
+
+**API Endpoints Created:**
+| Method | Endpoint | Description | Permission |
+|--------|----------|-------------|------------|
+| POST | `/api/v1/processing/callback` | Webhook from Python service | None (internal) |
+| GET | `/projects/:id/processing/status/:documentId` | Get processing status | canAccessVDR |
+| POST | `/projects/:id/processing/retry` | Retry failed document | ADMIN+ |
+| GET | `/projects/:id/processing/pending` | List pending documents | ADMIN+ |
+| GET | `/projects/:id/processing/failed` | List failed documents | ADMIN+ |
+| POST | `/projects/:id/processing/process-all` | Process all pending | ADMIN+ |
+
+**Processing Pipeline Flow:**
+1. User uploads file to S3 via presigned URL
+2. Frontend calls `confirmUpload` endpoint
+3. Backend updates document to PENDING status
+4. Backend calls Python microservice `/ingest` endpoint
+5. Python service processes document (OCR, indexing)
+6. Python service calls `/processing/callback` with result
+7. Backend updates document status to COMPLETE or FAILED
+8. If failed, retry up to 3 times with exponential backoff
+
+**Notes:**
+- When Python service is not configured, processing is simulated (completes after 1s delay)
+- Webhook endpoint is unauthenticated (should be secured with shared secret in production)
+- Retry count and last error are tracked for debugging
+- Admin can manually retry failed documents
+
+**Tasks Completed:** 15/46
+
+**Next Task:**
+- Full-text search API (Phase 2A task 8)
+- Or: Infrastructure setup for VDR (Phase 2A task 1) - requires AWS S3 bucket
 
 ---
 

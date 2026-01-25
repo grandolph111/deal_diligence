@@ -1,4 +1,4 @@
-import { PrismaClient, ProjectRole, TaskStatus, TaskPriority, SubtaskStatus, Folder } from '@prisma/client';
+import { PrismaClient, ProjectRole, TaskStatus, TaskPriority, SubtaskStatus, Folder, DocumentStatus } from '@prisma/client';
 import { testUsers, MockUser } from './auth-mock';
 
 // Use a separate Prisma client for tests
@@ -353,27 +353,67 @@ export async function createTestFolder(
 
 /**
  * Create a test document
+ * Supports two signatures:
+ *   createTestDocument(projectId, uploadedById, options?)
+ *   createTestDocument({ projectId, uploadedById, ...options })
  */
 export async function createTestDocument(
-  projectId: string,
-  uploadedById: string,
-  data: {
+  projectIdOrData:
+    | string
+    | {
+        projectId: string;
+        uploadedById: string;
+        name?: string;
+        folderId?: string;
+        s3Key?: string;
+        mimeType?: string;
+        sizeBytes?: number;
+        processingStatus?: DocumentStatus;
+      },
+  uploadedById?: string,
+  options: {
     name?: string;
     folderId?: string;
     s3Key?: string;
     mimeType?: string;
     sizeBytes?: number;
+    processingStatus?: DocumentStatus;
   } = {}
 ) {
+  // Support both old and new signature
+  let data: {
+    projectId: string;
+    uploadedById: string;
+    name?: string;
+    folderId?: string;
+    s3Key?: string;
+    mimeType?: string;
+    sizeBytes?: number;
+    processingStatus?: DocumentStatus;
+  };
+
+  if (typeof projectIdOrData === 'string') {
+    // Old signature: createTestDocument(projectId, uploadedById, options?)
+    data = {
+      projectId: projectIdOrData,
+      uploadedById: uploadedById!,
+      ...options,
+    };
+  } else {
+    // New signature: createTestDocument({ projectId, uploadedById, ...options })
+    data = projectIdOrData;
+  }
+
   return prisma.document.create({
     data: {
-      projectId,
-      uploadedById,
+      projectId: data.projectId,
+      uploadedById: data.uploadedById,
       name: data.name || 'test-document.pdf',
       folderId: data.folderId || null,
       s3Key: data.s3Key || `test-key-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       mimeType: data.mimeType || 'application/pdf',
       sizeBytes: data.sizeBytes || 1024,
+      processingStatus: data.processingStatus || 'PENDING',
     },
   });
 }

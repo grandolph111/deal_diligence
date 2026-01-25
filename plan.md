@@ -126,7 +126,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Add retry logic for failed ingestions",
       "Write tests for processing pipeline"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "backend",
