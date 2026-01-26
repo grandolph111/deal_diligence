@@ -261,27 +261,34 @@ export const searchService = {
       prisma.document.count({ where }),
     ]);
 
-    // Convert to search results
+    // Convert to search results (matching frontend SearchResult type)
     const results: SearchResult[] = documents.map((doc, index) => ({
-      documentId: doc.id,
-      berryDbId: doc.berryDbId,
-      filename: doc.name,
-      folderId: doc.folderId,
-      folderName: doc.folder?.name ?? null,
+      document: {
+        id: doc.id,
+        name: doc.name,
+        mimeType: doc.mimeType,
+        sizeBytes: doc.sizeBytes,
+        processingStatus: doc.processingStatus,
+        documentType: doc.documentType,
+        riskLevel: doc.riskLevel,
+        folderId: doc.folderId,
+        folder: doc.folder
+          ? {
+              id: doc.folder.id,
+              name: doc.folder.name,
+            }
+          : undefined,
+        uploadedBy: doc.uploadedBy
+          ? {
+              id: doc.uploadedBy.id,
+              name: doc.uploadedBy.name,
+              email: doc.uploadedBy.email,
+            }
+          : null,
+        createdAt: doc.createdAt,
+      },
       score: 1 - index * 0.01, // Simple score based on position
       snippets: this.generateSimpleSnippets(doc.name, query.query),
-      documentType: doc.documentType,
-      riskLevel: doc.riskLevel,
-      mimeType: doc.mimeType,
-      sizeBytes: doc.sizeBytes,
-      uploadedAt: doc.createdAt,
-      uploadedBy: doc.uploadedBy
-        ? {
-            id: doc.uploadedBy.id,
-            name: doc.uploadedBy.name,
-            email: doc.uploadedBy.email,
-          }
-        : null,
       isRestricted: false,
     }));
 
@@ -313,8 +320,7 @@ export const searchService = {
     return [
       {
         text: filename,
-        pageNumber: null,
-        highlights: [[index, index + query.length]],
+        highlights: [{ start: index, end: index + query.length }],
       },
     ];
   },
@@ -354,7 +360,7 @@ export const searchService = {
     // Create lookup map
     const docMap = new Map(documents.map((d) => [d.id, d]));
 
-    // Map results, marking restricted documents
+    // Map results, marking restricted documents (matching frontend SearchResult type)
     return results.map((result) => {
       const doc = docMap.get(result.document_id);
 
@@ -366,30 +372,37 @@ export const searchService = {
 
       const snippets: SearchSnippet[] = result.snippets.map((s) => ({
         text: s.text,
-        pageNumber: s.page_number,
-        highlights: s.highlights,
+        pageNumber: s.page_number ?? undefined,
+        highlights: s.highlights.map((h) => ({ start: h[0], end: h[1] })),
       }));
 
       return {
-        documentId: result.document_id,
-        berryDbId: result.berrydb_id,
-        filename: doc?.name ?? result.filename,
-        folderId: doc?.folderId ?? result.folder_id,
-        folderName: doc?.folder?.name ?? null,
+        document: {
+          id: result.document_id,
+          name: doc?.name ?? result.filename,
+          mimeType: doc?.mimeType ?? 'application/pdf',
+          sizeBytes: doc?.sizeBytes ?? 0,
+          processingStatus: doc?.processingStatus ?? null,
+          documentType: doc?.documentType ?? result.document_type,
+          riskLevel: doc?.riskLevel ?? result.risk_level,
+          folderId: doc?.folderId ?? result.folder_id,
+          folder: doc?.folder
+            ? {
+                id: doc.folder.id,
+                name: doc.folder.name,
+              }
+            : undefined,
+          uploadedBy: doc?.uploadedBy
+            ? {
+                id: doc.uploadedBy.id,
+                name: doc.uploadedBy.name,
+                email: doc.uploadedBy.email,
+              }
+            : null,
+          createdAt: doc?.createdAt ?? new Date(),
+        },
         score: result.score,
         snippets: isRestricted ? [] : snippets, // Hide snippets for restricted docs
-        documentType: doc?.documentType ?? result.document_type,
-        riskLevel: doc?.riskLevel ?? result.risk_level,
-        mimeType: doc?.mimeType ?? 'application/pdf',
-        sizeBytes: doc?.sizeBytes ?? 0,
-        uploadedAt: doc?.createdAt ?? new Date(),
-        uploadedBy: doc?.uploadedBy
-          ? {
-              id: doc.uploadedBy.id,
-              name: doc.uploadedBy.name,
-              email: doc.uploadedBy.email,
-            }
-          : null,
         isRestricted,
       };
     });

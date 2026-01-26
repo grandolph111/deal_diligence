@@ -73,35 +73,41 @@ export const searchQuerySchema = z.object({
 export type SearchQueryInput = z.infer<typeof searchQuerySchema>;
 
 /**
- * Search snippet with highlighted text
+ * Search snippet with highlighted text - matches frontend SearchSnippet type
  */
 export interface SearchSnippet {
   text: string;
-  pageNumber: number | null;
-  highlights: Array<[number, number]>;
+  pageNumber?: number;
+  highlights: Array<{ start: number; end: number }>;
 }
 
 /**
- * Individual search result
+ * Individual search result - matches frontend SearchResult type
  */
 export interface SearchResult {
-  documentId: string;
-  berryDbId: string | null;
-  filename: string;
-  folderId: string | null;
-  folderName: string | null;
+  document: {
+    id: string;
+    name: string;
+    mimeType: string;
+    sizeBytes: number;
+    processingStatus: string | null;
+    documentType: string | null;
+    riskLevel: string | null;
+    folderId: string | null;
+    folder?: {
+      id: string;
+      name: string;
+    };
+    uploadedBy: {
+      id: string;
+      name: string | null;
+      email: string;
+    } | null;
+    createdAt: Date | string;
+  };
   score: number;
   snippets: SearchSnippet[];
-  documentType: string | null;
-  riskLevel: string | null;
-  mimeType: string;
-  sizeBytes: number;
-  uploadedAt: Date;
-  uploadedBy: {
-    id: string;
-    name: string | null;
-    email: string;
-  } | null;
+  matchedEntities?: string[];
   isRestricted: boolean;
 }
 
