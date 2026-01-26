@@ -34,6 +34,7 @@ import {
   documentEntitiesRouter,
   projectEntitiesRouter,
 } from './modules/entities/entities.routes';
+import mockS3Routes from './routes/mock-s3.routes';
 
 const app = express();
 
@@ -66,6 +67,10 @@ app.use(
     credentials: true,
   })
 );
+
+// Mock S3 routes for development (must be before body parsers to handle raw binary data)
+// Only functional when S3 is in mock mode (no real S3 credentials)
+app.use('/api/v1/mock-s3', mockS3Routes);
 
 // Body parsing with size limits to prevent DoS
 app.use(express.json({ limit: '1mb' }));

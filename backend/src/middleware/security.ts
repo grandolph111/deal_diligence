@@ -38,10 +38,12 @@ export const csrfProtection = (req: Request, res: Response, next: NextFunction) 
 
 /**
  * Global rate limiter - applies to all routes
+ * Set to 500 requests per 15 minutes to accommodate modern SPA usage
+ * (multiple API calls per page, file uploads, etc.)
  */
 export const globalRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 500, // limit each IP to 500 requests per windowMs
   message: {
     status: 'error',
     message: 'Too many requests, please try again later',
@@ -52,11 +54,29 @@ export const globalRateLimiter = rateLimit({
 });
 
 /**
+ * Upload rate limiter - more permissive for document uploads
+ * Each file upload requires multiple requests (initiate, confirm)
+ */
+export const uploadRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200, // allow 200 upload-related requests per 15 minutes
+  message: {
+    status: 'error',
+    message: 'Too many upload requests, please try again later',
+    code: 'UPLOAD_RATE_LIMIT_EXCEEDED',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
  * Strict rate limiter for auth-related endpoints
+ * Set to 50 requests per 15 minutes to allow for token refreshes
+ * and normal app navigation that triggers auth checks
  */
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // limit each IP to 10 requests per windowMs
+  max: 50, // limit each IP to 50 requests per windowMs
   message: {
     status: 'error',
     message: 'Too many authentication attempts, please try again later',
@@ -68,10 +88,11 @@ export const authRateLimiter = rateLimit({
 
 /**
  * Rate limiter for invitation token lookups
+ * Slightly increased to allow multiple invitation views
  */
 export const invitationRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 5, // limit each IP to 5 requests per minute
+  max: 15, // limit each IP to 15 requests per minute
   message: {
     status: 'error',
     message: 'Too many requests, please try again later',

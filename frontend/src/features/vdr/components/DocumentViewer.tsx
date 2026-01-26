@@ -112,7 +112,7 @@ export function DocumentViewer({
   useEffect(() => {
     if (!pdfUrl) {
       setLoading(false);
-      setError('No PDF URL provided. Document API not yet available.');
+      setError('Unable to load PDF. Please try again or refresh the page.');
       return;
     }
 
@@ -610,6 +610,35 @@ export function DocumentViewer({
               <div className="pdf-page-wrapper">
                 <canvas ref={canvasRef} className="pdf-canvas" />
                 <div ref={textLayerRef} className="pdf-text-layer" />
+              </div>
+            )}
+
+            {/* Floating page navigation - always visible when multi-page */}
+            {!loading && !error && pdfDoc && totalPages > 1 && (
+              <div className="floating-nav-container">
+                <button
+                  className="floating-nav-btn floating-nav-prev"
+                  onClick={goToPreviousPage}
+                  disabled={currentPage <= 1}
+                  title="Previous page (Left arrow)"
+                  aria-label="Previous page"
+                >
+                  <ChevronUp size={28} />
+                </button>
+
+                <div className="floating-page-indicator">
+                  Page {currentPage} of {totalPages}
+                </div>
+
+                <button
+                  className="floating-nav-btn floating-nav-next"
+                  onClick={goToNextPage}
+                  disabled={currentPage >= totalPages}
+                  title="Next page (Right arrow)"
+                  aria-label="Next page"
+                >
+                  <ChevronDown size={28} />
+                </button>
               </div>
             )}
           </div>

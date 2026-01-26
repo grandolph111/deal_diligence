@@ -89,12 +89,15 @@ export const documentsService = {
 
   /**
    * Get a document with download URL
+   * Note: Download is allowed regardless of processing status since file is in S3
+   * Processing only extracts metadata (document type, risk level, etc.)
    */
   async getDocumentWithDownloadUrl(documentId: string, projectId: string) {
     const document = await this.getDocumentById(documentId, projectId);
 
-    if (document.processingStatus !== 'COMPLETE') {
-      throw ApiError.badRequest('Document is not ready for download');
+    // Ensure document has an S3 key (upload was completed)
+    if (!document.s3Key) {
+      throw ApiError.badRequest('Document upload not completed');
     }
 
     const { downloadUrl, expiresAt } = await s3Service.generatePresignedDownloadUrl(

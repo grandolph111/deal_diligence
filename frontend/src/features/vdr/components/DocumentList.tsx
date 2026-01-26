@@ -3,7 +3,6 @@ import {
   FileText,
   Grid,
   List,
-  Upload,
   Download,
   Trash2,
   Eye,
@@ -444,14 +443,6 @@ export function DocumentList({
               <List size={18} />
             </button>
           </div>
-
-          {/* Upload button */}
-          {canUpload && onUploadClick && (
-            <button className="button primary" onClick={onUploadClick}>
-              <Upload size={16} />
-              Upload
-            </button>
-          )}
         </div>
       </div>
 
@@ -494,15 +485,9 @@ export function DocumentList({
             <h3>No documents</h3>
             <p>
               {canUpload
-                ? 'Upload documents to get started'
+                ? 'Drag and drop files above, or use the Upload Files button'
                 : 'No documents in this folder'}
             </p>
-            {canUpload && onUploadClick && (
-              <button className="button primary" onClick={onUploadClick}>
-                <Upload size={16} />
-                Upload Documents
-              </button>
-            )}
           </div>
         ) : viewMode === 'grid' ? (
           <div className="document-grid">

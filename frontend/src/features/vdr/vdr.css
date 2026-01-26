@@ -1310,21 +1310,29 @@
 .document-viewer-canvas-container {
   flex: 1;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   overflow: auto;
-  padding: 24px;
-  background: #525659;
+  padding: 40px 60px 160px;
+  background: #404346;
+  position: relative;
 }
 
 .pdf-page-wrapper {
   position: relative;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.2);
   background: white;
+  border-radius: 2px;
+  max-width: 100%;
+  max-height: calc(100vh - 200px);
 }
 
 .pdf-canvas {
   display: block;
+  max-width: 100%;
+  height: auto;
 }
 
 .pdf-text-layer {
@@ -1598,6 +1606,104 @@
 }
 
 /* ============================================
+   Floating Page Navigation
+   ============================================ */
+
+/* Navigation container - positioned at bottom center of canvas */
+.floating-nav-container {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 100;
+}
+
+.floating-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  color: #374151;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.floating-nav-btn:hover:not(:disabled) {
+  background: white;
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.floating-nav-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.floating-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+/* Page indicator */
+.floating-page-indicator {
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.75);
+  color: white;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Responsive adjustments for floating nav */
+@media (max-width: 768px) {
+  .floating-nav-container {
+    bottom: 16px;
+    gap: 6px;
+  }
+
+  .floating-nav-btn {
+    width: 46px;
+    height: 46px;
+  }
+
+  .floating-nav-btn svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .floating-page-indicator {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+
+  .document-viewer-canvas-container {
+    padding: 40px 20px 140px;
+  }
+}
+
+@media (max-width: 480px) {
+  .floating-nav-btn {
+    width: 42px;
+    height: 42px;
+  }
+
+  .document-viewer-canvas-container {
+    padding: 30px 16px 130px;
+  }
+}
+
+/* ============================================
    Search Panel Styles
    ============================================ */
 
@@ -1605,22 +1711,22 @@
 .search-panel-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(107, 114, 128, 0.75);
   z-index: 1500;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 40px 24px;
+  padding: 60px 24px 24px;
   overflow: auto;
 }
 
 .search-panel {
-  background: var(--color-bg);
-  border-radius: 12px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   width: 100%;
-  max-width: 900px;
-  max-height: calc(100vh - 80px);
+  max-width: 720px;
+  max-height: calc(100vh - 84px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1631,7 +1737,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px 20px;
+  padding: 12px 16px;
+  background: #ffffff;
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
@@ -1670,7 +1777,8 @@
 .search-panel-content {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 16px;
+  background: #ffffff;
 }
 
 /* ============================================
@@ -1686,15 +1794,15 @@
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   transition: all 0.15s ease;
 }
 
 .search-bar-wrapper:focus-within {
   border-color: var(--color-primary);
-  background: var(--color-bg);
+  background: #ffffff;
 }
 
 .search-bar-icon {
@@ -1904,59 +2012,23 @@
   gap: 12px;
 }
 
-/* Search results loading */
-.search-results-loading {
+/* Search results status (loading, empty, error, hint) */
+.search-results-status {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 24px;
+  gap: 8px;
+  padding: 24px 16px;
+  font-size: 14px;
   color: var(--color-text-secondary);
 }
 
-.search-results-loading p {
-  margin-top: 16px;
-  font-size: 14px;
-}
-
-/* Search results empty/error */
-.search-results-empty,
-.search-results-error {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 24px;
-  text-align: center;
-  color: var(--color-text-secondary);
-}
-
-.search-results-empty svg,
-.search-results-error svg {
-  opacity: 0.5;
-  margin-bottom: 16px;
-}
-
-.search-results-empty h3,
-.search-results-error h3 {
-  margin: 0 0 8px;
-  font-size: 18px;
-  color: var(--color-text);
-}
-
-.search-results-empty p,
-.search-results-error p {
-  margin: 0;
-  font-size: 14px;
-  max-width: 400px;
-}
-
-.search-results-error {
+.search-results-status-error {
   color: var(--color-error);
 }
 
-.search-results-error h3 {
-  color: var(--color-error);
+.search-results-status-hint {
+  color: var(--color-text-muted);
 }
 
 /* ============================================

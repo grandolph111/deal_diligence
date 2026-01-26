@@ -101,7 +101,7 @@ export function VDRPage() {
   } = useDocuments({ projectId });
 
   // View mode state
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
 
   // Modal states
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);

@@ -28,11 +28,14 @@ export const documentsController = {
   /**
    * GET /projects/:id/documents/:documentId
    * Get a single document with optional download URL
+   * Query params: includeDownloadUrl=true or download=true
    */
   getDocument: asyncHandler(async (req: Request, res: Response) => {
     const projectId = req.params.id as string;
     const documentId = req.params.documentId as string;
-    const includeDownloadUrl = req.query.download === 'true';
+    // Support both query parameter names for backward compatibility
+    const includeDownloadUrl =
+      req.query.includeDownloadUrl === 'true' || req.query.download === 'true';
 
     if (includeDownloadUrl) {
       const document = await documentsService.getDocumentWithDownloadUrl(
@@ -85,7 +88,7 @@ export const documentsController = {
       documents
     );
 
-    res.status(201).json({ uploads: results });
+    res.status(201).json({ documents: results });
   }),
 
   /**

@@ -193,15 +193,6 @@ export function ProjectOverviewPage() {
           </Link>
 
           <Link
-            to={`/projects/${projectId}/members`}
-            className="quick-action-card"
-          >
-            <Users size={24} />
-            <span>Manage Team</span>
-            <p>Invite members and manage permissions</p>
-          </Link>
-
-          <Link
             to={`/projects/${projectId}/settings`}
             className="quick-action-card"
           >

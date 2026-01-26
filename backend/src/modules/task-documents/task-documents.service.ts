@@ -1,5 +1,4 @@
 import { prisma } from '../../config/database';
-import { TaskDocument } from '@prisma/client';
 import { ApiError } from '../../utils/ApiError';
 
 /**
@@ -102,7 +101,7 @@ export const taskDocumentsService = {
     taskId: string,
     documentId: string,
     userId: string
-  ): Promise<TaskDocument> {
+  ): Promise<LinkedDocument> {
     // Check if already linked
     const existing = await prisma.taskDocument.findUnique({
       where: {
@@ -117,13 +116,40 @@ export const taskDocumentsService = {
       throw ApiError.conflict('Document is already linked to this task');
     }
 
-    return prisma.taskDocument.create({
+    const created = await prisma.taskDocument.create({
       data: {
         taskId,
         documentId,
         linkedById: userId,
       },
+      include: {
+        linkedBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        document: {
+          select: {
+            id: true,
+            name: true,
+            mimeType: true,
+            sizeBytes: true,
+            processingStatus: true,
+            folderId: true,
+          },
+        },
+      },
     });
+
+    return {
+      id: created.id,
+      documentId: created.documentId,
+      linkedAt: created.linkedAt,
+      linkedBy: created.linkedBy,
+      document: created.document,
+    };
   },
 
   /**

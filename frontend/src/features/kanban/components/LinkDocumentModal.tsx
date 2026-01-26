@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, FileText, Search, Folder, FolderOpen, ChevronRight, ChevronDown, Loader, CheckCircle } from 'lucide-react';
 import { foldersService } from '../../../api/services/folders.service';
+import { documentsService } from '../../../api/services/documents.service';
 import type { FolderTreeNode, Document } from '../../../types/api';
 
 interface LinkDocumentModalProps {
@@ -136,9 +137,21 @@ export function LinkDocumentModal({
     if (!isOpen || !projectId) return;
 
     const fetchDocuments = async () => {
-      // For now, we'll use a mock list since documents API isn't implemented yet
-      // This will be replaced with actual API call when document upload is implemented
-      setDocuments([]);
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await documentsService.listDocuments(projectId, {
+          folderId: selectedFolderId,
+          limit: 100,
+        });
+        setDocuments(response.documents);
+      } catch (err) {
+        console.error('Failed to load documents:', err);
+        setError('Failed to load documents');
+        setDocuments([]);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchDocuments();

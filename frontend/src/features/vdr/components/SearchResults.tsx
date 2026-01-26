@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Search, FileQuestion, ChevronLeft, ChevronRight, Loader } from 'lucide-react';
+import { FileQuestion, ChevronLeft, ChevronRight, Loader } from 'lucide-react';
 import { SearchResultItem } from './SearchResultItem';
 import type { SearchResult } from '../../../types/api';
 
@@ -108,9 +108,9 @@ export function SearchResults({
   // Loading state
   if (loading && !results.length) {
     return (
-      <div className="search-results-loading">
-        <Loader size={32} className="spinning" />
-        <p>Searching documents...</p>
+      <div className="search-results-status">
+        <Loader size={16} className="spinning" />
+        <span>Searching...</span>
       </div>
     );
   }
@@ -118,10 +118,9 @@ export function SearchResults({
   // Error state
   if (error) {
     return (
-      <div className="search-results-error">
-        <FileQuestion size={48} />
-        <h3>Search Error</h3>
-        <p>{error}</p>
+      <div className="search-results-status search-results-status-error">
+        <FileQuestion size={16} />
+        <span>{error}</span>
       </div>
     );
   }
@@ -129,10 +128,8 @@ export function SearchResults({
   // Initial state (no search yet)
   if (!hasSearched) {
     return (
-      <div className="search-results-empty">
-        <Search size={48} />
-        <h3>Search Documents</h3>
-        <p>Enter a search term above to find documents in the data room.</p>
+      <div className="search-results-status search-results-status-hint">
+        <span>Type to search documents, contracts, and agreements</span>
       </div>
     );
   }
@@ -140,12 +137,8 @@ export function SearchResults({
   // No results
   if (results.length === 0) {
     return (
-      <div className="search-results-empty">
-        <FileQuestion size={48} />
-        <h3>No Results Found</h3>
-        <p>
-          No documents match "{query}". Try different keywords or adjust your filters.
-        </p>
+      <div className="search-results-status">
+        <span>No results for "{query}"</span>
       </div>
     );
   }

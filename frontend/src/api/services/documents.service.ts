@@ -142,8 +142,8 @@ export const documentsService = {
   ): Promise<ListDocumentsResponse> {
     const searchParams = new URLSearchParams();
 
-    if (params.folderId !== undefined) {
-      searchParams.set('folderId', params.folderId === null ? 'null' : params.folderId);
+    if (params.folderId) {
+      searchParams.set('folderId', params.folderId);
     }
     if (params.documentType) {
       searchParams.set('documentType', params.documentType);
@@ -395,14 +395,22 @@ export const documentsService = {
       try {
         const confirmResult = await this.confirmMultipleUploads(projectId, confirmedIds);
 
-        // Fetch confirmed documents
+        // Mark confirmed uploads as complete using original filename
+        // This ensures progress updates even if document fetch fails
         for (const docId of confirmResult.confirmed) {
+          const uploadResult = uploadResults.find((r) => r.documentId === docId);
+          if (uploadResult) {
+            // Mark as complete immediately using original filename
+            onProgress?.(uploadResult.filename, 100, 'complete');
+          }
+
+          // Try to fetch the document for the successful array (non-blocking)
           try {
             const doc = await this.getDocument(projectId, docId);
             successful.push(doc);
-            onProgress?.(doc.name, 100, 'complete');
           } catch {
-            // Ignore fetch errors
+            // Document fetch failed but upload succeeded - still count as success
+            // The document list will refresh and show it
           }
         }
 
