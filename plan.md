@@ -371,7 +371,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Merge and rerank hybrid search results",
       "Write tests for semantic search"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "frontend",

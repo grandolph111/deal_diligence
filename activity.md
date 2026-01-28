@@ -2349,4 +2349,87 @@ The documents module was already partially implemented. This session enhanced it
 
 ---
 
+### 2026-01-28 - Semantic Search API Implementation
+
+**Objective:** Implement Semantic search API for VDR (Phase 2B task 6)
+
+**Task Completed:**
+- Category: backend
+- Phase: 2B
+- Description: Semantic search API
+
+**What Was Implemented:**
+
+1. **Similarity Search Method** (`python-service/app/services/berrydb.py`)
+   - `similarity_search()`: Find documents similar to a given document using semantic embeddings
+   - Uses BerryDB embeddings via chat API for vector similarity search
+   - Extracts source document content and finds conceptually similar documents
+   - Returns results ranked by similarity score (0-1)
+   - Mock mode support for development (deterministic seeded by document_id)
+   - `_generate_mock_similarity_response()`: Generates realistic similar document results
+
+2. **Enhanced Search with Search Types**
+   - Updated `search()` method to properly handle all three search types:
+     - KEYWORD: Text matching with frequency-based scoring
+     - SEMANTIC: Vector similarity search using BerryDB embeddings
+     - HYBRID: Combination of both with RRF (Reciprocal Rank Fusion) re-ranking
+
+3. **Hybrid Search Re-ranking** (`_merge_and_rerank_results()`)
+   - Implements Reciprocal Rank Fusion (RRF) algorithm with k=60 constant
+   - Combines keyword and semantic search rankings intelligently
+   - Produces a unified score (0-1) for merged results
+   - Preserves snippets from both keyword matches and semantic results
+
+4. **Similar Documents Endpoint** (`python-service/app/routers/search.py`)
+   - Updated `POST /search/similar/{document_id}` endpoint
+   - Now calls the implemented `berrydb_service.similarity_search()` method
+   - Returns semantic search results with proper pagination
+   - Page size capped at 100 for safety
+
+5. **Integration Tests** (`python-service/tests/test_search.py`)
+   - Added 9 new tests for semantic search functionality:
+     - `test_search_keyword_type`: Keyword search returns results
+     - `test_search_semantic_type`: Semantic search returns results
+     - `test_search_hybrid_type`: Hybrid search with merged ranking
+     - `test_similar_documents_returns_results`: Mock mode returns results
+     - `test_similar_documents_with_pagination`: Pagination support
+     - `test_similar_documents_page_size_capped`: Page size limit enforced
+     - `test_similar_documents_deterministic_results`: Consistent results for same doc
+     - `test_similar_documents_result_structure`: Proper response structure
+     - `test_search_results_have_snippets`: Snippets with highlights
+
+**Files Modified:**
+- `python-service/app/services/berrydb.py` - Added similarity_search, updated search with RRF
+- `python-service/app/routers/search.py` - Updated similar endpoint to use new method
+- `python-service/tests/test_search.py` - Added 9 semantic search tests
+
+**API Endpoints Updated:**
+
+| Method | Endpoint | Description | Changes |
+|--------|----------|-------------|---------|
+| POST | `/search` | Document search | Now supports keyword, semantic, hybrid with proper RRF |
+| POST | `/search/similar/{document_id}` | Find similar documents | **Implemented** - was returning empty |
+
+**Key Features:**
+- Three search modes fully supported (keyword, semantic, hybrid)
+- Reciprocal Rank Fusion for intelligent hybrid search re-ranking
+- Similarity search using document embeddings
+- Mock mode for development with deterministic results
+- Comprehensive test coverage (12 search tests total, all passing)
+
+**Notes:**
+- Pre-existing TypeScript errors in the backend (unrelated to this change) continue to exist
+- All 12 Python search tests pass
+- Backend Node.js `findSimilar` method already calls the Python endpoint correctly
+- The Python service works in mock mode when BerryDB is not configured
+
+**Tasks Completed:** 23/46
+
+**Phase 2B Progress:** 6/9 tasks
+
+**Next Task:**
+- Entity display UI (Phase 2B task 7 - frontend)
+
+---
+
 <!-- Future session entries will be added below -->
