@@ -665,6 +665,48 @@
   color: var(--color-text-secondary);
 }
 
+/* Document Badges (Type and Risk) */
+.document-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.document-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: white;
+  white-space: nowrap;
+}
+
+.document-type-badge svg {
+  flex-shrink: 0;
+}
+
+.document-risk-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.document-type-unknown {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
 .document-status {
   display: flex;
   align-items: center;
@@ -3361,4 +3403,187 @@
 .viewer-sidebar-tab:not(.active) .tab-badge {
   background: var(--color-text-secondary);
   opacity: 0.7;
+}
+
+/* ============================================
+   Classification Dropdown Styles
+   ============================================ */
+
+.classification-dropdown {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.classification-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.classification-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.classification-selector {
+  position: relative;
+}
+
+.classification-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s ease;
+}
+
+.classification-button:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.classification-button.active {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.classification-button:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.classification-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: white;
+}
+
+.classification-badge.small {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.classification-icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-secondary);
+}
+
+.classification-icons .success-icon {
+  color: var(--color-success);
+}
+
+.classification-placeholder {
+  color: var(--color-text-muted);
+}
+
+.classification-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 20;
+  overflow: hidden;
+}
+
+.classification-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.ai-classify-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--color-primary-light);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-primary);
+  transition: all 0.15s ease;
+}
+
+.ai-classify-button:hover:not(:disabled) {
+  background: var(--color-primary);
+  color: white;
+}
+
+.ai-classify-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.classification-options {
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.classification-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--color-text);
+  text-align: left;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+
+.classification-option:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+}
+
+.classification-option.selected {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.classification-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.option-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.classification-option svg {
+  margin-left: auto;
 }

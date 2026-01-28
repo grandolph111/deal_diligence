@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-28
 **Phase:** 2B - Intelligent Extraction (IN PROGRESS)
-**Tasks Completed:** 24/46
-**Current Task:** Entity display UI - COMPLETE
+**Tasks Completed:** 25/46
+**Current Task:** Document classification UI - COMPLETE
 
 ---
 
@@ -24,7 +24,7 @@
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
 | 2A - Foundation | COMPLETE | 17 | 17 |
-| 2B - Extraction | IN PROGRESS | 9 | 7 |
+| 2B - Extraction | IN PROGRESS | 9 | 8 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
 | Cross-Cutting | Not Started | 3 | 0 |
@@ -2542,6 +2542,108 @@ The documents module was already partially implemented. This session enhanced it
 
 **Next Task:**
 - Document classification UI (Phase 2B task 8 - frontend)
+
+---
+
+### 2026-01-28 - Document Classification UI Implementation
+
+**Objective:** Implement Document classification UI for VDR (Phase 2B task 8)
+
+**Task Completed:**
+- Category: frontend
+- Phase: 2B
+- Description: Document classification UI
+
+**What Was Implemented:**
+
+1. **Document Type Constants** (`frontend/src/types/api.ts`)
+   - Added `DocumentType` enum matching backend classification types
+   - Added `RiskLevel` enum matching backend risk levels
+   - Added `DOCUMENT_TYPE_LABELS` for human-readable labels
+   - Added `DOCUMENT_TYPE_COLORS` for distinct badge colors per type
+   - Added `RISK_LEVEL_LABELS` and `RISK_LEVEL_COLORS` for risk badges
+
+2. **Document Type Badges** (`frontend/src/features/vdr/components/DocumentList.tsx`)
+   - Added `getDocumentTypeBadge()` helper function
+   - Added `getRiskLevelBadge()` helper function
+   - Updated DocumentCard to show document type and risk badges
+   - Updated DocumentRow (list view) to show styled type badges
+   - Badges show with distinct colors for each document type
+
+3. **Search Filter Updates** (`frontend/src/features/vdr/components/SearchFilters.tsx`)
+   - Updated DOCUMENT_TYPES to use backend enum values
+   - Updated RISK_LEVELS to use backend enum values
+   - Document type filter now matches backend classification types
+
+4. **Classification API Service** (`frontend/src/api/services/classification.service.ts`)
+   - `getClassification()` - Get document classification
+   - `classifyDocument()` - Manually classify a document
+   - `classifyViaAI()` - Trigger AI classification
+   - `clearClassification()` - Clear document classification
+   - `getStats()` - Get project classification statistics
+
+5. **API Client Enhancement** (`frontend/src/api/client.ts`)
+   - Added `put()` method for PUT requests
+
+6. **ClassificationDropdown Component** (`frontend/src/features/vdr/components/ClassificationDropdown.tsx`)
+   - Document type selector with all backend types
+   - Risk level selector (shown after type is set)
+   - Color-coded badges for current selection
+   - "AI Classify" button for automatic classification
+   - Loading states and success feedback
+   - Calls backend classification API
+
+7. **DocumentViewer Integration** (`frontend/src/features/vdr/components/DocumentViewer.tsx`)
+   - Added ClassificationDropdown to Details tab sidebar
+   - Added `canEditClassification` prop for permission control
+   - Added `onDocumentUpdate` callback for parent component
+   - Local state management for classification changes
+   - Classification section with dedicated "Classification" header
+
+8. **CSS Styles** (`frontend/src/features/vdr/vdr.css`)
+   - Document badges styles (type and risk)
+   - Classification dropdown styles
+   - Classification menu styles
+   - Option selection styles with color dots
+   - AI classify button styles
+
+**Files Created:**
+- `frontend/src/api/services/classification.service.ts`
+- `frontend/src/features/vdr/components/ClassificationDropdown.tsx`
+
+**Files Modified:**
+- `frontend/src/types/api.ts` - Added document type and risk level enums/constants
+- `frontend/src/api/client.ts` - Added PUT method
+- `frontend/src/api/index.ts` - Exported classification service
+- `frontend/src/features/vdr/index.ts` - Exported ClassificationDropdown
+- `frontend/src/features/vdr/components/DocumentList.tsx` - Added type badges
+- `frontend/src/features/vdr/components/SearchFilters.tsx` - Updated filters
+- `frontend/src/features/vdr/components/DocumentViewer.tsx` - Added classification UI
+- `frontend/src/features/vdr/vdr.css` - Added ~150 lines of new styles
+
+**Verification:**
+- Document classification UI module TypeScript compiles without errors
+- Pre-existing TypeScript errors in settings module remain (unrelated to this change)
+
+**Features Implemented per Task Steps:**
+| Step | Status |
+|------|--------|
+| Show document type badge on document cards | ✓ Color-coded badges in grid and list |
+| Add document type filter to search | ✓ Updated to use backend enum |
+| Implement manual classification override dropdown | ✓ Full dropdown with AI option |
+| Update document details panel with type | ✓ Classification section in viewer |
+
+**Notes:**
+- Classification dropdown supports both manual selection and AI classification
+- Pre-existing TypeScript errors in codebase (unrelated to this change) remain
+- ClassificationDropdown can be reused in other components (e.g., document list context menu)
+
+**Tasks Completed:** 25/46
+
+**Phase 2B Progress:** 8/9 tasks
+
+**Next Task:**
+- Clause detection UI (Phase 2B task 9 - frontend)
 
 ---
 

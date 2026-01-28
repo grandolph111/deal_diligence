@@ -22,9 +22,10 @@ import {
   ChevronDown,
   Tags,
 } from 'lucide-react';
-import type { Document, DocumentEntity } from '../../../types/api';
+import type { Document, DocumentEntity, DocumentType, RiskLevel } from '../../../types/api';
 import { EntitiesPanel } from './EntitiesPanel';
 import { EntityDetailsModal } from './EntityDetailsModal';
+import { ClassificationDropdown } from './ClassificationDropdown';
 import { useEntities } from '../hooks/useEntities';
 
 // Set up PDF.js worker
@@ -40,6 +41,8 @@ interface DocumentViewerProps {
   projectId: string;
   onClose: () => void;
   onDownload?: (document: Document) => void;
+  canEditClassification?: boolean;
+  onDocumentUpdate?: (document: Document) => void;
 }
 
 type SidebarTab = 'details' | 'entities';
@@ -88,7 +91,12 @@ export function DocumentViewer({
   projectId,
   onClose,
   onDownload,
+  canEditClassification = false,
+  onDocumentUpdate,
 }: DocumentViewerProps) {
+  // Local document state for classification updates
+  const [currentDocument, setCurrentDocument] = useState<Document>(document);
+
   // PDF state
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -399,6 +407,20 @@ export function DocumentViewer({
       goToPage(pageNumber);
     },
     [goToPage]
+  );
+
+  // Handle classification change
+  const handleClassificationChange = useCallback(
+    (documentType: DocumentType | null, riskLevel: RiskLevel | null) => {
+      const updatedDoc = {
+        ...currentDocument,
+        documentType,
+        riskLevel,
+      };
+      setCurrentDocument(updatedDoc);
+      onDocumentUpdate?.(updatedDoc);
+    },
+    [currentDocument, onDocumentUpdate]
   );
 
   // Keyboard shortcuts
@@ -727,12 +749,24 @@ export function DocumentViewer({
               {/* Details tab content */}
               {sidebarTab === 'details' && (
                 <>
+                  {/* Classification Section */}
                   <div className="metadata-section">
+                    <h4>Classification</h4>
+                    <ClassificationDropdown
+                      projectId={projectId}
+                      document={currentDocument}
+                      canEdit={canEditClassification}
+                      onClassificationChange={handleClassificationChange}
+                    />
+                  </div>
+
+                  <div className="metadata-section">
+                    <h4>Document Info</h4>
                     <div className="metadata-item">
                       <FileText size={16} />
                       <div>
                         <label>Name</label>
-                        <span>{document.name}</span>
+                        <span>{currentDocument.name}</span>
                       </div>
                     </div>
 
@@ -740,24 +774,24 @@ export function DocumentViewer({
                       <HardDrive size={16} />
                       <div>
                         <label>Size</label>
-                        <span>{formatFileSize(document.sizeBytes)}</span>
+                        <span>{formatFileSize(currentDocument.sizeBytes)}</span>
                       </div>
                     </div>
 
                     <div className="metadata-item">
                       <FileText size={16} />
                       <div>
-                        <label>Type</label>
-                        <span>{document.mimeType}</span>
+                        <label>File Type</label>
+                        <span>{currentDocument.mimeType}</span>
                       </div>
                     </div>
 
-                    {document.pageCount && (
+                    {currentDocument.pageCount && (
                       <div className="metadata-item">
                         <FileText size={16} />
                         <div>
                           <label>Pages</label>
-                          <span>{document.pageCount}</span>
+                          <span>{currentDocument.pageCount}</span>
                         </div>
                       </div>
                     )}
@@ -766,50 +800,28 @@ export function DocumentViewer({
                       <Calendar size={16} />
                       <div>
                         <label>Uploaded</label>
-                        <span>{formatDate(document.createdAt)}</span>
+                        <span>{formatDate(currentDocument.createdAt)}</span>
                       </div>
                     </div>
 
-                    {document.uploadedBy && (
+                    {currentDocument.uploadedBy && (
                       <div className="metadata-item">
                         <User size={16} />
                         <div>
                           <label>Uploaded by</label>
                           <span>
-                            {document.uploadedBy.name || document.uploadedBy.email}
+                            {currentDocument.uploadedBy.name || currentDocument.uploadedBy.email}
                           </span>
                         </div>
                       </div>
                     )}
 
-                    {document.folder && (
+                    {currentDocument.folder && (
                       <div className="metadata-item">
                         <Folder size={16} />
                         <div>
                           <label>Folder</label>
-                          <span>{document.folder.name}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {document.documentType && (
-                      <div className="metadata-item">
-                        <FileText size={16} />
-                        <div>
-                          <label>Document Type</label>
-                          <span>{document.documentType}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {document.riskLevel && (
-                      <div className="metadata-item">
-                        <AlertCircle size={16} />
-                        <div>
-                          <label>Risk Level</label>
-                          <span className={`risk-badge risk-${document.riskLevel.toLowerCase()}`}>
-                            {document.riskLevel}
-                          </span>
+                          <span>{currentDocument.folder.name}</span>
                         </div>
                       </div>
                     )}
@@ -817,20 +829,20 @@ export function DocumentViewer({
 
                   <div className="metadata-section">
                     <h4>Processing Status</h4>
-                    <div className={`processing-status status-${document.processingStatus.toLowerCase()}`}>
-                      {document.processingStatus === 'PROCESSING' && (
+                    <div className={`processing-status status-${currentDocument.processingStatus.toLowerCase()}`}>
+                      {currentDocument.processingStatus === 'PROCESSING' && (
                         <Loader size={14} className="spinning" />
                       )}
-                      {document.processingStatus === 'COMPLETE' && (
+                      {currentDocument.processingStatus === 'COMPLETE' && (
                         <span className="status-dot complete" />
                       )}
-                      {document.processingStatus === 'FAILED' && (
+                      {currentDocument.processingStatus === 'FAILED' && (
                         <AlertCircle size={14} />
                       )}
-                      {document.processingStatus === 'PENDING' && (
+                      {currentDocument.processingStatus === 'PENDING' && (
                         <span className="status-dot pending" />
                       )}
-                      <span>{document.processingStatus}</span>
+                      <span>{currentDocument.processingStatus}</span>
                     </div>
                   </div>
 

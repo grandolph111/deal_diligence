@@ -290,6 +290,67 @@ export interface ReorderSubtasksDto {
 // Document processing status
 export type DocumentStatus = 'PENDING' | 'PROCESSING' | 'COMPLETE' | 'FAILED';
 
+// Document type classification
+export type DocumentType =
+  | 'CONTRACT'
+  | 'FINANCIAL'
+  | 'LEGAL'
+  | 'CORPORATE'
+  | 'TECHNICAL'
+  | 'TAX'
+  | 'HR'
+  | 'IP'
+  | 'COMMERCIAL'
+  | 'OPERATIONAL'
+  | 'OTHER';
+
+// Risk level classification
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+// Document type display labels and colors
+export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
+  CONTRACT: 'Contract',
+  FINANCIAL: 'Financial',
+  LEGAL: 'Legal',
+  CORPORATE: 'Corporate',
+  TECHNICAL: 'Technical',
+  TAX: 'Tax',
+  HR: 'HR',
+  IP: 'IP/Patent',
+  COMMERCIAL: 'Commercial',
+  OPERATIONAL: 'Operational',
+  OTHER: 'Other',
+};
+
+export const DOCUMENT_TYPE_COLORS: Record<DocumentType, string> = {
+  CONTRACT: '#3b82f6',    // blue
+  FINANCIAL: '#10b981',   // green
+  LEGAL: '#8b5cf6',       // purple
+  CORPORATE: '#f59e0b',   // amber
+  TECHNICAL: '#06b6d4',   // cyan
+  TAX: '#ef4444',         // red
+  HR: '#ec4899',          // pink
+  IP: '#14b8a6',          // teal
+  COMMERCIAL: '#f97316',  // orange
+  OPERATIONAL: '#6366f1', // indigo
+  OTHER: '#6b7280',       // gray
+};
+
+// Risk level display labels and colors
+export const RISK_LEVEL_LABELS: Record<RiskLevel, string> = {
+  LOW: 'Low Risk',
+  MEDIUM: 'Medium Risk',
+  HIGH: 'High Risk',
+  CRITICAL: 'Critical Risk',
+};
+
+export const RISK_LEVEL_COLORS: Record<RiskLevel, string> = {
+  LOW: '#10b981',     // green
+  MEDIUM: '#f59e0b',  // amber
+  HIGH: '#ef4444',    // red
+  CRITICAL: '#dc2626', // dark red
+};
+
 // Folder model
 export interface Folder extends Timestamps {
   id: string;

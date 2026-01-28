@@ -17,8 +17,10 @@ import {
   Square,
   X,
   ShieldAlert,
+  Tag,
 } from 'lucide-react';
-import type { Document, DocumentStatus } from '../../../types/api';
+import type { Document, DocumentStatus, DocumentType, RiskLevel } from '../../../types/api';
+import { DOCUMENT_TYPE_LABELS, DOCUMENT_TYPE_COLORS, RISK_LEVEL_COLORS } from '../../../types/api';
 
 interface DocumentListProps {
   documents: Document[];
@@ -78,6 +80,27 @@ function formatDate(dateString: string): string {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+/**
+ * Get document type badge info
+ */
+function getDocumentTypeBadge(documentType: string | null): { label: string; color: string } | null {
+  if (!documentType) return null;
+  const type = documentType.toUpperCase() as DocumentType;
+  const label = DOCUMENT_TYPE_LABELS[type] || documentType;
+  const color = DOCUMENT_TYPE_COLORS[type] || '#6b7280';
+  return { label, color };
+}
+
+/**
+ * Get risk level badge info
+ */
+function getRiskLevelBadge(riskLevel: string | null): { label: string; color: string } | null {
+  if (!riskLevel) return null;
+  const level = riskLevel.toUpperCase() as RiskLevel;
+  const color = RISK_LEVEL_COLORS[level] || '#6b7280';
+  return { label: level, color };
 }
 
 interface DocumentCardProps {
@@ -177,6 +200,34 @@ function DocumentCard({
         <h4 className="document-name" title={document.name}>
           {document.name}
         </h4>
+        {/* Document type badge */}
+        {(() => {
+          const typeBadge = getDocumentTypeBadge(document.documentType);
+          const riskBadge = getRiskLevelBadge(document.riskLevel);
+          return (typeBadge || riskBadge) ? (
+            <div className="document-badges">
+              {typeBadge && (
+                <span
+                  className="document-type-badge"
+                  style={{ backgroundColor: typeBadge.color }}
+                  title={`Document type: ${typeBadge.label}`}
+                >
+                  <Tag size={10} />
+                  {typeBadge.label}
+                </span>
+              )}
+              {riskBadge && (
+                <span
+                  className="document-risk-badge"
+                  style={{ backgroundColor: riskBadge.color }}
+                  title={`Risk level: ${riskBadge.label}`}
+                >
+                  {riskBadge.label}
+                </span>
+              )}
+            </div>
+          ) : null;
+        })()}
         <div className="document-meta">
           <span className="document-size">{formatFileSize(document.sizeBytes)}</span>
           <span className="document-status" style={{ color: statusInfo.color }} title={statusInfo.label}>
@@ -297,7 +348,23 @@ function DocumentRow({
           </span>
         )}
       </td>
-      <td className="document-type-cell">{document.documentType || 'Unknown'}</td>
+      <td className="document-type-cell">
+        {(() => {
+          const typeBadge = getDocumentTypeBadge(document.documentType);
+          if (typeBadge) {
+            return (
+              <span
+                className="document-type-badge"
+                style={{ backgroundColor: typeBadge.color }}
+              >
+                <Tag size={10} />
+                {typeBadge.label}
+              </span>
+            );
+          }
+          return <span className="document-type-unknown">Unclassified</span>;
+        })()}
+      </td>
       <td className="document-size-cell">{formatFileSize(document.sizeBytes)}</td>
       <td className="document-status-cell">
         <span className="status-badge" style={{ color: statusInfo.color }} title={statusInfo.label}>
@@ -338,7 +405,7 @@ export function DocumentList({
   loading,
   viewMode,
   onViewModeChange,
-  onUploadClick,
+  onUploadClick: _onUploadClick,
   onDocumentClick,
   onDocumentDownload,
   onDocumentDelete,
@@ -351,6 +418,7 @@ export function DocumentList({
   selectedFolderName,
   restrictedDocumentIds = new Set(),
 }: DocumentListProps) {
+  // Note: onUploadClick (_onUploadClick) is available in props but used by parent component's upload modal
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 

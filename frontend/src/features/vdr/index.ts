@@ -24,6 +24,9 @@ export { SearchPanel } from './components/SearchPanel';
 export { EntitiesPanel } from './components/EntitiesPanel';
 export { EntityDetailsModal } from './components/EntityDetailsModal';
 
+// Classification components
+export { ClassificationDropdown } from './components/ClassificationDropdown';
+
 // Hooks
 export { useFolders } from './hooks/useFolders';
 export { useSearch } from './hooks/useSearch';

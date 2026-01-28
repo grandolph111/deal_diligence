@@ -398,7 +398,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Implement manual classification override dropdown",
       "Update document details panel with type"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "frontend",

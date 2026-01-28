@@ -143,6 +143,20 @@ class ApiClient {
   }
 
   /**
+   * Make a PUT request
+   */
+  async put<T>(path: string, body?: unknown): Promise<T> {
+    const headers = await this.buildHeaders();
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: 'PUT',
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    return this.handleResponse<T>(response);
+  }
+
+  /**
    * Make a PATCH request
    */
   async patch<T>(path: string, body?: unknown): Promise<T> {

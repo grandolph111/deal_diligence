@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { Filter, ChevronDown, X } from 'lucide-react';
-import type { SearchFilters as SearchFiltersType, SearchType, FolderTreeNode } from '../../../types/api';
+import type { SearchFilters as SearchFiltersType, SearchType, FolderTreeNode, DocumentType, RiskLevel } from '../../../types/api';
+import { DOCUMENT_TYPE_LABELS, RISK_LEVEL_LABELS } from '../../../types/api';
 
 interface SearchFiltersProps {
   filters: SearchFiltersType;
@@ -11,24 +12,22 @@ interface SearchFiltersProps {
   onClearFilters: () => void;
 }
 
-// Document type options
-const DOCUMENT_TYPES = [
+// Document type options from backend enum
+const DOCUMENT_TYPES: Array<{ value: string; label: string }> = [
   { value: '', label: 'All Types' },
-  { value: 'contract', label: 'Contract' },
-  { value: 'financial', label: 'Financial Statement' },
-  { value: 'legal', label: 'Legal Document' },
-  { value: 'employment', label: 'Employment Agreement' },
-  { value: 'ip', label: 'IP/Patent' },
-  { value: 'corporate', label: 'Corporate Document' },
-  { value: 'other', label: 'Other' },
+  ...Object.entries(DOCUMENT_TYPE_LABELS).map(([value, label]) => ({
+    value: value as DocumentType,
+    label,
+  })),
 ];
 
-// Risk level options
-const RISK_LEVELS = [
+// Risk level options from backend enum
+const RISK_LEVELS: Array<{ value: string; label: string }> = [
   { value: '', label: 'All Risk Levels' },
-  { value: 'high', label: 'High Risk' },
-  { value: 'medium', label: 'Medium Risk' },
-  { value: 'low', label: 'Low Risk' },
+  ...Object.entries(RISK_LEVEL_LABELS).map(([value, label]) => ({
+    value: value as RiskLevel,
+    label,
+  })),
 ];
 
 // Search type options
