@@ -34,6 +34,10 @@ import {
   documentEntitiesRouter,
   projectEntitiesRouter,
 } from './modules/entities/entities.routes';
+import {
+  documentClassificationRouter,
+  projectClassificationRouter,
+} from './modules/classification/classification.routes';
 import mockS3Routes from './routes/mock-s3.routes';
 
 const app = express();
@@ -170,6 +174,11 @@ app.use('/api/v1/projects/:id/processing', processingProjectRouter);
 app.use('/api/v1/projects/:id/search', searchRoutes);
 app.use('/api/v1/projects/:id/documents/:documentId/entities', documentEntitiesRouter);
 app.use('/api/v1/projects/:id/entities', projectEntitiesRouter);
+app.use(
+  '/api/v1/projects/:id/documents/:documentId/classification',
+  documentClassificationRouter
+);
+app.use('/api/v1/projects/:id/classification', projectClassificationRouter);
 
 // Error handling
 app.use(notFoundHandler);

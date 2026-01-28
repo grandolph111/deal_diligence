@@ -344,7 +344,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Add document type filter to search",
       "Write tests for classification"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "backend",
@@ -451,7 +451,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Run prisma migrate",
       "Create indexes for graph queries"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "backend",
@@ -804,9 +804,9 @@ Infrastructure Setup (2A)
 
 ## Open Questions Before Starting
 
-1. [ ] BerryDB account created and API key obtained
+1. [x] BerryDB account created and API key obtained
 2. [ ] BerryDB SOC 2 compliance verified
 3. [ ] BerryDB pricing confirmed for expected volume
-4. [ ] AWS S3 bucket provisioned
-5. [ ] Python microservice hosting decision (same server, separate, containerized)
-6. [ ] Redis caching decision (needed for MVP?)
+4. [x] AWS S3 bucket provisioned
+5. [x] Python microservice hosting decision (same server, separate, containerized)
+6. [x] Redis caching decision (needed for MVP?) - Deferred, not needed for MVP

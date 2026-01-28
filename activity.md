@@ -2,10 +2,10 @@
 
 ## Current Status
 
-**Last Updated:** 2026-01-25
+**Last Updated:** 2026-01-28
 **Phase:** 2B - Intelligent Extraction (IN PROGRESS)
-**Tasks Completed:** 20/46
-**Current Task:** Entity extraction API - COMPLETE
+**Tasks Completed:** 21/46
+**Current Task:** Document classification API - COMPLETE
 
 ---
 
@@ -24,7 +24,7 @@
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
 | 2A - Foundation | COMPLETE | 17 | 17 |
-| 2B - Extraction | IN PROGRESS | 9 | 3 |
+| 2B - Extraction | IN PROGRESS | 9 | 4 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
 | Cross-Cutting | Not Started | 3 | 0 |
@@ -2115,6 +2115,113 @@ The documents module was already partially implemented. This session enhanced it
 
 **Next Task:**
 - Document classification API (Phase 2B task 4)
+
+---
+
+### 2026-01-28 - Document Classification API Implementation
+
+**Objective:** Implement Document classification API for VDR (Phase 2B task 4)
+
+**Task Completed:**
+- Category: backend
+- Phase: 2B
+- Description: Document classification API
+
+**What Was Implemented:**
+
+1. **Classification Validators** (`backend/src/modules/classification/classification.validators.ts`)
+   - `documentTypeEnum`: CONTRACT, FINANCIAL, LEGAL, CORPORATE, TECHNICAL, TAX, HR, IP, COMMERCIAL, OPERATIONAL, OTHER
+   - `riskLevelEnum`: LOW, MEDIUM, HIGH, CRITICAL
+   - `classifyDocumentSchema`: Manual classification input
+   - `syncClassificationSchema`: Sync from Python microservice with confidence scores
+   - `listByClassificationQuerySchema`: Query documents by classification
+   - `ClassificationStats` and `ClassificationResult` interfaces
+
+2. **Classification Service** (`backend/src/modules/classification/classification.service.ts`)
+   - `verifyDocumentInProject()`: IDOR protection - ensures document belongs to project
+   - `getDocumentClassification()`: Get current classification for a document
+   - `classifyViaAI()`: Call Python microservice to auto-classify document
+   - `classifyManually()`: Manual classification override
+   - `syncClassification()`: Sync classification from Python service to PostgreSQL
+   - `clearClassification()`: Clear classification for a document
+   - `getProjectStats()`: Classification statistics (total, classified, unclassified, by type, by risk)
+   - `listByClassification()`: List documents filtered by type or risk level
+   - `listUnclassified()`: List documents without classification
+   - `batchClassify()`: Batch classify multiple documents
+
+3. **Classification Controller** (`backend/src/modules/classification/classification.controller.ts`)
+   - All endpoints wrapped with `asyncHandler()` for error handling
+   - Zod validation for all request bodies and query parameters
+   - Returns appropriate status codes (200, 204, 400)
+
+4. **Classification Routes** (`backend/src/modules/classification/classification.routes.ts`)
+   - `documentClassificationRouter`: Document-level routes
+   - `projectClassificationRouter`: Project-level routes
+   - Routes use `requirePermission('canAccessVDR')` for read access
+   - Write operations require `requireMinRole('MEMBER')` or `requireMinRole('ADMIN')`
+
+5. **Route Mounting** (`backend/src/app.ts`)
+   - Mounted document classification at `/api/v1/projects/:id/documents/:documentId/classification`
+   - Mounted project classification at `/api/v1/projects/:id/classification`
+
+6. **Integration Tests** (`backend/tests/integration/classification.test.ts`)
+   - 25+ comprehensive tests covering:
+     - Authentication (401 for unauthenticated)
+     - Authorization (403 for VIEWER on write operations)
+     - IDOR protection (404 for cross-project access)
+     - Get classification for document
+     - Manual classification (PUT)
+     - Clear classification (DELETE)
+     - Sync from Python service
+     - Project statistics
+     - List by classification type/risk
+     - List unclassified documents
+     - Batch classification validation
+
+**Files Created:**
+- `backend/src/modules/classification/classification.validators.ts`
+- `backend/src/modules/classification/classification.service.ts`
+- `backend/src/modules/classification/classification.controller.ts`
+- `backend/src/modules/classification/classification.routes.ts`
+- `backend/src/modules/classification/index.ts`
+- `backend/tests/integration/classification.test.ts`
+
+**Files Modified:**
+- `backend/src/app.ts` - Added classification routes import and mounting
+
+**API Endpoints Created:**
+
+| Method | Endpoint | Description | Permission |
+|--------|----------|-------------|------------|
+| GET | `/projects/:id/documents/:docId/classification` | Get document classification | canAccessVDR |
+| PUT | `/projects/:id/documents/:docId/classification` | Manual classification | MEMBER+ |
+| DELETE | `/projects/:id/documents/:docId/classification` | Clear classification | ADMIN+ |
+| POST | `/projects/:id/documents/:docId/classification/classify` | AI classification | ADMIN+ |
+| POST | `/projects/:id/documents/:docId/classification/sync` | Sync from Python | ADMIN+ |
+| GET | `/projects/:id/classification/stats` | Classification statistics | canAccessVDR |
+| GET | `/projects/:id/classification/documents` | List by classification | canAccessVDR |
+| GET | `/projects/:id/classification/unclassified` | List unclassified | canAccessVDR |
+| POST | `/projects/:id/classification/batch` | Batch classify | ADMIN+ |
+
+**Key Features:**
+- Auto-classification during ingestion via processing pipeline callback (already implemented)
+- Manual classification override for human correction
+- Classification statistics and reporting
+- Batch classification for multiple documents
+- Search already supports document type filter (implemented in Phase 2A)
+- IDOR protection on all endpoints
+
+**Notes:**
+- Pre-existing TypeScript errors in the codebase (unrelated to this change) continue to exist
+- Tests require running database (PostgreSQL at 127.0.0.1:5433)
+- Auto-classification is triggered via processing pipeline (handleCallback in processing.service.ts)
+
+**Tasks Completed:** 21/46
+
+**Phase 2B Progress:** 4/9 tasks
+
+**Next Task:**
+- Clause detection API (Phase 2B task 5)
 
 ---
 
