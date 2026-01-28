@@ -435,3 +435,95 @@ export interface SearchRequestDto {
   page?: number;
   pageSize?: number;
 }
+
+// ============================================
+// ENTITY EXTRACTION
+// ============================================
+
+// Entity types that can be extracted from documents
+export type EntityType =
+  | 'PERSON'
+  | 'ORGANIZATION'
+  | 'DATE'
+  | 'MONEY'
+  | 'PERCENTAGE'
+  | 'LOCATION'
+  | 'CONTRACT_TERM'
+  | 'CLAUSE_TYPE'
+  | 'JURISDICTION';
+
+// Document entity (extracted from a document)
+export interface DocumentEntity extends Timestamps {
+  id: string;
+  documentId: string;
+  entityType: EntityType;
+  text: string;
+  normalizedText: string | null;
+  confidence: number;
+  needsReview: boolean;
+  pageNumber: number | null;
+  startOffset: number;
+  endOffset: number;
+  masterEntityId: string | null;
+  masterEntity?: MasterEntity;
+}
+
+// Master entity (deduplicated/canonical entity)
+export interface MasterEntity extends Timestamps {
+  id: string;
+  projectId: string;
+  entityType: EntityType;
+  canonicalName: string;
+  aliases: string[];
+  metadata: Record<string, unknown> | null;
+}
+
+// Entity statistics
+export interface EntityStats {
+  total: number;
+  byType: Record<EntityType, number>;
+  needsReview: number;
+}
+
+// Query params for listing entities
+export interface ListEntitiesParams {
+  entityType?: EntityType;
+  needsReview?: boolean;
+  minConfidence?: number;
+  page?: number;
+  limit?: number;
+}
+
+// Entity list response
+export interface EntitiesListResponse {
+  entities: DocumentEntity[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+// Entity colors for display
+export const ENTITY_TYPE_COLORS: Record<EntityType, string> = {
+  PERSON: '#4CAF50',      // Green
+  ORGANIZATION: '#2196F3', // Blue
+  DATE: '#FF9800',         // Orange
+  MONEY: '#9C27B0',        // Purple
+  PERCENTAGE: '#00BCD4',   // Cyan
+  LOCATION: '#F44336',     // Red
+  CONTRACT_TERM: '#795548',// Brown
+  CLAUSE_TYPE: '#607D8B',  // Blue Grey
+  JURISDICTION: '#E91E63', // Pink
+};
+
+// Entity display labels
+export const ENTITY_TYPE_LABELS: Record<EntityType, string> = {
+  PERSON: 'Person',
+  ORGANIZATION: 'Organization',
+  DATE: 'Date',
+  MONEY: 'Money',
+  PERCENTAGE: 'Percentage',
+  LOCATION: 'Location',
+  CONTRACT_TERM: 'Contract Term',
+  CLAUSE_TYPE: 'Clause Type',
+  JURISDICTION: 'Jurisdiction',
+};

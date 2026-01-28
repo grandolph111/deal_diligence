@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-28
 **Phase:** 2B - Intelligent Extraction (IN PROGRESS)
-**Tasks Completed:** 22/46
-**Current Task:** Clause detection API - COMPLETE
+**Tasks Completed:** 24/46
+**Current Task:** Entity display UI - COMPLETE
 
 ---
 
@@ -24,7 +24,7 @@
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
 | 2A - Foundation | COMPLETE | 17 | 17 |
-| 2B - Extraction | IN PROGRESS | 9 | 5 |
+| 2B - Extraction | IN PROGRESS | 9 | 7 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
 | Cross-Cutting | Not Started | 3 | 0 |
@@ -2429,6 +2429,119 @@ The documents module was already partially implemented. This session enhanced it
 
 **Next Task:**
 - Entity display UI (Phase 2B task 7 - frontend)
+
+---
+
+### 2026-01-28 - Entity Display UI Implementation
+
+**Objective:** Implement Entity display UI for VDR document viewer (Phase 2B task 7)
+
+**Task Completed:**
+- Category: frontend
+- Phase: 2B
+- Description: Entity display UI
+
+**What Was Implemented:**
+
+1. **Entity Types** (`frontend/src/types/api.ts`)
+   - Added `EntityType` type (PERSON, ORGANIZATION, DATE, MONEY, PERCENTAGE, LOCATION, CONTRACT_TERM, CLAUSE_TYPE, JURISDICTION)
+   - Added `DocumentEntity` interface with all fields from backend schema
+   - Added `MasterEntity` interface for canonical entities
+   - Added `EntityStats` interface for statistics
+   - Added `ListEntitiesParams` and `EntitiesListResponse` interfaces
+   - Added `ENTITY_TYPE_COLORS` constant with distinct colors per type
+   - Added `ENTITY_TYPE_LABELS` constant with human-readable labels
+
+2. **Entities API Service** (`frontend/src/api/services/entities.service.ts`)
+   - `getDocumentEntities()` - Fetch entities for a document with filters
+   - `getDocumentEntityStats()` - Get entity statistics
+   - `getEntity()` - Get single entity by ID
+   - `extractEntities()` - Trigger entity extraction
+   - `updateEntity()` - Update entity after review
+   - `deleteEntity()` - Delete an entity
+   - `flagForReview()` - Flag entity for human review
+   - `markReviewed()` - Clear needsReview flag
+   - `searchEntities()` - Search entities across project
+   - `getEntitiesNeedingReview()` - Get review queue
+
+3. **useEntities Hook** (`frontend/src/features/vdr/hooks/useEntities.ts`)
+   - Manages entity state for document viewer
+   - Tracks selected entity and highlight state
+   - Manages highlighted entity types (toggle per type)
+   - Auto-fetch on mount with projectId and documentId
+
+4. **EntitiesPanel Component** (`frontend/src/features/vdr/components/EntitiesPanel.tsx`)
+   - Displays entities grouped by type (collapsible sections)
+   - Entity type icons and colors for each category
+   - Confidence scores displayed on each entity
+   - "Needs Review" warning badge for low-confidence entities
+   - Entity legend with type toggles for highlighting
+   - Click entity to show details modal
+   - Navigate to page when entity clicked
+
+5. **EntityDetailsModal Component** (`frontend/src/features/vdr/components/EntityDetailsModal.tsx`)
+   - Full entity details display
+   - Shows text, normalized text, confidence, page, position
+   - Status badge (Needs Review / Verified)
+   - Master entity link (if deduplicated)
+   - "Go to Page" navigation button
+
+6. **DocumentViewer Integration** (`frontend/src/features/vdr/components/DocumentViewer.tsx`)
+   - Added sidebar tabs (Details / Entities)
+   - Integrated EntitiesPanel in Entities tab
+   - Entity highlight toggle button in toolbar (Tags icon)
+   - Entity count badge on Entities tab
+   - Entity details modal on entity click
+   - Navigate to page functionality
+
+7. **CSS Styles** (`frontend/src/features/vdr/vdr.css`)
+   - Entities panel styles (header, legend, list)
+   - Entity group styles (collapsible sections)
+   - Entity item styles with confidence colors
+   - Entity details modal styles
+   - Sidebar tabs styles
+   - Entity highlighting styles for PDF text layer
+
+**Files Created:**
+- `frontend/src/api/services/entities.service.ts`
+- `frontend/src/features/vdr/hooks/useEntities.ts`
+- `frontend/src/features/vdr/components/EntitiesPanel.tsx`
+- `frontend/src/features/vdr/components/EntityDetailsModal.tsx`
+
+**Files Modified:**
+- `frontend/src/types/api.ts` - Added entity types and interfaces
+- `frontend/src/api/index.ts` - Exported entitiesService
+- `frontend/src/features/vdr/index.ts` - Exported new components and hook
+- `frontend/src/features/vdr/vdr.css` - Added ~300 lines of entity styles
+- `frontend/src/features/vdr/components/DocumentViewer.tsx` - Integrated entities panel
+- `frontend/src/pages/VDRPage.tsx` - Added projectId prop to DocumentViewer
+
+**Verification:**
+- Entity display UI module TypeScript compiles without errors
+- Pre-existing TypeScript errors in settings module remain (unrelated to this change)
+
+**Features Implemented per Task Steps:**
+| Step | Status |
+|------|--------|
+| Add entities panel to document viewer sidebar | ✓ Entities tab in sidebar |
+| Display entities grouped by type | ✓ Collapsible type sections |
+| Show entity confidence scores | ✓ Percentage displayed on each entity |
+| Add entity highlighting toggle in viewer | ✓ Tags icon in toolbar |
+| Implement different colors per entity type | ✓ 9 distinct colors defined |
+| Add entity legend to viewer toolbar | ✓ Type toggles in panel header |
+| Click entity to see details | ✓ EntityDetailsModal |
+
+**Notes:**
+- Entity highlighting in PDF requires actual PDF entity extraction data (placeholder functionality)
+- API calls work with backend entity endpoints implemented in Phase 2B task 3
+- Pre-existing TypeScript errors in codebase (unrelated to this change) remain
+
+**Tasks Completed:** 24/46
+
+**Phase 2B Progress:** 7/9 tasks
+
+**Next Task:**
+- Document classification UI (Phase 2B task 8 - frontend)
 
 ---
 

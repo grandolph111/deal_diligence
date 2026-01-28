@@ -20,7 +20,12 @@ export { SearchResultItem } from './components/SearchResultItem';
 export { SearchResults } from './components/SearchResults';
 export { SearchPanel } from './components/SearchPanel';
 
+// Entity components
+export { EntitiesPanel } from './components/EntitiesPanel';
+export { EntityDetailsModal } from './components/EntityDetailsModal';
+
 // Hooks
 export { useFolders } from './hooks/useFolders';
 export { useSearch } from './hooks/useSearch';
 export { useDocuments } from './hooks/useDocuments';
+export { useEntities } from './hooks/useEntities';

@@ -20,8 +20,12 @@ import {
   Info,
   ChevronUp,
   ChevronDown,
+  Tags,
 } from 'lucide-react';
-import type { Document } from '../../../types/api';
+import type { Document, DocumentEntity } from '../../../types/api';
+import { EntitiesPanel } from './EntitiesPanel';
+import { EntityDetailsModal } from './EntityDetailsModal';
+import { useEntities } from '../hooks/useEntities';
 
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -33,9 +37,12 @@ interface DocumentViewerProps {
   document: Document;
   pdfUrl: string | null;
   isViewOnly?: boolean;
+  projectId: string;
   onClose: () => void;
   onDownload?: (document: Document) => void;
 }
+
+type SidebarTab = 'details' | 'entities';
 
 type ZoomLevel = 0.5 | 0.75 | 1 | 1.25 | 1.5 | 2 | 3;
 
@@ -78,6 +85,7 @@ export function DocumentViewer({
   document,
   pdfUrl,
   isViewOnly = false,
+  projectId,
   onClose,
   onDownload,
 }: DocumentViewerProps) {
@@ -101,6 +109,25 @@ export function DocumentViewer({
 
   // Sidebar state
   const [showSidebar, setShowSidebar] = useState(true);
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('details');
+  const [showEntityDetails, setShowEntityDetails] = useState(false);
+
+  // Entities state
+  const {
+    entities,
+    loading: entitiesLoading,
+    error: entitiesError,
+    selectedEntity,
+    highlightEnabled,
+    highlightedTypes,
+    selectEntity,
+    toggleHighlight,
+    toggleTypeHighlight,
+  } = useEntities({
+    projectId,
+    documentId: document.id,
+    autoFetch: true,
+  });
 
   // Refs
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -355,6 +382,25 @@ export function DocumentViewer({
     }
   }, [document, isViewOnly, onDownload]);
 
+  // Handle entity selection and show details
+  const handleSelectEntity = useCallback(
+    (entity: DocumentEntity | null) => {
+      selectEntity(entity);
+      if (entity) {
+        setShowEntityDetails(true);
+      }
+    },
+    [selectEntity]
+  );
+
+  // Navigate to page from entity
+  const handleNavigateToPage = useCallback(
+    (pageNumber: number) => {
+      goToPage(pageNumber);
+    },
+    [goToPage]
+  );
+
   // Keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -533,6 +579,17 @@ export function DocumentViewer({
               </button>
             )}
 
+            {/* Entity highlighting toggle */}
+            {entities.length > 0 && (
+              <button
+                className={`icon-button ${highlightEnabled ? 'active' : ''}`}
+                onClick={toggleHighlight}
+                title={highlightEnabled ? 'Hide entity highlights' : 'Show entity highlights'}
+              >
+                <Tags size={18} />
+              </button>
+            )}
+
             {/* Toggle sidebar */}
             <button
               className={`icon-button ${showSidebar ? 'active' : ''}`}
@@ -646,124 +703,176 @@ export function DocumentViewer({
           {/* Metadata sidebar */}
           {showSidebar && (
             <aside className="document-viewer-sidebar">
-              <h3>Document Details</h3>
-
-              <div className="metadata-section">
-                <div className="metadata-item">
-                  <FileText size={16} />
-                  <div>
-                    <label>Name</label>
-                    <span>{document.name}</span>
-                  </div>
-                </div>
-
-                <div className="metadata-item">
-                  <HardDrive size={16} />
-                  <div>
-                    <label>Size</label>
-                    <span>{formatFileSize(document.sizeBytes)}</span>
-                  </div>
-                </div>
-
-                <div className="metadata-item">
-                  <FileText size={16} />
-                  <div>
-                    <label>Type</label>
-                    <span>{document.mimeType}</span>
-                  </div>
-                </div>
-
-                {document.pageCount && (
-                  <div className="metadata-item">
-                    <FileText size={16} />
-                    <div>
-                      <label>Pages</label>
-                      <span>{document.pageCount}</span>
-                    </div>
-                  </div>
-                )}
-
-                <div className="metadata-item">
-                  <Calendar size={16} />
-                  <div>
-                    <label>Uploaded</label>
-                    <span>{formatDate(document.createdAt)}</span>
-                  </div>
-                </div>
-
-                {document.uploadedBy && (
-                  <div className="metadata-item">
-                    <User size={16} />
-                    <div>
-                      <label>Uploaded by</label>
-                      <span>
-                        {document.uploadedBy.name || document.uploadedBy.email}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {document.folder && (
-                  <div className="metadata-item">
-                    <Folder size={16} />
-                    <div>
-                      <label>Folder</label>
-                      <span>{document.folder.name}</span>
-                    </div>
-                  </div>
-                )}
-
-                {document.documentType && (
-                  <div className="metadata-item">
-                    <FileText size={16} />
-                    <div>
-                      <label>Document Type</label>
-                      <span>{document.documentType}</span>
-                    </div>
-                  </div>
-                )}
-
-                {document.riskLevel && (
-                  <div className="metadata-item">
-                    <AlertCircle size={16} />
-                    <div>
-                      <label>Risk Level</label>
-                      <span className={`risk-badge risk-${document.riskLevel.toLowerCase()}`}>
-                        {document.riskLevel}
-                      </span>
-                    </div>
-                  </div>
-                )}
+              {/* Sidebar tabs */}
+              <div className="viewer-sidebar-tabs">
+                <button
+                  className={`viewer-sidebar-tab ${sidebarTab === 'details' ? 'active' : ''}`}
+                  onClick={() => setSidebarTab('details')}
+                >
+                  <Info size={14} />
+                  Details
+                </button>
+                <button
+                  className={`viewer-sidebar-tab ${sidebarTab === 'entities' ? 'active' : ''}`}
+                  onClick={() => setSidebarTab('entities')}
+                >
+                  <Tags size={14} />
+                  Entities
+                  {entities.length > 0 && (
+                    <span className="tab-badge">{entities.length}</span>
+                  )}
+                </button>
               </div>
 
-              <div className="metadata-section">
-                <h4>Processing Status</h4>
-                <div className={`processing-status status-${document.processingStatus.toLowerCase()}`}>
-                  {document.processingStatus === 'PROCESSING' && (
-                    <Loader size={14} className="spinning" />
-                  )}
-                  {document.processingStatus === 'COMPLETE' && (
-                    <span className="status-dot complete" />
-                  )}
-                  {document.processingStatus === 'FAILED' && (
-                    <AlertCircle size={14} />
-                  )}
-                  {document.processingStatus === 'PENDING' && (
-                    <span className="status-dot pending" />
-                  )}
-                  <span>{document.processingStatus}</span>
-                </div>
-              </div>
+              {/* Details tab content */}
+              {sidebarTab === 'details' && (
+                <>
+                  <div className="metadata-section">
+                    <div className="metadata-item">
+                      <FileText size={16} />
+                      <div>
+                        <label>Name</label>
+                        <span>{document.name}</span>
+                      </div>
+                    </div>
 
-              {isViewOnly && (
-                <div className="view-only-notice">
-                  <Lock size={16} />
-                  <p>This document is view-only. Download is disabled.</p>
-                </div>
+                    <div className="metadata-item">
+                      <HardDrive size={16} />
+                      <div>
+                        <label>Size</label>
+                        <span>{formatFileSize(document.sizeBytes)}</span>
+                      </div>
+                    </div>
+
+                    <div className="metadata-item">
+                      <FileText size={16} />
+                      <div>
+                        <label>Type</label>
+                        <span>{document.mimeType}</span>
+                      </div>
+                    </div>
+
+                    {document.pageCount && (
+                      <div className="metadata-item">
+                        <FileText size={16} />
+                        <div>
+                          <label>Pages</label>
+                          <span>{document.pageCount}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="metadata-item">
+                      <Calendar size={16} />
+                      <div>
+                        <label>Uploaded</label>
+                        <span>{formatDate(document.createdAt)}</span>
+                      </div>
+                    </div>
+
+                    {document.uploadedBy && (
+                      <div className="metadata-item">
+                        <User size={16} />
+                        <div>
+                          <label>Uploaded by</label>
+                          <span>
+                            {document.uploadedBy.name || document.uploadedBy.email}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {document.folder && (
+                      <div className="metadata-item">
+                        <Folder size={16} />
+                        <div>
+                          <label>Folder</label>
+                          <span>{document.folder.name}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {document.documentType && (
+                      <div className="metadata-item">
+                        <FileText size={16} />
+                        <div>
+                          <label>Document Type</label>
+                          <span>{document.documentType}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {document.riskLevel && (
+                      <div className="metadata-item">
+                        <AlertCircle size={16} />
+                        <div>
+                          <label>Risk Level</label>
+                          <span className={`risk-badge risk-${document.riskLevel.toLowerCase()}`}>
+                            {document.riskLevel}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="metadata-section">
+                    <h4>Processing Status</h4>
+                    <div className={`processing-status status-${document.processingStatus.toLowerCase()}`}>
+                      {document.processingStatus === 'PROCESSING' && (
+                        <Loader size={14} className="spinning" />
+                      )}
+                      {document.processingStatus === 'COMPLETE' && (
+                        <span className="status-dot complete" />
+                      )}
+                      {document.processingStatus === 'FAILED' && (
+                        <AlertCircle size={14} />
+                      )}
+                      {document.processingStatus === 'PENDING' && (
+                        <span className="status-dot pending" />
+                      )}
+                      <span>{document.processingStatus}</span>
+                    </div>
+                  </div>
+
+                  {isViewOnly && (
+                    <div className="view-only-notice">
+                      <Lock size={16} />
+                      <p>This document is view-only. Download is disabled.</p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Entities tab content */}
+              {sidebarTab === 'entities' && (
+                <EntitiesPanel
+                  entities={entities}
+                  loading={entitiesLoading}
+                  error={entitiesError}
+                  highlightEnabled={highlightEnabled}
+                  highlightedTypes={highlightedTypes}
+                  selectedEntity={selectedEntity}
+                  onToggleHighlight={toggleHighlight}
+                  onToggleTypeHighlight={toggleTypeHighlight}
+                  onSelectEntity={handleSelectEntity}
+                  onNavigateToPage={handleNavigateToPage}
+                />
               )}
             </aside>
           )}
         </div>
+
+        {/* Entity details modal */}
+        {showEntityDetails && selectedEntity && (
+          <EntityDetailsModal
+            entity={selectedEntity}
+            onClose={() => {
+              setShowEntityDetails(false);
+              selectEntity(null);
+            }}
+            onNavigateToPage={handleNavigateToPage}
+          />
+        )}
       </div>
     </div>
   );

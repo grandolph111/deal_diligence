@@ -386,7 +386,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Add entity legend to viewer toolbar",
       "Click entity to see details"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "frontend",

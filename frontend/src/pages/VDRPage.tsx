@@ -606,11 +606,12 @@ export function VDRPage() {
       />
 
       {/* Document Viewer */}
-      {showViewer && viewerDocument && (
+      {showViewer && viewerDocument && projectId && (
         <DocumentViewer
           document={viewerDocument}
           pdfUrl={viewerPdfUrl}
           isViewOnly={viewerDocument.isViewOnly || selectedFolder?.isViewOnly}
+          projectId={projectId}
           onClose={handleCloseViewer}
           onDownload={handleDocumentDownload}
         />
