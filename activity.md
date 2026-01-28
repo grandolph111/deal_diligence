@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-28
 **Phase:** 2B - Intelligent Extraction (IN PROGRESS)
-**Tasks Completed:** 21/46
-**Current Task:** Document classification API - COMPLETE
+**Tasks Completed:** 22/46
+**Current Task:** Clause detection API - COMPLETE
 
 ---
 
@@ -24,7 +24,7 @@
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
 | 2A - Foundation | COMPLETE | 17 | 17 |
-| 2B - Extraction | IN PROGRESS | 9 | 4 |
+| 2B - Extraction | IN PROGRESS | 9 | 5 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
 | Cross-Cutting | Not Started | 3 | 0 |
@@ -2222,6 +2222,130 @@ The documents module was already partially implemented. This session enhanced it
 
 **Next Task:**
 - Clause detection API (Phase 2B task 5)
+
+---
+
+### 2026-01-28 - Clause Detection API Implementation
+
+**Objective:** Implement Clause detection API for VDR (Phase 2B task 5)
+
+**Task Completed:**
+- Category: backend
+- Phase: 2B
+- Description: Clause detection API
+
+**What Was Implemented:**
+
+1. **Clause Validators** (`backend/src/modules/clauses/clauses.validators.ts`)
+   - `clauseTypeEnum`: TERMINATION, LIABILITY, INDEMNIFICATION, CONFIDENTIALITY, NON_COMPETE, CHANGE_OF_CONTROL, ASSIGNMENT, GOVERNING_LAW, DISPUTE_RESOLUTION, PAYMENT_TERMS, WARRANTY, INTELLECTUAL_PROPERTY, FORCE_MAJEURE, REPRESENTATIONS, COVENANTS, CONDITIONS_PRECEDENT, MATERIAL_ADVERSE_CHANGE, OTHER
+   - `riskLevelEnum`: LOW, MEDIUM, HIGH, CRITICAL
+   - `listClausesQuerySchema`: Filter by clauseType, riskLevel, isRiskFlagged, isVerified, pagination
+   - `searchClausesQuerySchema`: Search clauses with query text and filters
+   - `syncClausesSchema`: Sync clauses from Python microservice
+   - `createClauseSchema`: Manual clause creation
+   - `updateClauseSchema`: Update clause annotation
+   - `ClauseStats` and `ClauseDetectionResult` interfaces
+
+2. **Clause Service** (`backend/src/modules/clauses/clauses.service.ts`)
+   - `verifyDocumentInProject()`: IDOR protection - ensures document belongs to project
+   - `getDocumentClauses()`: List clauses with filtering and pagination
+   - `getClauseById()`: Get single clause with verification/rejection details
+   - `syncClausesFromPython()`: Sync detected clauses from Python service to PostgreSQL
+   - `detectClausesInDocument()`: Call Python microservice to detect clauses
+   - `createClause()`: Manually create a clause annotation
+   - `updateClause()`: Update clause after human review
+   - `deleteClause()`: Delete a clause annotation
+   - `verifyClause()`: Mark clause as verified (human verification)
+   - `rejectClause()`: Mark clause as rejected/incorrect
+   - `searchClauses()`: Search clauses across all documents in project
+   - `getClauseStats()`: Get clause statistics for a document
+   - `getRiskFlaggedClauses()`: Get all risk-flagged clauses in project
+   - `getUnverifiedClauses()`: Get AI-detected clauses needing review
+   - `getProjectClauseStats()`: Get project-level clause statistics
+
+3. **Clause Controller** (`backend/src/modules/clauses/clauses.controller.ts`)
+   - All endpoints wrapped with `asyncHandler()` for error handling
+   - Zod validation for all request bodies and query parameters
+   - Returns appropriate status codes (200, 201, 204)
+
+4. **Clause Routes** (`backend/src/modules/clauses/clauses.routes.ts`)
+   - `documentClausesRouter`: Document-level routes
+   - `projectClausesRouter`: Project-level routes
+   - Routes use `requirePermission('canAccessVDR')` for read access
+   - Write operations require `requireMinRole('MEMBER')` or `requireMinRole('ADMIN')`
+
+5. **Route Mounting** (`backend/src/app.ts`)
+   - Mounted document clauses at `/api/v1/projects/:id/documents/:documentId/clauses`
+   - Mounted project clauses at `/api/v1/projects/:id/clauses`
+
+6. **Integration Tests** (`backend/tests/integration/clauses.test.ts`)
+   - 30+ comprehensive tests covering:
+     - Authentication (401 for unauthenticated)
+     - Authorization (403 for VIEWER on write operations, 403 for MEMBER on ADMIN operations)
+     - IDOR protection (404 for cross-project access)
+     - Clause CRUD operations
+     - Filtering by type, riskLevel, isRiskFlagged, isVerified
+     - Pagination
+     - Human verification workflow (verify/reject)
+     - Sync from Python service
+     - Project-level search, statistics, risk-flagged, unverified queues
+
+7. **Test Utilities** (`backend/tests/utils/db-helpers.ts`)
+   - Added `createTestClause()` helper function
+
+**Files Created:**
+- `backend/src/modules/clauses/clauses.validators.ts`
+- `backend/src/modules/clauses/clauses.service.ts`
+- `backend/src/modules/clauses/clauses.controller.ts`
+- `backend/src/modules/clauses/clauses.routes.ts`
+- `backend/src/modules/clauses/index.ts`
+- `backend/tests/integration/clauses.test.ts`
+
+**Files Modified:**
+- `backend/src/app.ts` - Added clauses routes import and mounting
+- `backend/tests/utils/db-helpers.ts` - Added createTestClause helper
+- `backend/tests/utils/index.ts` - Exported createTestClause
+
+**API Endpoints Created:**
+
+| Method | Endpoint | Description | Permission |
+|--------|----------|-------------|------------|
+| GET | `/projects/:id/documents/:docId/clauses` | List document clauses | canAccessVDR |
+| GET | `/projects/:id/documents/:docId/clauses/stats` | Clause statistics | canAccessVDR |
+| GET | `/projects/:id/documents/:docId/clauses/:clauseId` | Get single clause | canAccessVDR |
+| POST | `/projects/:id/documents/:docId/clauses` | Create manual clause | MEMBER+ |
+| POST | `/projects/:id/documents/:docId/clauses/detect` | Trigger AI detection | ADMIN+ |
+| POST | `/projects/:id/documents/:docId/clauses/sync` | Sync from Python | ADMIN+ |
+| PATCH | `/projects/:id/documents/:docId/clauses/:clauseId` | Update clause | MEMBER+ |
+| DELETE | `/projects/:id/documents/:docId/clauses/:clauseId` | Delete clause | ADMIN+ |
+| POST | `/projects/:id/documents/:docId/clauses/:clauseId/verify` | Verify clause | MEMBER+ |
+| POST | `/projects/:id/documents/:docId/clauses/:clauseId/reject` | Reject clause | MEMBER+ |
+| GET | `/projects/:id/clauses/search` | Search clauses | canAccessVDR |
+| GET | `/projects/:id/clauses/risk-flagged` | Risk-flagged clauses | canAccessVDR |
+| GET | `/projects/:id/clauses/unverified` | Unverified clauses (review queue) | canAccessVDR |
+| GET | `/projects/:id/clauses/stats` | Project clause statistics | canAccessVDR |
+
+**Key Features:**
+- Clause detection integrated with Python microservice via /analyze/clauses
+- Risk-flagged clauses highlighted with severity levels (LOW, MEDIUM, HIGH, CRITICAL)
+- Human verification workflow (verify/reject) for AI-detected clauses
+- Review queue for unverified AI-detected clauses
+- Manual clause annotation support
+- Project-level statistics and risk dashboard data
+- IDOR protection on all endpoints
+
+**Notes:**
+- Pre-existing TypeScript errors in the codebase (unrelated to this change) continue to exist
+- Tests require running database (PostgreSQL at 127.0.0.1:5433)
+- Clause detection is triggered via Python service endpoint POST /analyze/clauses
+- Risk flagged clauses are sorted by severity (CRITICAL > HIGH > MEDIUM > LOW)
+
+**Tasks Completed:** 22/46
+
+**Phase 2B Progress:** 5/9 tasks
+
+**Next Task:**
+- Semantic search API (Phase 2B task 6)
 
 ---
 

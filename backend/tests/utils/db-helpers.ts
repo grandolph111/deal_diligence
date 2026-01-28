@@ -472,3 +472,41 @@ export async function createTestDocumentEntity(
     },
   });
 }
+
+/**
+ * Create a test document annotation (clause)
+ */
+export async function createTestClause(
+  documentId: string,
+  data: {
+    clauseType?: string;
+    title?: string;
+    content?: string;
+    pageNumber?: number;
+    startOffset?: number;
+    endOffset?: number;
+    confidence?: number;
+    source?: string;
+    riskLevel?: string;
+    isVerified?: boolean;
+    isRejected?: boolean;
+  } = {}
+) {
+  return prisma.documentAnnotation.create({
+    data: {
+      documentId,
+      annotationType: 'CLAUSE',
+      clauseType: data.clauseType || 'TERMINATION',
+      title: data.title || 'Test Clause',
+      content: data.content || 'This is a test clause content.',
+      pageNumber: data.pageNumber ?? 1,
+      startOffset: data.startOffset ?? 0,
+      endOffset: data.endOffset ?? 100,
+      confidence: data.confidence ?? 0.95,
+      source: data.source || 'test',
+      riskLevel: data.riskLevel ?? null,
+      isVerified: data.isVerified ?? false,
+      isRejected: data.isRejected ?? false,
+    },
+  });
+}

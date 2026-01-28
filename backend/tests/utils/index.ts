@@ -29,6 +29,7 @@ export {
   createTestDocument,
   linkDocumentToTask,
   createTestDocumentEntity,
+  createTestClause,
 } from './db-helpers';
 
 // Test app factory

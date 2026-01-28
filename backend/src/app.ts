@@ -38,6 +38,10 @@ import {
   documentClassificationRouter,
   projectClassificationRouter,
 } from './modules/classification/classification.routes';
+import {
+  documentClausesRouter,
+  projectClausesRouter,
+} from './modules/clauses/clauses.routes';
 import mockS3Routes from './routes/mock-s3.routes';
 
 const app = express();
@@ -179,6 +183,11 @@ app.use(
   documentClassificationRouter
 );
 app.use('/api/v1/projects/:id/classification', projectClassificationRouter);
+app.use(
+  '/api/v1/projects/:id/documents/:documentId/clauses',
+  documentClausesRouter
+);
+app.use('/api/v1/projects/:id/clauses', projectClausesRouter);
 
 // Error handling
 app.use(notFoundHandler);

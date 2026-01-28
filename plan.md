@@ -358,7 +358,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Add clause type filter to search",
       "Write tests for clause detection"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "backend",
