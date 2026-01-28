@@ -1,11 +1,13 @@
 import { useCallback } from 'react';
-import { FileText, Folder, Calendar, Shield, AlertTriangle, ExternalLink } from 'lucide-react';
-import type { SearchResult, SearchSnippet } from '../../../types/api';
+import { FileText, Folder, Calendar, Shield, AlertTriangle, ExternalLink, Sparkles, BarChart3 } from 'lucide-react';
+import type { SearchResult, SearchSnippet, SearchType } from '../../../types/api';
 
 interface SearchResultItemProps {
   result: SearchResult;
+  searchType?: SearchType;
   onDocumentClick: (documentId: string, folderId: string | null) => void;
   onRequestAccess?: (documentId: string) => void;
+  onFindSimilar?: (documentId: string) => void;
 }
 
 /**
@@ -83,14 +85,53 @@ function getRiskClass(riskLevel: string | null): string {
 }
 
 /**
+ * Format similarity/relevance score as percentage
+ */
+function formatScore(score: number): string {
+  // Score is typically between 0 and 1, convert to percentage
+  if (score <= 1) {
+    return `${Math.round(score * 100)}%`;
+  }
+  // If score is already a percentage or larger, format accordingly
+  return `${Math.round(score)}%`;
+}
+
+/**
+ * Get score level class based on value
+ */
+function getScoreClass(score: number): string {
+  const normalizedScore = score <= 1 ? score : score / 100;
+  if (normalizedScore >= 0.8) return 'score-high';
+  if (normalizedScore >= 0.5) return 'score-medium';
+  return 'score-low';
+}
+
+/**
+ * Get score label based on search type
+ */
+function getScoreLabel(searchType?: SearchType): string {
+  switch (searchType) {
+    case 'semantic':
+      return 'Relevance';
+    case 'hybrid':
+      return 'Match Score';
+    case 'keyword':
+    default:
+      return 'Match';
+  }
+}
+
+/**
  * Search result item component
  */
 export function SearchResultItem({
   result,
+  searchType,
   onDocumentClick,
   onRequestAccess,
+  onFindSimilar,
 }: SearchResultItemProps) {
-  const { document, snippets, isRestricted } = result;
+  const { document, score, snippets, matchedEntities, isRestricted } = result;
 
   // Handle document click
   const handleClick = useCallback(() => {
@@ -105,6 +146,12 @@ export function SearchResultItem({
     e.stopPropagation();
     onRequestAccess?.(document.id);
   }, [document.id, onRequestAccess]);
+
+  // Handle find similar
+  const handleFindSimilar = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onFindSimilar?.(document.id);
+  }, [document.id, onFindSimilar]);
 
   return (
     <article
@@ -150,8 +197,15 @@ export function SearchResultItem({
           </div>
         </div>
 
-        {/* Badges */}
+        {/* Score and Badges */}
         <div className="search-result-badges">
+          {/* Similarity/Relevance Score */}
+          {(searchType === 'semantic' || searchType === 'hybrid') && score > 0 && (
+            <span className={`search-result-score ${getScoreClass(score)}`} title={getScoreLabel(searchType)}>
+              <BarChart3 size={12} />
+              {formatScore(score)} {getScoreLabel(searchType)}
+            </span>
+          )}
           {document.documentType && (
             <span className="search-result-type-badge">
               {document.documentType}
@@ -166,6 +220,21 @@ export function SearchResultItem({
         </div>
       </header>
 
+      {/* Matched Entities */}
+      {matchedEntities && matchedEntities.length > 0 && !isRestricted && (
+        <div className="search-result-matched-entities">
+          <span className="matched-entities-label">Matched entities:</span>
+          {matchedEntities.slice(0, 5).map((entity, index) => (
+            <span key={index} className="matched-entity-badge">
+              {entity}
+            </span>
+          ))}
+          {matchedEntities.length > 5 && (
+            <span className="matched-entities-more">+{matchedEntities.length - 5} more</span>
+          )}
+        </div>
+      )}
+
       {/* Snippets */}
       {snippets.length > 0 && !isRestricted && (
         <div className="search-result-snippets">
@@ -179,6 +248,21 @@ export function SearchResultItem({
               </p>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Find Similar button */}
+      {!isRestricted && onFindSimilar && (
+        <div className="search-result-actions">
+          <button
+            type="button"
+            className="search-result-find-similar"
+            onClick={handleFindSimilar}
+            title="Find similar documents"
+          >
+            <Sparkles size={14} />
+            Find Similar
+          </button>
         </div>
       )}
 

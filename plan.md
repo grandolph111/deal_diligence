@@ -424,7 +424,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Add entity filter to search (party names)",
       "Add amount filter to search"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "testing",

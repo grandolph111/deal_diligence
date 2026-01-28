@@ -1,12 +1,14 @@
-import { useCallback } from 'react';
-import { Filter, ChevronDown, X } from 'lucide-react';
-import type { SearchFilters as SearchFiltersType, SearchType, FolderTreeNode, DocumentType, RiskLevel } from '../../../types/api';
+import { useCallback, useState, useEffect } from 'react';
+import { Filter, ChevronDown, X, User, DollarSign } from 'lucide-react';
+import type { SearchFilters as SearchFiltersType, SearchType, FolderTreeNode, DocumentType, RiskLevel, DocumentEntity } from '../../../types/api';
 import { DOCUMENT_TYPE_LABELS, RISK_LEVEL_LABELS } from '../../../types/api';
+import { entitiesService } from '../../../api';
 
 interface SearchFiltersProps {
   filters: SearchFiltersType;
   searchType: SearchType;
   folders: FolderTreeNode[];
+  projectId?: string;
   onFiltersChange: (filters: Partial<SearchFiltersType>) => void;
   onSearchTypeChange: (type: SearchType) => void;
   onClearFilters: () => void;
@@ -60,7 +62,10 @@ function hasActiveFilters(filters: SearchFiltersType): boolean {
     filters.documentType ||
     filters.dateFrom ||
     filters.dateTo ||
-    filters.riskLevel
+    filters.riskLevel ||
+    filters.entityName ||
+    filters.amountMin ||
+    filters.amountMax
   );
 }
 
@@ -71,6 +76,7 @@ export function SearchFilters({
   filters,
   searchType,
   folders,
+  projectId,
   onFiltersChange,
   onSearchTypeChange,
   onClearFilters,
@@ -81,7 +87,42 @@ export function SearchFilters({
     filters.documentType,
     filters.dateFrom || filters.dateTo,
     filters.riskLevel,
+    filters.entityName,
+    filters.amountMin || filters.amountMax,
   ].filter(Boolean).length;
+
+  // Entity suggestions state
+  const [entitySuggestions, setEntitySuggestions] = useState<DocumentEntity[]>([]);
+  const [entityInput, setEntityInput] = useState(filters.entityName || '');
+  const [showEntitySuggestions, setShowEntitySuggestions] = useState(false);
+  const [loadingEntities, setLoadingEntities] = useState(false);
+
+  // Fetch entity suggestions when input changes
+  useEffect(() => {
+    if (!projectId || !entityInput || entityInput.length < 2) {
+      setEntitySuggestions([]);
+      return;
+    }
+
+    const fetchSuggestions = async () => {
+      setLoadingEntities(true);
+      try {
+        const results = await entitiesService.searchEntities(
+          projectId,
+          entityInput,
+          { entityTypes: ['PERSON', 'ORGANIZATION'], limit: 10 }
+        );
+        setEntitySuggestions(results.entities);
+      } catch {
+        setEntitySuggestions([]);
+      } finally {
+        setLoadingEntities(false);
+      }
+    };
+
+    const debounceTimer = setTimeout(fetchSuggestions, 300);
+    return () => clearTimeout(debounceTimer);
+  }, [projectId, entityInput]);
 
   // Handle folder change
   const handleFolderChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -112,6 +153,39 @@ export function SearchFilters({
   const handleSearchTypeChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     onSearchTypeChange(e.target.value as SearchType);
   }, [onSearchTypeChange]);
+
+  // Handle entity input change
+  const handleEntityInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setEntityInput(e.target.value);
+    setShowEntitySuggestions(true);
+  }, []);
+
+  // Handle entity selection
+  const handleEntitySelect = useCallback((entity: DocumentEntity) => {
+    const entityName = entity.normalizedText || entity.text;
+    setEntityInput(entityName);
+    onFiltersChange({ entityName });
+    setShowEntitySuggestions(false);
+  }, [onFiltersChange]);
+
+  // Handle entity clear
+  const handleEntityClear = useCallback(() => {
+    setEntityInput('');
+    onFiltersChange({ entityName: null });
+    setShowEntitySuggestions(false);
+  }, [onFiltersChange]);
+
+  // Handle amount min change
+  const handleAmountMinChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value ? parseFloat(e.target.value) : null;
+    onFiltersChange({ amountMin: value });
+  }, [onFiltersChange]);
+
+  // Handle amount max change
+  const handleAmountMaxChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value ? parseFloat(e.target.value) : null;
+    onFiltersChange({ amountMax: value });
+  }, [onFiltersChange]);
 
   return (
     <div className="search-filters">
@@ -231,6 +305,84 @@ export function SearchFilters({
               onChange={handleDateToChange}
               placeholder="To"
               aria-label="Date to"
+            />
+          </div>
+        </div>
+
+        {/* Entity Filter (Party Names) */}
+        <div className="search-filter-group search-filter-entity">
+          <label htmlFor="entity-filter">
+            <User size={14} />
+            Party Name
+          </label>
+          <div className="entity-filter-wrapper">
+            <input
+              type="text"
+              id="entity-filter"
+              value={entityInput}
+              onChange={handleEntityInputChange}
+              onFocus={() => setShowEntitySuggestions(true)}
+              placeholder="Search parties..."
+              aria-label="Filter by party name"
+              autoComplete="off"
+            />
+            {entityInput && (
+              <button
+                type="button"
+                className="entity-clear-button"
+                onClick={handleEntityClear}
+                aria-label="Clear entity filter"
+              >
+                <X size={14} />
+              </button>
+            )}
+            {showEntitySuggestions && entitySuggestions.length > 0 && (
+              <ul className="entity-suggestions">
+                {loadingEntities && (
+                  <li className="entity-suggestion-loading">Loading...</li>
+                )}
+                {entitySuggestions.map((entity) => (
+                  <li key={entity.id}>
+                    <button
+                      type="button"
+                      className="entity-suggestion-item"
+                      onClick={() => handleEntitySelect(entity)}
+                    >
+                      <span className="entity-type-badge">{entity.entityType}</span>
+                      <span className="entity-name">{entity.normalizedText || entity.text}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+
+        {/* Amount Filter */}
+        <div className="search-filter-group search-filter-amount">
+          <label>
+            <DollarSign size={14} />
+            Amount Range
+          </label>
+          <div className="amount-range-inputs">
+            <input
+              type="number"
+              value={filters.amountMin ?? ''}
+              onChange={handleAmountMinChange}
+              placeholder="Min"
+              aria-label="Minimum amount"
+              min="0"
+              step="1000"
+            />
+            <span className="amount-range-separator">to</span>
+            <input
+              type="number"
+              value={filters.amountMax ?? ''}
+              onChange={handleAmountMaxChange}
+              placeholder="Max"
+              aria-label="Maximum amount"
+              min="0"
+              step="1000"
             />
           </div>
         </div>

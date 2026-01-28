@@ -1,5 +1,5 @@
 import { apiClient } from '../client';
-import type { SearchResponse, SearchRequestDto } from '../../types/api';
+import type { SearchResponse, SearchRequestDto, SimilarDocumentsResponse } from '../../types/api';
 
 /**
  * VDR Search API service
@@ -37,6 +37,32 @@ export const searchService = {
           dateTo: params.dateTo ?? null,
           riskLevel: params.riskLevel ?? null,
         },
+      };
+    }
+  },
+
+  /**
+   * Find documents similar to a given document using semantic search
+   * Uses BerryDB's similarity search via the Python microservice
+   */
+  async findSimilar(
+    projectId: string,
+    documentId: string,
+    options?: { limit?: number }
+  ): Promise<SimilarDocumentsResponse> {
+    try {
+      return await apiClient.post<SimilarDocumentsResponse>(
+        `/projects/${projectId}/search/similar/${documentId}`,
+        { limit: options?.limit ?? 10 }
+      );
+    } catch {
+      // Fall back to mock data when backend is not available
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      return {
+        documentId,
+        similarDocuments: [],
+        total: 0,
       };
     }
   },

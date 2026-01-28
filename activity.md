@@ -3,9 +3,9 @@
 ## Current Status
 
 **Last Updated:** 2026-01-28
-**Phase:** 2B - Intelligent Extraction (IN PROGRESS)
-**Tasks Completed:** 26/46
-**Current Task:** Clause detection UI - COMPLETE
+**Phase:** 2B - Intelligent Extraction (COMPLETE)
+**Tasks Completed:** 27/46
+**Current Task:** Semantic search UI - COMPLETE
 
 ---
 
@@ -24,7 +24,7 @@
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
 | 2A - Foundation | COMPLETE | 17 | 17 |
-| 2B - Extraction | COMPLETE | 9 | 9 |
+| 2B - Extraction | COMPLETE | 10 | 10 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
 | Cross-Cutting | Not Started | 3 | 0 |
@@ -2763,6 +2763,114 @@ The documents module was already partially implemented. This session enhanced it
 
 **Next Phase:**
 - Phase 2C - Knowledge Graph (Entity deduplication, relationship mapping, visual graph explorer)
+
+---
+
+### 2026-01-28 - Semantic Search UI Implementation
+
+**Objective:** Implement Semantic search UI for VDR (Phase 2B task 10)
+
+**Task Completed:**
+- Category: frontend
+- Phase: 2B
+- Description: Semantic search UI
+
+**What Was Implemented:**
+
+1. **Search Service Enhancement** (`frontend/src/api/services/search.service.ts`)
+   - Added `findSimilar()` method to find similar documents using semantic search
+   - Calls Python microservice `/search/similar/:documentId` endpoint
+   - Falls back to empty results when backend is not available
+
+2. **New Types** (`frontend/src/types/api.ts`)
+   - Added `SimilarDocument` interface for similarity search results
+   - Added `SimilarDocumentsResponse` interface for API response
+   - Extended `SearchFilters` with `entityName`, `amountMin`, `amountMax`
+   - Extended `SearchRequestDto` with same new filter fields
+
+3. **Find Similar Button** (`frontend/src/features/vdr/components/DocumentList.tsx`)
+   - Added Sparkles icon import
+   - Added `onFindSimilar` prop to DocumentListProps
+   - Added Find Similar button to DocumentCard menu (grid view)
+   - Added Find Similar icon button to DocumentRow (list view)
+   - Only shows for documents with COMPLETE processing status
+
+4. **Similar Documents Modal** (`frontend/src/features/vdr/components/SimilarDocumentsModal.tsx`)
+   - New component for displaying similar document search results
+   - Shows similarity scores with color-coded badges (high/medium/low)
+   - Displays shared entities when available
+   - Loading, empty, and error states
+   - Click to navigate to similar document
+
+5. **Similarity Score Display** (`frontend/src/features/vdr/components/SearchResultItem.tsx`)
+   - Added score display for semantic and hybrid search results
+   - Color-coded score badges (high/medium/low)
+   - Matched entities display when available
+   - Find Similar button on search results
+   - `searchType` prop to control score label
+
+6. **Entity Filter** (`frontend/src/features/vdr/components/SearchFilters.tsx`)
+   - Added party name autocomplete filter
+   - Fetches entity suggestions from backend with debounce
+   - Supports PERSON and ORGANIZATION entity types
+   - Clear button and dropdown suggestions UI
+
+7. **Amount Filter** (`frontend/src/features/vdr/components/SearchFilters.tsx`)
+   - Added min/max amount range filter inputs
+   - Numeric inputs with step of 1000
+   - Integrated with search filters state
+
+8. **CSS Styles** (`frontend/src/features/vdr/vdr.css`)
+   - ~350 lines of new styles for semantic search UI
+   - Score badges with three severity levels
+   - Entity filter autocomplete dropdown
+   - Amount range inputs
+   - Similar documents modal
+
+9. **Entity Service Update** (`frontend/src/api/services/entities.service.ts`)
+   - Updated `searchEntities()` to accept options object
+   - Supports multiple entity types filtering
+   - Added fallback for when backend is unavailable
+
+**Files Created:**
+- `frontend/src/features/vdr/components/SimilarDocumentsModal.tsx`
+
+**Files Modified:**
+- `frontend/src/api/services/search.service.ts` - Added findSimilar method
+- `frontend/src/api/services/entities.service.ts` - Updated searchEntities signature
+- `frontend/src/types/api.ts` - Added similarity types and extended filters
+- `frontend/src/features/vdr/index.ts` - Exported SimilarDocumentsModal
+- `frontend/src/features/vdr/components/DocumentList.tsx` - Added Find Similar button
+- `frontend/src/features/vdr/components/SearchResultItem.tsx` - Added score display
+- `frontend/src/features/vdr/components/SearchFilters.tsx` - Added entity and amount filters
+- `frontend/src/features/vdr/vdr.css` - Added ~350 lines of semantic search styles
+
+**Verification:**
+- Semantic search UI module TypeScript compiles without errors
+- Pre-existing TypeScript errors in settings module remain (unrelated to this change)
+
+**Features Implemented per Task Steps:**
+| Step | Status |
+|------|--------|
+| Add search type toggle (keyword/semantic/hybrid) | ✓ Already existed in SearchFilters |
+| Add 'Find Similar' button on document cards | ✓ In DocumentCard menu and DocumentRow |
+| Display similarity scores in results | ✓ Score badges with color coding |
+| Add entity filter to search (party names) | ✓ Autocomplete with suggestions |
+| Add amount filter to search | ✓ Min/max range inputs |
+
+**Notes:**
+- Find Similar button only appears for processed documents (COMPLETE status)
+- Entity filter searches PERSON and ORGANIZATION entities
+- Score display only shows for semantic and hybrid search types
+- Pre-existing TypeScript errors in codebase (unrelated to this change) remain
+
+**Tasks Completed:** 27/46
+
+**Phase 2B Progress:** 10/10 tasks - COMPLETE (note: Phase 2B testing task remains)
+
+**Next Phase:**
+- Phase 2B integration testing
+- Then Phase 2C - Knowledge Graph
 
 ---
 

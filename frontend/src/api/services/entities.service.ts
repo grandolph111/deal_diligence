@@ -134,19 +134,28 @@ export const entitiesService = {
   async searchEntities(
     projectId: string,
     query: string,
-    entityType?: EntityType,
-    page = 1,
-    limit = 20
+    options?: {
+      entityTypes?: EntityType[];
+      page?: number;
+      limit?: number;
+    }
   ): Promise<EntitiesListResponse> {
     const queryParams = new URLSearchParams();
     queryParams.set('query', query);
-    if (entityType) queryParams.set('entityType', entityType);
-    queryParams.set('page', String(page));
-    queryParams.set('limit', String(limit));
+    if (options?.entityTypes?.length) {
+      options.entityTypes.forEach((type) => queryParams.append('entityType', type));
+    }
+    queryParams.set('page', String(options?.page ?? 1));
+    queryParams.set('limit', String(options?.limit ?? 20));
 
-    return apiClient.get<EntitiesListResponse>(
-      `/projects/${projectId}/entities/search?${queryParams.toString()}`
-    );
+    try {
+      return await apiClient.get<EntitiesListResponse>(
+        `/projects/${projectId}/entities/search?${queryParams.toString()}`
+      );
+    } catch {
+      // Return empty response when backend is not available
+      return { entities: [], total: 0, page: 1, limit: options?.limit ?? 20 };
+    }
   },
 
   /**

@@ -19,6 +19,7 @@ export { SearchFilters } from './components/SearchFilters';
 export { SearchResultItem } from './components/SearchResultItem';
 export { SearchResults } from './components/SearchResults';
 export { SearchPanel } from './components/SearchPanel';
+export { SimilarDocumentsModal } from './components/SimilarDocumentsModal';
 
 // Entity components
 export { EntitiesPanel } from './components/EntitiesPanel';

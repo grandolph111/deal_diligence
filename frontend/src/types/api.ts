@@ -482,6 +482,9 @@ export interface SearchFilters {
   dateFrom?: string | null;
   dateTo?: string | null;
   riskLevel?: string | null;
+  entityName?: string | null;
+  amountMin?: number | null;
+  amountMax?: number | null;
 }
 
 // Search request DTO
@@ -493,8 +496,27 @@ export interface SearchRequestDto {
   dateFrom?: string | null;
   dateTo?: string | null;
   riskLevel?: string | null;
+  entityName?: string | null;
+  amountMin?: number | null;
+  amountMax?: number | null;
   page?: number;
   pageSize?: number;
+}
+
+// Similar document item
+export interface SimilarDocument {
+  document: Pick<Document, 'id' | 'name' | 'mimeType' | 'sizeBytes' | 'processingStatus' | 'documentType' | 'riskLevel' | 'folderId' | 'uploadedBy' | 'createdAt'> & {
+    folder?: Pick<Folder, 'id' | 'name'>;
+  };
+  similarityScore: number;
+  sharedEntities?: string[];
+}
+
+// Response from find similar endpoint
+export interface SimilarDocumentsResponse {
+  documentId: string;
+  similarDocuments: SimilarDocument[];
+  total: number;
 }
 
 // ============================================
