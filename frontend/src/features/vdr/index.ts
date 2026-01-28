@@ -24,6 +24,10 @@ export { SearchPanel } from './components/SearchPanel';
 export { EntitiesPanel } from './components/EntitiesPanel';
 export { EntityDetailsModal } from './components/EntityDetailsModal';
 
+// Clause components
+export { ClausesPanel } from './components/ClausesPanel';
+export { ClauseDetailsModal } from './components/ClauseDetailsModal';
+
 // Classification components
 export { ClassificationDropdown } from './components/ClassificationDropdown';
 
@@ -32,3 +36,4 @@ export { useFolders } from './hooks/useFolders';
 export { useSearch } from './hooks/useSearch';
 export { useDocuments } from './hooks/useDocuments';
 export { useEntities } from './hooks/useEntities';
+export { useClauses } from './hooks/useClauses';

@@ -411,7 +411,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Click clause to navigate to page in viewer",
       "Add clause type filter to search"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "frontend",

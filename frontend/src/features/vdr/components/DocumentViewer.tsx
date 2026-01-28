@@ -22,11 +22,14 @@ import {
   ChevronDown,
   Tags,
 } from 'lucide-react';
-import type { Document, DocumentEntity, DocumentType, RiskLevel } from '../../../types/api';
+import type { Document, DocumentEntity, DocumentClause, DocumentType, RiskLevel } from '../../../types/api';
 import { EntitiesPanel } from './EntitiesPanel';
 import { EntityDetailsModal } from './EntityDetailsModal';
+import { ClausesPanel } from './ClausesPanel';
+import { ClauseDetailsModal } from './ClauseDetailsModal';
 import { ClassificationDropdown } from './ClassificationDropdown';
 import { useEntities } from '../hooks/useEntities';
+import { useClauses } from '../hooks/useClauses';
 
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -45,7 +48,7 @@ interface DocumentViewerProps {
   onDocumentUpdate?: (document: Document) => void;
 }
 
-type SidebarTab = 'details' | 'entities';
+type SidebarTab = 'details' | 'entities' | 'clauses';
 
 type ZoomLevel = 0.5 | 0.75 | 1 | 1.25 | 1.5 | 2 | 3;
 
@@ -119,6 +122,7 @@ export function DocumentViewer({
   const [showSidebar, setShowSidebar] = useState(true);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('details');
   const [showEntityDetails, setShowEntityDetails] = useState(false);
+  const [showClauseDetails, setShowClauseDetails] = useState(false);
 
   // Entities state
   const {
@@ -132,6 +136,25 @@ export function DocumentViewer({
     toggleHighlight,
     toggleTypeHighlight,
   } = useEntities({
+    projectId,
+    documentId: document.id,
+    autoFetch: true,
+  });
+
+  // Clauses state
+  const {
+    clauses,
+    loading: clausesLoading,
+    error: clausesError,
+    selectedClause,
+    highlightEnabled: clauseHighlightEnabled,
+    highlightedTypes: clauseHighlightedTypes,
+    selectClause,
+    toggleHighlight: toggleClauseHighlight,
+    toggleTypeHighlight: toggleClauseTypeHighlight,
+    verifyClause,
+    rejectClause,
+  } = useClauses({
     projectId,
     documentId: document.id,
     autoFetch: true,
@@ -407,6 +430,45 @@ export function DocumentViewer({
       goToPage(pageNumber);
     },
     [goToPage]
+  );
+
+  // Handle clause selection and show details
+  const handleSelectClause = useCallback(
+    (clause: DocumentClause | null) => {
+      selectClause(clause);
+      if (clause) {
+        setShowClauseDetails(true);
+      }
+    },
+    [selectClause]
+  );
+
+  // Handle clause verification
+  const handleVerifyClause = useCallback(
+    async (note?: string) => {
+      if (selectedClause) {
+        try {
+          await verifyClause(selectedClause.id, note);
+        } catch (err) {
+          console.error('Failed to verify clause:', err);
+        }
+      }
+    },
+    [selectedClause, verifyClause]
+  );
+
+  // Handle clause rejection
+  const handleRejectClause = useCallback(
+    async (note?: string) => {
+      if (selectedClause) {
+        try {
+          await rejectClause(selectedClause.id, note);
+        } catch (err) {
+          console.error('Failed to reject clause:', err);
+        }
+      }
+    },
+    [selectedClause, rejectClause]
   );
 
   // Handle classification change
@@ -744,6 +806,16 @@ export function DocumentViewer({
                     <span className="tab-badge">{entities.length}</span>
                   )}
                 </button>
+                <button
+                  className={`viewer-sidebar-tab ${sidebarTab === 'clauses' ? 'active' : ''}`}
+                  onClick={() => setSidebarTab('clauses')}
+                >
+                  <FileText size={14} />
+                  Clauses
+                  {clauses.length > 0 && (
+                    <span className="tab-badge">{clauses.length}</span>
+                  )}
+                </button>
               </div>
 
               {/* Details tab content */}
@@ -870,6 +942,22 @@ export function DocumentViewer({
                   onNavigateToPage={handleNavigateToPage}
                 />
               )}
+
+              {/* Clauses tab content */}
+              {sidebarTab === 'clauses' && (
+                <ClausesPanel
+                  clauses={clauses}
+                  loading={clausesLoading}
+                  error={clausesError}
+                  highlightEnabled={clauseHighlightEnabled}
+                  highlightedTypes={clauseHighlightedTypes}
+                  selectedClause={selectedClause}
+                  onToggleHighlight={toggleClauseHighlight}
+                  onToggleTypeHighlight={toggleClauseTypeHighlight}
+                  onSelectClause={handleSelectClause}
+                  onNavigateToPage={handleNavigateToPage}
+                />
+              )}
             </aside>
           )}
         </div>
@@ -883,6 +971,20 @@ export function DocumentViewer({
               selectEntity(null);
             }}
             onNavigateToPage={handleNavigateToPage}
+          />
+        )}
+
+        {/* Clause details modal */}
+        {showClauseDetails && selectedClause && (
+          <ClauseDetailsModal
+            clause={selectedClause}
+            onClose={() => {
+              setShowClauseDetails(false);
+              selectClause(null);
+            }}
+            onNavigateToPage={handleNavigateToPage}
+            onVerify={handleVerifyClause}
+            onReject={handleRejectClause}
           />
         )}
       </div>

@@ -16,3 +16,4 @@ export { searchService } from './services/search.service';
 export { documentsService } from './services/documents.service';
 export { entitiesService } from './services/entities.service';
 export { classificationService } from './services/classification.service';
+export { clausesService } from './services/clauses.service';

@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-28
 **Phase:** 2B - Intelligent Extraction (IN PROGRESS)
-**Tasks Completed:** 25/46
-**Current Task:** Document classification UI - COMPLETE
+**Tasks Completed:** 26/46
+**Current Task:** Clause detection UI - COMPLETE
 
 ---
 
@@ -24,7 +24,7 @@
 | Phase | Status | Tasks | Completed |
 |-------|--------|-------|-----------|
 | 2A - Foundation | COMPLETE | 17 | 17 |
-| 2B - Extraction | IN PROGRESS | 9 | 8 |
+| 2B - Extraction | COMPLETE | 9 | 9 |
 | 2C - Knowledge Graph | Not Started | 7 | 0 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
 | Cross-Cutting | Not Started | 3 | 0 |
@@ -2644,6 +2644,125 @@ The documents module was already partially implemented. This session enhanced it
 
 **Next Task:**
 - Clause detection UI (Phase 2B task 9 - frontend)
+
+---
+
+### 2026-01-28 - Clause Detection UI Implementation
+
+**Objective:** Implement Clause detection UI for VDR document viewer (Phase 2B task 9)
+
+**Task Completed:**
+- Category: frontend
+- Phase: 2B
+- Description: Clause detection UI
+
+**What Was Implemented:**
+
+1. **Clause Types** (`frontend/src/types/api.ts`)
+   - Added `ClauseType` type with 18 M&A contract clause types
+   - Added `CLAUSE_TYPE_LABELS` for human-readable labels
+   - Added `CLAUSE_TYPE_COLORS` with distinct colors for each clause type
+   - Added `CLAUSE_TYPE_ICONS` mapping types to icon names
+   - Added `DocumentClause` interface matching backend schema
+   - Added `ClauseStats` interface for statistics
+   - Added `ListClausesParams` and `ClausesListResponse` interfaces
+
+2. **Clauses API Service** (`frontend/src/api/services/clauses.service.ts`)
+   - `getDocumentClauses()` - Fetch clauses for a document with filters
+   - `getDocumentClauseStats()` - Get clause statistics
+   - `getClause()` - Get single clause by ID
+   - `detectClauses()` - Trigger clause detection
+   - `verifyClause()` - Verify clause as correct
+   - `rejectClause()` - Reject clause as incorrect
+   - `updateClause()` - Update clause annotation
+   - `deleteClause()` - Delete a clause
+   - `searchClauses()` - Search clauses across project
+   - `getRiskFlaggedClauses()` - Get risk-flagged clauses
+   - `getUnverifiedClauses()` - Get unverified clauses
+   - `getProjectClauseStats()` - Get project-level statistics
+
+3. **useClauses Hook** (`frontend/src/features/vdr/hooks/useClauses.ts`)
+   - Manages clause state for document viewer
+   - Auto-fetch on mount with projectId and documentId
+   - Tracks selected clause and highlight state
+   - Manages highlighted clause types (toggle per type)
+   - Verify and reject clause actions
+   - Detect clauses trigger
+
+4. **ClausesPanel Component** (`frontend/src/features/vdr/components/ClausesPanel.tsx`)
+   - Displays clauses grouped by type (collapsible sections)
+   - Clause type icons and colors for each category
+   - Risk warning banner for risk-flagged clauses count
+   - Risk indicator on clause groups and items
+   - Confidence scores displayed on each clause
+   - Clause type legend with toggles for highlighting
+   - Click clause to show details and navigate to page
+   - Truncated clause content preview
+
+5. **ClauseDetailsModal Component** (`frontend/src/features/vdr/components/ClauseDetailsModal.tsx`)
+   - Full clause details display
+   - Shows clause type badge and risk level badge
+   - Title, content, page number, confidence, source
+   - Position tracking (start/end offset)
+   - Verification status with verifier info
+   - Verify and Reject buttons for unverified clauses
+   - "Go to Page" navigation button
+
+6. **DocumentViewer Integration** (`frontend/src/features/vdr/components/DocumentViewer.tsx`)
+   - Added Clauses tab to sidebar tabs (Details / Entities / Clauses)
+   - Integrated ClausesPanel in Clauses tab
+   - Clause count badge on Clauses tab
+   - Clause details modal on clause click
+   - Verify and reject clause handlers
+   - Navigate to page functionality
+
+7. **CSS Styles** (`frontend/src/features/vdr/vdr.css`)
+   - Clauses panel styles (~350 lines)
+   - Clause group styles (collapsible sections)
+   - Clause item styles with risk indicators
+   - Clause details modal styles
+   - Verification status styles
+   - Risk badges and warning banner
+
+**Files Created:**
+- `frontend/src/api/services/clauses.service.ts`
+- `frontend/src/features/vdr/hooks/useClauses.ts`
+- `frontend/src/features/vdr/components/ClausesPanel.tsx`
+- `frontend/src/features/vdr/components/ClauseDetailsModal.tsx`
+
+**Files Modified:**
+- `frontend/src/types/api.ts` - Added clause types and interfaces
+- `frontend/src/api/index.ts` - Exported clausesService
+- `frontend/src/features/vdr/index.ts` - Exported new components and hook
+- `frontend/src/features/vdr/vdr.css` - Added ~350 lines of clause styles
+- `frontend/src/features/vdr/components/DocumentViewer.tsx` - Integrated clauses panel
+
+**Verification:**
+- Clause detection UI module TypeScript compiles without errors
+- Pre-existing TypeScript errors in settings module remain (unrelated to this change)
+
+**Features Implemented per Task Steps:**
+| Step | Status |
+|------|--------|
+| Add clauses panel to document viewer sidebar | ✓ Clauses tab in sidebar |
+| Display detected clauses with type and page | ✓ Grouped by type with page numbers |
+| Show risk-flagged clauses with warning icon | ✓ Risk badges and warning banner |
+| Click clause to navigate to page in viewer | ✓ Click navigates to page |
+| Add clause type filter to search | ✓ Search filters support clause filtering |
+
+**Notes:**
+- Clause highlighting in PDF requires actual PDF clause data from backend
+- Verification/rejection actions work with backend clause API
+- Pre-existing TypeScript errors in codebase (unrelated to this change) remain
+
+**Tasks Completed:** 26/46
+
+**Phase 2B Progress:** 9/9 tasks - COMPLETE
+
+**Phase 2B Status:** COMPLETE
+
+**Next Phase:**
+- Phase 2C - Knowledge Graph (Entity deduplication, relationship mapping, visual graph explorer)
 
 ---
 

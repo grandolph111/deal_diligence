@@ -588,3 +588,152 @@ export const ENTITY_TYPE_LABELS: Record<EntityType, string> = {
   CLAUSE_TYPE: 'Clause Type',
   JURISDICTION: 'Jurisdiction',
 };
+
+// ============================================
+// CLAUSE DETECTION
+// ============================================
+
+// Clause types that can be detected in documents
+export type ClauseType =
+  | 'TERMINATION'
+  | 'LIABILITY'
+  | 'INDEMNIFICATION'
+  | 'CONFIDENTIALITY'
+  | 'NON_COMPETE'
+  | 'CHANGE_OF_CONTROL'
+  | 'ASSIGNMENT'
+  | 'GOVERNING_LAW'
+  | 'DISPUTE_RESOLUTION'
+  | 'PAYMENT_TERMS'
+  | 'WARRANTY'
+  | 'INTELLECTUAL_PROPERTY'
+  | 'FORCE_MAJEURE'
+  | 'REPRESENTATIONS'
+  | 'COVENANTS'
+  | 'CONDITIONS_PRECEDENT'
+  | 'MATERIAL_ADVERSE_CHANGE'
+  | 'OTHER';
+
+// Clause display labels
+export const CLAUSE_TYPE_LABELS: Record<ClauseType, string> = {
+  TERMINATION: 'Termination',
+  LIABILITY: 'Liability',
+  INDEMNIFICATION: 'Indemnification',
+  CONFIDENTIALITY: 'Confidentiality',
+  NON_COMPETE: 'Non-Compete',
+  CHANGE_OF_CONTROL: 'Change of Control',
+  ASSIGNMENT: 'Assignment',
+  GOVERNING_LAW: 'Governing Law',
+  DISPUTE_RESOLUTION: 'Dispute Resolution',
+  PAYMENT_TERMS: 'Payment Terms',
+  WARRANTY: 'Warranty',
+  INTELLECTUAL_PROPERTY: 'Intellectual Property',
+  FORCE_MAJEURE: 'Force Majeure',
+  REPRESENTATIONS: 'Representations',
+  COVENANTS: 'Covenants',
+  CONDITIONS_PRECEDENT: 'Conditions Precedent',
+  MATERIAL_ADVERSE_CHANGE: 'Material Adverse Change',
+  OTHER: 'Other',
+};
+
+// Clause type colors (distinct colors for each type)
+export const CLAUSE_TYPE_COLORS: Record<ClauseType, string> = {
+  TERMINATION: '#ef4444',         // Red
+  LIABILITY: '#f97316',           // Orange
+  INDEMNIFICATION: '#f59e0b',     // Amber
+  CONFIDENTIALITY: '#84cc16',     // Lime
+  NON_COMPETE: '#22c55e',         // Green
+  CHANGE_OF_CONTROL: '#14b8a6',   // Teal
+  ASSIGNMENT: '#06b6d4',          // Cyan
+  GOVERNING_LAW: '#0ea5e9',       // Sky
+  DISPUTE_RESOLUTION: '#3b82f6',  // Blue
+  PAYMENT_TERMS: '#6366f1',       // Indigo
+  WARRANTY: '#8b5cf6',            // Violet
+  INTELLECTUAL_PROPERTY: '#a855f7', // Purple
+  FORCE_MAJEURE: '#d946ef',       // Fuchsia
+  REPRESENTATIONS: '#ec4899',     // Pink
+  COVENANTS: '#f43f5e',           // Rose
+  CONDITIONS_PRECEDENT: '#78716c',// Stone
+  MATERIAL_ADVERSE_CHANGE: '#dc2626', // Dark Red (high importance)
+  OTHER: '#6b7280',               // Gray
+};
+
+// Clause type icons (for UI display)
+export const CLAUSE_TYPE_ICONS: Record<ClauseType, string> = {
+  TERMINATION: 'X',
+  LIABILITY: 'Shield',
+  INDEMNIFICATION: 'ShieldCheck',
+  CONFIDENTIALITY: 'Lock',
+  NON_COMPETE: 'Ban',
+  CHANGE_OF_CONTROL: 'RefreshCw',
+  ASSIGNMENT: 'ArrowRight',
+  GOVERNING_LAW: 'Scale',
+  DISPUTE_RESOLUTION: 'Gavel',
+  PAYMENT_TERMS: 'DollarSign',
+  WARRANTY: 'CheckCircle',
+  INTELLECTUAL_PROPERTY: 'Lightbulb',
+  FORCE_MAJEURE: 'AlertTriangle',
+  REPRESENTATIONS: 'FileText',
+  COVENANTS: 'FileCheck',
+  CONDITIONS_PRECEDENT: 'GitBranch',
+  MATERIAL_ADVERSE_CHANGE: 'AlertOctagon',
+  OTHER: 'MoreHorizontal',
+};
+
+// Document clause/annotation model
+export interface DocumentClause extends Timestamps {
+  id: string;
+  documentId: string;
+  annotationType: 'CLAUSE' | 'RISK_FLAG' | 'NOTE' | 'VERIFICATION';
+  clauseType: ClauseType | null;
+  title: string | null;
+  content: string;
+  pageNumber: number | null;
+  startOffset: number | null;
+  endOffset: number | null;
+  confidence: number;
+  riskLevel: RiskLevel | null;
+  source: 'berrydb' | 'manual' | null;
+  isVerified: boolean;
+  verifiedById: string | null;
+  verifiedAt: string | null;
+  verificationNote: string | null;
+  isRejected: boolean;
+  rejectedById: string | null;
+  rejectedAt: string | null;
+  rejectionNote: string | null;
+  verifiedBy?: Pick<User, 'id' | 'email' | 'name'> | null;
+  rejectedBy?: Pick<User, 'id' | 'email' | 'name'> | null;
+  document?: Pick<Document, 'id' | 'name' | 'folderId'>;
+}
+
+// Clause statistics
+export interface ClauseStats {
+  documentId: string;
+  totalClauses: number;
+  riskFlaggedCount: number;
+  verifiedCount: number;
+  byType: Array<{ type: string; count: number }>;
+  byRiskLevel: Array<{ level: string; count: number }>;
+}
+
+// Query params for listing clauses
+export interface ListClausesParams {
+  clauseType?: ClauseType;
+  riskLevel?: RiskLevel;
+  isRiskFlagged?: boolean;
+  isVerified?: boolean;
+  page?: number;
+  limit?: number;
+}
+
+// Clauses list response
+export interface ClausesListResponse {
+  clauses: DocumentClause[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
