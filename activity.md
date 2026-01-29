@@ -3,9 +3,9 @@
 ## Current Status
 
 **Last Updated:** 2026-01-28
-**Phase:** 2C - Knowledge Graph (IN PROGRESS)
-**Tasks Completed:** 33/46
-**Current Task:** Related documents UI - COMPLETE
+**Phase:** 2C - Knowledge Graph (COMPLETE)
+**Tasks Completed:** 34/46
+**Current Task:** Phase 2C Integration Testing - COMPLETE
 
 ---
 
@@ -25,7 +25,7 @@
 |-------|--------|-------|-----------|
 | 2A - Foundation | COMPLETE | 17 | 17 |
 | 2B - Extraction | COMPLETE | 11 | 11 |
-| 2C - Knowledge Graph | IN PROGRESS | 7 | 6 |
+| 2C - Knowledge Graph | COMPLETE | 7 | 7 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
 | Cross-Cutting | Not Started | 3 | 0 |
 
@@ -3560,6 +3560,106 @@ Upon investigation, the Related Documents API was already implemented as part of
 
 **Next Task:**
 - Phase 2C: Integration testing
+
+---
+
+### 2026-01-28 - Phase 2C Integration Testing
+
+**Objective:** Implement integration tests for Phase 2C Knowledge Graph features
+
+**Task Completed:**
+- Category: testing
+- Phase: 2C
+- Description: Integration testing for knowledge graph
+
+**What Was Implemented:**
+
+1. **Test Helper Functions** (`backend/tests/utils/db-helpers.ts`)
+   - `createTestMasterEntity()` - Creates test master entities with configurable options
+   - `createTestEntityRelationship()` - Creates test entity relationships
+
+2. **Comprehensive Integration Test Suite** (`backend/tests/integration/vdr-phase2c.test.ts`)
+   - 15 tests covering all Phase 2C knowledge graph features
+
+   **Entity Deduplication Tests (2 tests):**
+   - Test deduplication service creates master entities from similar document entities
+   - Test finding potential duplicates for manual review
+
+   **Relationship Mapping Tests (2 tests):**
+   - Test retrieving relationships for a specific entity
+   - Test relationship statistics for graph visualization
+
+   **Related Documents Tests (3 tests):**
+   - Test finding related documents based on shared entities
+   - Test shared entity details in response
+   - Test empty response when no related documents
+
+   **Entity Merge/Split Tests (3 tests):**
+   - Test merging entities consolidates aliases and references
+   - Test splitting document entities into new master entity
+   - Test rejection of merging entities with different types
+
+   **Permission Tests (4 tests):**
+   - Test ADMIN role required for deduplication operations
+   - Test ADMIN role required for merge operations
+   - Test MEMBER can read master entities and relationships
+   - Test MEMBER can read related documents
+
+   **End-to-End Workflow Test (1 test):**
+   - Complete entity resolution workflow from extraction to deduplication to relationships
+
+**Files Created:**
+- `backend/tests/integration/vdr-phase2c.test.ts`
+
+**Files Modified:**
+- `backend/tests/utils/db-helpers.ts` - Added createTestMasterEntity, createTestEntityRelationship
+- `backend/tests/utils/index.ts` - Exported new helper functions
+
+**Technical Details:**
+- Tests require `X-Requested-With: XMLHttpRequest` header for POST requests due to CSRF protection
+- Tests clean up entities and relationships in `beforeEach` to ensure test isolation
+- Tests use `testUsers.owner` for OWNER role and `testUsers.member` for MEMBER role
+
+**Verification:**
+```
+npm test -- tests/integration/vdr-phase2c.test.ts
+
+✓ VDR Phase 2C Integration Tests - Knowledge Graph > Entity Deduplication > should deduplicate entities and create master entities
+✓ VDR Phase 2C Integration Tests - Knowledge Graph > Entity Deduplication > should find potential duplicates for review
+✓ VDR Phase 2C Integration Tests - Knowledge Graph > Relationship Mapping > should retrieve relationships for a specific entity
+✓ VDR Phase 2C Integration Tests - Knowledge Graph > Relationship Mapping > should get relationship statistics for graph visualization
+✓ VDR Phase 2C Integration Tests - Knowledge Graph > Related Documents > should find related documents based on shared entities
+✓ VDR Phase 2C Integration Tests - Knowledge Graph > Related Documents > should include shared entity details
+✓ VDR Phase 2C Integration Tests - Knowledge Graph > Related Documents > should return empty array when no related documents exist
+✓ VDR Phase 2C Integration Tests - Knowledge Graph > Entity Merge/Split > should merge entities and consolidate references
+✓ VDR Phase 2C Integration Tests - Knowledge Graph > Entity Merge/Split > should split document entities into new master entity
+✓ VDR Phase 2C Integration Tests - Knowledge Graph > Entity Merge/Split > should reject merging entities of different types
+✓ VDR Phase 2C Integration Tests - Knowledge Graph > Permissions > should require ADMIN role for deduplication
+✓ VDR Phase 2C Integration Tests - Knowledge Graph > Permissions > should require ADMIN role for merge operations
+✓ VDR Phase 2C Integration Tests - Knowledge Graph > Permissions > should allow MEMBER to read master entities and relationships
+✓ VDR Phase 2C Integration Tests - Knowledge Graph > Permissions > should allow MEMBER to read related documents
+✓ VDR Phase 2C Integration Tests - Knowledge Graph > End-to-End Workflow > should support complete entity resolution workflow
+
+Tests: 15 passed (15)
+```
+
+**Features Tested per Task Steps:**
+| Step | Status |
+|------|--------|
+| Test entity deduplication across documents | ✓ Deduplication tests |
+| Test relationship extraction | ✓ Relationship mapping tests |
+| Test graph visualization | ✓ Stats endpoint for graph data |
+| Test related documents suggestions | ✓ Related documents tests |
+| Test entity merge/split functionality | ✓ Merge/split tests |
+
+**Tasks Completed:** 34/46
+
+**Phase 2C Progress:** 7/7 tasks - COMPLETE
+
+**Phase 2C Complete!** Ready to begin Phase 3 - AI Intelligence Layer.
+
+**Next Task:**
+- Phase 3: Query understanding NLP service
 
 ---
 

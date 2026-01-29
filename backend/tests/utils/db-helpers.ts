@@ -510,3 +510,51 @@ export async function createTestClause(
     },
   });
 }
+
+/**
+ * Create a test master entity
+ */
+export async function createTestMasterEntity(
+  projectId: string,
+  data: {
+    canonicalName?: string;
+    entityType?: string;
+    aliases?: string[];
+    metadata?: Record<string, unknown>;
+  } = {}
+) {
+  return prisma.masterEntity.create({
+    data: {
+      projectId,
+      canonicalName: data.canonicalName || 'Test Entity',
+      entityType: data.entityType || 'ORGANIZATION',
+      aliases: data.aliases || [],
+      metadata: data.metadata,
+    },
+  });
+}
+
+/**
+ * Create a test entity relationship
+ */
+export async function createTestEntityRelationship(
+  sourceEntityId: string,
+  targetEntityId: string,
+  data: {
+    relationshipType?: string;
+    confidence?: number;
+    documentId?: string;
+    metadata?: Record<string, unknown>;
+  } = {}
+) {
+  return prisma.entityRelationship.create({
+    data: {
+      sourceEntityId,
+      targetEntityId,
+      relationshipType: data.relationshipType || 'CONTRACTS_WITH',
+      confidence: data.confidence ?? 0.95,
+      documentId: data.documentId,
+      metadata: data.metadata,
+    },
+  });
+}
