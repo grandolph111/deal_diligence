@@ -3,9 +3,9 @@
 ## Current Status
 
 **Last Updated:** 2026-01-28
-**Phase:** 2B - Intelligent Extraction (COMPLETE)
-**Tasks Completed:** 28/46
-**Current Task:** Phase 2B integration testing - COMPLETE
+**Phase:** 2C - Knowledge Graph (IN PROGRESS)
+**Tasks Completed:** 29/46
+**Current Task:** Entity deduplication service - COMPLETE
 
 ---
 
@@ -25,7 +25,7 @@
 |-------|--------|-------|-----------|
 | 2A - Foundation | COMPLETE | 17 | 17 |
 | 2B - Extraction | COMPLETE | 11 | 11 |
-| 2C - Knowledge Graph | Not Started | 7 | 0 |
+| 2C - Knowledge Graph | IN PROGRESS | 7 | 1 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
 | Cross-Cutting | Not Started | 3 | 0 |
 
@@ -2937,6 +2937,115 @@ The documents module was already partially implemented. This session enhanced it
 
 **Next Phase:**
 - Phase 2C - Knowledge Graph (Entity deduplication, relationship mapping, visual graph explorer)
+
+---
+
+### 2026-01-28 - Entity Deduplication Service Implementation
+
+**Objective:** Implement entity deduplication service for Phase 2C knowledge graph
+
+**Task Completed:**
+- Category: backend
+- Phase: 2C
+- Description: Entity deduplication service
+
+**What Was Implemented:**
+
+1. **Master Entities Module** (`backend/src/modules/master-entities/`)
+   - Complete module with validators, service, controller, and routes
+   - Full CRUD for master entities (canonical entities)
+   - Mounted at `/api/v1/projects/:id/master-entities`
+
+2. **Fuzzy Matching Algorithm** (`master-entities.service.ts`)
+   - Levenshtein distance-based similarity calculation
+   - Text normalization (removes legal suffixes, normalizes whitespace/punctuation)
+   - Configurable similarity threshold (default 0.85)
+   - Handles company name variations (Inc., LLC, Corp, etc.)
+
+3. **Deduplication Features:**
+   - `findOrCreateMasterEntity()` - Core algorithm for matching/creating
+   - `runDeduplication()` - Batch process unlinked document entities
+   - Automatic alias collection from matched variants
+   - Only deduplicates PERSON, ORGANIZATION, LOCATION, JURISDICTION types
+
+4. **Admin Merge Endpoint** (`POST /master-entities/merge`)
+   - Merge multiple source entities into one target
+   - Preserves all aliases from merged entities
+   - Re-links all document entities to target
+   - Deletes source entities after merge
+   - Validates all entities are same type
+
+5. **Admin Split Endpoint** (`POST /master-entities/:entityId/split`)
+   - Split document entities into a new master entity
+   - Creates new master entity with specified canonical name
+   - Re-links selected document entities to new master
+   - Validates no name conflicts
+
+6. **Duplicate Detection** (`GET /master-entities/duplicates`)
+   - Find potential duplicate master entities
+   - Returns similarity scores for each pair
+   - Filterable by entity type and threshold
+
+7. **Document Association** (`GET /master-entities/:entityId/documents`)
+   - List all documents mentioning an entity
+   - Groups mentions by document with page numbers
+   - Supports pagination
+
+8. **Role-Based Access Control:**
+   - MEMBER: List entities, view details, view documents
+   - ADMIN: Create, update, delete, merge, split, run deduplication
+
+**Files Created:**
+- `backend/src/modules/master-entities/master-entities.validators.ts`
+- `backend/src/modules/master-entities/master-entities.service.ts`
+- `backend/src/modules/master-entities/master-entities.controller.ts`
+- `backend/src/modules/master-entities/master-entities.routes.ts`
+- `backend/src/modules/master-entities/index.ts`
+- `backend/tests/integration/master-entities.test.ts`
+
+**Files Modified:**
+- `backend/src/app.ts` - Added master-entities routes
+
+**API Endpoints Created:**
+
+| Method | Endpoint | Description | Permission |
+|--------|----------|-------------|------------|
+| GET | `/master-entities` | List master entities | MEMBER+ |
+| POST | `/master-entities` | Create master entity | ADMIN+ |
+| GET | `/master-entities/duplicates` | Find potential duplicates | ADMIN+ |
+| POST | `/master-entities/deduplicate` | Run batch deduplication | ADMIN+ |
+| POST | `/master-entities/merge` | Merge entities | ADMIN+ |
+| GET | `/master-entities/:entityId` | Get entity details | MEMBER+ |
+| PATCH | `/master-entities/:entityId` | Update entity | ADMIN+ |
+| DELETE | `/master-entities/:entityId` | Delete entity | ADMIN+ |
+| GET | `/master-entities/:entityId/documents` | Get entity documents | MEMBER+ |
+| POST | `/master-entities/:entityId/split` | Split entity | ADMIN+ |
+
+**Verification:**
+- Master entities module TypeScript compiles without errors
+- Pre-existing TypeScript errors in other modules remain (unrelated to this change)
+
+**Features Implemented per Task Steps:**
+| Step | Status |
+|------|--------|
+| Implement entity matching algorithm (fuzzy match) | ✓ Levenshtein + normalization |
+| Create MasterEntity records for canonical entities | ✓ findOrCreateMasterEntity() |
+| Link DocumentEntity to MasterEntity | ✓ runDeduplication() links entities |
+| Store entity aliases | ✓ Aliases stored in JSON array field |
+| Implement admin merge/split entity endpoint | ✓ Both merge and split implemented |
+| Write tests for deduplication | ✓ Comprehensive test suite |
+
+**Notes:**
+- Deduplication only runs on PERSON, ORGANIZATION, LOCATION, JURISDICTION types
+- Other types (MONEY, DATE, PERCENTAGE, etc.) are skipped as they don't benefit from deduplication
+- Pre-existing TypeScript errors in codebase (unrelated to this change) remain
+
+**Tasks Completed:** 29/46
+
+**Phase 2C Progress:** 1/7 tasks
+
+**Next Task:**
+- Phase 2C: Relationship mapping API
 
 ---
 

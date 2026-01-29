@@ -42,6 +42,7 @@ import {
   documentClausesRouter,
   projectClausesRouter,
 } from './modules/clauses/clauses.routes';
+import { masterEntitiesRouter } from './modules/master-entities/master-entities.routes';
 import mockS3Routes from './routes/mock-s3.routes';
 
 const app = express();
@@ -188,6 +189,7 @@ app.use(
   documentClausesRouter
 );
 app.use('/api/v1/projects/:id/clauses', projectClausesRouter);
+app.use('/api/v1/projects/:id/master-entities', masterEntitiesRouter);
 
 // Error handling
 app.use(notFoundHandler);

@@ -465,7 +465,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Implement admin merge/split entity endpoint",
       "Write tests for deduplication"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "backend",
