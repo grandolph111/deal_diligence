@@ -30,6 +30,10 @@ import { ClauseDetailsModal } from './ClauseDetailsModal';
 import { ClassificationDropdown } from './ClassificationDropdown';
 import { useEntities } from '../hooks/useEntities';
 import { useClauses } from '../hooks/useClauses';
+import { documentsService } from '../../../api/services/documents.service';
+
+/** Polling interval for document status updates (in ms) */
+const PROCESSING_POLL_INTERVAL = 3000;
 
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -135,6 +139,7 @@ export function DocumentViewer({
     selectEntity,
     toggleHighlight,
     toggleTypeHighlight,
+    refresh: refreshEntities,
   } = useEntities({
     projectId,
     documentId: document.id,
@@ -154,6 +159,7 @@ export function DocumentViewer({
     toggleTypeHighlight: toggleClauseTypeHighlight,
     verifyClause,
     rejectClause,
+    fetchClauses: refreshClauses,
   } = useClauses({
     projectId,
     documentId: document.id,
@@ -296,6 +302,63 @@ export function DocumentViewer({
       cancelled = true;
     };
   }, [pdfDoc, currentPage, zoom, rotation, searchQuery]);
+
+  // Poll for document status updates when processing
+  useEffect(() => {
+    // Only poll if document is still processing
+    const isProcessing =
+      currentDocument.processingStatus === 'PROCESSING' ||
+      currentDocument.processingStatus === 'PENDING';
+
+    if (!isProcessing) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const pollStatus = async () => {
+      try {
+        const updatedDoc = await documentsService.getDocument(projectId, document.id);
+
+        if (cancelled) return;
+
+        // Update local state
+        setCurrentDocument(updatedDoc);
+
+        // If processing completed, refresh entities and clauses
+        if (updatedDoc.processingStatus === 'COMPLETE') {
+          // Notify parent of update
+          onDocumentUpdate?.(updatedDoc);
+
+          // Refresh entities and clauses data
+          await Promise.all([refreshEntities(), refreshClauses()]);
+        }
+      } catch (err) {
+        // Polling error - silently ignore and try again
+        if (!cancelled) {
+          console.warn('Failed to poll document status:', err);
+        }
+      }
+    };
+
+    // Start polling
+    const intervalId = setInterval(pollStatus, PROCESSING_POLL_INTERVAL);
+
+    // Also do an immediate check
+    pollStatus();
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [
+    currentDocument.processingStatus,
+    projectId,
+    document.id,
+    onDocumentUpdate,
+    refreshEntities,
+    refreshClauses,
+  ]);
 
   // Page navigation
   const goToPage = useCallback(
@@ -751,35 +814,6 @@ export function DocumentViewer({
               <div className="pdf-page-wrapper">
                 <canvas ref={canvasRef} className="pdf-canvas" />
                 <div ref={textLayerRef} className="pdf-text-layer" />
-              </div>
-            )}
-
-            {/* Floating page navigation - always visible when multi-page */}
-            {!loading && !error && pdfDoc && totalPages > 1 && (
-              <div className="floating-nav-container">
-                <button
-                  className="floating-nav-btn floating-nav-prev"
-                  onClick={goToPreviousPage}
-                  disabled={currentPage <= 1}
-                  title="Previous page (Left arrow)"
-                  aria-label="Previous page"
-                >
-                  <ChevronUp size={28} />
-                </button>
-
-                <div className="floating-page-indicator">
-                  Page {currentPage} of {totalPages}
-                </div>
-
-                <button
-                  className="floating-nav-btn floating-nav-next"
-                  onClick={goToNextPage}
-                  disabled={currentPage >= totalPages}
-                  title="Next page (Right arrow)"
-                  aria-label="Next page"
-                >
-                  <ChevronDown size={28} />
-                </button>
               </div>
             )}
           </div>

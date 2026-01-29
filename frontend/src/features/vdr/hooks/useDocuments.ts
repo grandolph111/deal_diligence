@@ -1,6 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { documentsService, type UploadProgress, type ListDocumentsParams } from '../../../api/services/documents.service';
 import type { Document } from '../../../types/api';
+
+/** Polling interval for checking processing document status (in ms) */
+const PROCESSING_POLL_INTERVAL = 5000;
 
 interface UseDocumentsOptions {
   projectId?: string;
@@ -170,6 +173,30 @@ export function useDocuments({
   const clearUploadProgress = useCallback(() => {
     setUploadProgress(new Map());
   }, []);
+
+  // Track if we should poll (memoize the check to avoid effect re-runs)
+  const hasProcessingDocs = documents.some(
+    (doc) => doc.processingStatus === 'PROCESSING' || doc.processingStatus === 'PENDING'
+  );
+
+  // Store refreshDocuments in a ref to avoid dependency issues
+  const refreshDocumentsRef = useRef(refreshDocuments);
+  refreshDocumentsRef.current = refreshDocuments;
+
+  // Poll for updates when documents are processing
+  useEffect(() => {
+    if (!hasProcessingDocs || !projectId) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      refreshDocumentsRef.current();
+    }, PROCESSING_POLL_INTERVAL);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [hasProcessingDocs, projectId]);
 
   return {
     documents,

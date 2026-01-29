@@ -426,6 +426,14 @@ export function VDRPage() {
     }
   }, [selectedFolderId, documents, handleSelectFolder, handleDocumentClick]);
 
+  // Handle document update from viewer (e.g., when processing completes)
+  const handleDocumentUpdate = useCallback((updatedDoc: Document) => {
+    // Update the viewer document state
+    setViewerDocument(updatedDoc);
+    // Refresh the document list to reflect changes
+    refreshDocuments();
+  }, [refreshDocuments]);
+
   // Loading state
   if (authLoading || membersLoading) {
     return (
@@ -614,6 +622,8 @@ export function VDRPage() {
           projectId={projectId}
           onClose={handleCloseViewer}
           onDownload={handleDocumentDownload}
+          canEditClassification={isAdmin}
+          onDocumentUpdate={handleDocumentUpdate}
         />
       )}
 

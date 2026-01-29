@@ -6,11 +6,13 @@
  * 2. Track processing status
  * 3. Handle webhook callbacks from Python service
  * 4. Retry failed processing
+ * 5. Store extracted entities and clauses
  */
 
 import { prisma } from '../config/database';
 import { config } from '../config';
 import { DocumentStatus } from '@prisma/client';
+import type { CallbackEntity, CallbackClause } from '../modules/processing/processing.validators';
 
 interface IngestRequest {
   document_id: string;
@@ -36,7 +38,12 @@ export interface ProcessingCallbackPayload {
   risk_level?: string;
   page_count?: number;
   error?: string;
+  entities?: CallbackEntity[];
+  clauses?: CallbackClause[];
 }
+
+/** Low confidence threshold for flagging items needing review */
+const LOW_CONFIDENCE_THRESHOLD = 0.8;
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 5000;
@@ -158,6 +165,7 @@ export const processingService = {
     }
 
     if (payload.status === 'completed') {
+      // Update document with classification data
       await prisma.document.update({
         where: { id: payload.document_id },
         data: {
@@ -168,11 +176,78 @@ export const processingService = {
           pageCount: payload.page_count,
         },
       });
+
+      // Save entities if provided
+      if (payload.entities && payload.entities.length > 0) {
+        await this.saveEntities(payload.document_id, payload.entities);
+      }
+
+      // Save clauses if provided
+      if (payload.clauses && payload.clauses.length > 0) {
+        await this.saveClauses(payload.document_id, payload.clauses);
+      }
     } else if (payload.status === 'failed') {
       await this.handleProcessingError(
         payload.document_id,
         new Error(payload.error || 'Processing failed')
       );
+    }
+  },
+
+  /**
+   * Save extracted entities to the database
+   */
+  async saveEntities(documentId: string, entities: CallbackEntity[]): Promise<void> {
+    // Delete existing AI-extracted entities for this document
+    await prisma.documentEntity.deleteMany({
+      where: { documentId, source: 'berrydb' },
+    });
+
+    // Create new entities
+    if (entities.length > 0) {
+      await prisma.documentEntity.createMany({
+        data: entities.map((entity) => ({
+          documentId,
+          text: entity.text,
+          entityType: entity.entity_type.toUpperCase(),
+          normalizedText: entity.normalized_value ?? null,
+          pageNumber: entity.page_number ?? null,
+          startOffset: entity.start_offset,
+          endOffset: entity.end_offset,
+          confidence: entity.confidence,
+          source: 'berrydb',
+          needsReview: entity.confidence < LOW_CONFIDENCE_THRESHOLD,
+        })),
+      });
+    }
+  },
+
+  /**
+   * Save detected clauses to the database
+   */
+  async saveClauses(documentId: string, clauses: CallbackClause[]): Promise<void> {
+    // Delete existing AI-detected clauses for this document
+    await prisma.documentAnnotation.deleteMany({
+      where: { documentId, annotationType: 'CLAUSE', source: 'berrydb' },
+    });
+
+    // Create new clause annotations
+    if (clauses.length > 0) {
+      await prisma.documentAnnotation.createMany({
+        data: clauses.map((clause) => ({
+          documentId,
+          annotationType: 'CLAUSE',
+          clauseType: clause.clause_type.toUpperCase(),
+          title: clause.title ?? null,
+          content: clause.content,
+          pageNumber: clause.page_number ?? null,
+          startOffset: clause.start_offset ?? null,
+          endOffset: clause.end_offset ?? null,
+          confidence: clause.confidence,
+          riskLevel: clause.risk_level?.toUpperCase() ?? null,
+          source: 'berrydb',
+        })),
+      });
     }
   },
 
