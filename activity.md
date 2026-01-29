@@ -3153,7 +3153,92 @@ The documents module was already partially implemented. This session enhanced it
 **Phase 2C Progress:** 1/7 tasks
 
 **Next Task:**
-- Phase 2C: Relationship mapping API
+- Phase 2C: Related documents API
+
+---
+
+### 2026-01-28 - Related Documents API Verification
+
+**Objective:** Verify and mark complete the Related Documents API for Phase 2C knowledge graph
+
+**Task Completed:**
+- Category: backend
+- Phase: 2C
+- Description: Related documents API
+
+**Status:** Already Implemented
+
+Upon investigation, the Related Documents API was already implemented as part of the Relationship Mapping API task. The implementation is complete and tested.
+
+**Implementation Details:**
+
+1. **Service Method** (`relationships.service.ts:457-583`)
+   - `getRelatedDocuments(documentId, projectId, page, limit)`
+   - Finds documents that share master entities with the source document
+   - Ranks by shared entity count (descending)
+   - Includes which entities are shared
+   - Supports pagination
+
+2. **Controller** (`relationships.controller.ts:127-140`)
+   - `getRelatedDocuments` handler
+   - Parses page/limit query parameters
+   - Returns structured response
+
+3. **Route** (`relationships.routes.ts:57-66`)
+   - `documentRelationshipsRouter` mounted at `/api/v1/projects/:id/documents/:documentId/related`
+   - GET `/` - Get related documents (MEMBER+)
+   - POST `/extract` - Extract relationships (ADMIN+)
+
+4. **Route Mounting** (`app.ts:203-206`)
+   - Properly mounted with `:documentId` parameter
+
+5. **Tests** (`relationships.test.ts:591-679`)
+   - "should find related documents based on shared entities" - ✓ Passes
+   - "should include shared entity details" - Tests sharedEntities array
+   - "should return empty array when no related documents" - Handles edge case
+
+**API Endpoint:**
+
+| Method | Endpoint | Description | Permission |
+|--------|----------|-------------|------------|
+| GET | `/documents/:id/related` | Get related documents ranked by shared entities | MEMBER+ |
+
+**Response Format:**
+```json
+{
+  "document": { "id": "...", "name": "..." },
+  "relatedDocuments": [
+    {
+      "document": { "id": "...", "name": "...", "documentType": "...", "folderId": "...", "createdAt": "..." },
+      "sharedEntityCount": 3,
+      "sharedEntities": [
+        { "id": "...", "canonicalName": "Acme Corp", "entityType": "ORGANIZATION" }
+      ]
+    }
+  ],
+  "pagination": { "page": 1, "limit": 10, "total": 5, "totalPages": 1 }
+}
+```
+
+**Verification:**
+- Test "should find related documents based on shared entities" passes
+- API properly mounted and accessible
+- Pre-existing TypeScript errors in other modules (not related to this API)
+
+**Features Implemented per Task Steps:**
+| Step | Status |
+|------|--------|
+| Implement GET /documents/:id/related endpoint | ✓ Implemented |
+| Rank by shared entity count | ✓ Sorted by sharedEntityCount desc |
+| Include which entities are shared | ✓ sharedEntities array included |
+| Write tests for related documents | ✓ 3 tests in relationships.test.ts |
+
+**Tasks Completed:** 30/46
+
+**Phase 2C Progress:** 3/7 tasks
+
+**Next Task:**
+- Phase 2C: Entity management UI (frontend)
 
 ---
 

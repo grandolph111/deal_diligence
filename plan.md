@@ -491,7 +491,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Include which entities are shared",
       "Write tests for related documents"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "frontend",
