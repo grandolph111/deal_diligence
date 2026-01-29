@@ -62,7 +62,7 @@ prisma/migrations/**/migration_lock.toml
 .mcp.json
 
 # Jupyter notebooks (if not needed in repo)
-*.ipynb
+# *.ipynb
 .ipynb_checkpoints/
 
 # Project-specific local files
