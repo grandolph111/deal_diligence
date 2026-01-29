@@ -18,3 +18,4 @@ export { entitiesService } from './services/entities.service';
 export { classificationService } from './services/classification.service';
 export { clausesService } from './services/clauses.service';
 export { masterEntitiesService } from './services/master-entities.service';
+export { relationshipsService } from './services/relationships.service';

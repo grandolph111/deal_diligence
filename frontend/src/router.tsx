@@ -12,6 +12,7 @@ import {
   SettingsPage,
   VDRPage,
   EntitiesPage,
+  GraphExplorerPage,
 } from './pages';
 
 /**
@@ -72,6 +73,10 @@ export const router = createBrowserRouter([
           {
             path: 'entities',
             element: <EntitiesPage />,
+          },
+          {
+            path: 'graph',
+            element: <GraphExplorerPage />,
           },
           {
             path: 'members',

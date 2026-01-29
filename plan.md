@@ -521,7 +521,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Add entity type filter",
       "Implement export graph as image"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "frontend",

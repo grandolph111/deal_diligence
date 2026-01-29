@@ -30,6 +30,10 @@ export { MasterEntityList } from './components/MasterEntityList';
 export { MasterEntityDetailModal } from './components/MasterEntityDetailModal';
 export { EntityMergeModal } from './components/EntityMergeModal';
 
+// Graph Explorer components
+export { GraphExplorer } from './components/GraphExplorer';
+export { NodeDetailPanel } from './components/NodeDetailPanel';
+
 // Clause components
 export { ClausesPanel } from './components/ClausesPanel';
 export { ClauseDetailsModal } from './components/ClauseDetailsModal';
@@ -44,3 +48,4 @@ export { useDocuments } from './hooks/useDocuments';
 export { useEntities } from './hooks/useEntities';
 export { useClauses } from './hooks/useClauses';
 export { useMasterEntities } from './hooks/useMasterEntities';
+export { useKnowledgeGraph } from './hooks/useKnowledgeGraph';

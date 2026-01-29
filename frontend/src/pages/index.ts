@@ -8,3 +8,4 @@ export { KanbanPage } from './KanbanPage';
 export { SettingsPage } from './SettingsPage';
 export { VDRPage } from './VDRPage';
 export { EntitiesPage } from './EntitiesPage';
+export { GraphExplorerPage } from './GraphExplorerPage';
