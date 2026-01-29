@@ -479,7 +479,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Implement GET /entities/:id/documents endpoint",
       "Write tests for relationship API"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "backend",

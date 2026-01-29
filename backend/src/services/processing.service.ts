@@ -30,6 +30,23 @@ interface IngestResponse {
   message: string;
 }
 
+export interface ExtractedRelationship {
+  source_entity_text: string;
+  source_entity_type: string;
+  target_entity_text: string;
+  target_entity_type: string;
+  relationship_type: string;
+  confidence: number;
+  page_number?: number;
+  context_text?: string;
+}
+
+export interface RelationshipsResponse {
+  document_id: string;
+  relationships: ExtractedRelationship[];
+  processing_time_ms: number;
+}
+
 export interface ProcessingCallbackPayload {
   document_id: string;
   berrydb_id?: string;
@@ -398,6 +415,77 @@ export const processingService = {
       where,
       orderBy: { createdAt: 'asc' },
     });
+  },
+
+  /**
+   * Extract relationships from a document using Python service
+   */
+  async extractRelationships(
+    documentId: string,
+    berrydbId?: string,
+    s3Key?: string
+  ): Promise<RelationshipsResponse> {
+    if (!this.isConfigured()) {
+      // Return mock relationships for development
+      return {
+        document_id: documentId,
+        relationships: [
+          {
+            source_entity_text: 'Acme Corporation',
+            source_entity_type: 'ORGANIZATION',
+            target_entity_text: 'This Agreement',
+            target_entity_type: 'CONTRACT_TERM',
+            relationship_type: 'PARTY_TO',
+            confidence: 0.85,
+            page_number: 1,
+            context_text: 'Acme Corporation (the "Company") agrees to the terms...',
+          },
+          {
+            source_entity_text: 'TechStart Inc.',
+            source_entity_type: 'ORGANIZATION',
+            target_entity_text: 'This Agreement',
+            target_entity_type: 'CONTRACT_TERM',
+            relationship_type: 'PARTY_TO',
+            confidence: 0.87,
+            page_number: 1,
+            context_text: 'TechStart Inc. (the "Buyer") agrees to the terms...',
+          },
+          {
+            source_entity_text: 'John Smith',
+            source_entity_type: 'PERSON',
+            target_entity_text: 'This Agreement',
+            target_entity_type: 'CONTRACT_TERM',
+            relationship_type: 'SIGNATORY',
+            confidence: 0.82,
+            page_number: 10,
+            context_text: 'Signed by: John Smith',
+          },
+        ],
+        processing_time_ms: 100,
+      };
+    }
+
+    try {
+      const response = await fetch(`${config.pythonService.url}/analyze/relationships`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          document_id: documentId,
+          berrydb_id: berrydbId,
+          s3_key: s3Key,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Python service error: ${response.status} - ${errorText}`);
+      }
+
+      return (await response.json()) as RelationshipsResponse;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to extract relationships: ${errorMessage}`);
+    }
   },
 
   /**

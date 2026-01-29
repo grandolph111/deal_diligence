@@ -43,6 +43,11 @@ import {
   projectClausesRouter,
 } from './modules/clauses/clauses.routes';
 import { masterEntitiesRouter } from './modules/master-entities/master-entities.routes';
+import {
+  relationshipsRoutes,
+  entityRelationshipsRouter,
+  documentRelationshipsRouter,
+} from './modules/relationships/relationships.routes';
 import mockS3Routes from './routes/mock-s3.routes';
 
 const app = express();
@@ -190,6 +195,15 @@ app.use(
 );
 app.use('/api/v1/projects/:id/clauses', projectClausesRouter);
 app.use('/api/v1/projects/:id/master-entities', masterEntitiesRouter);
+app.use('/api/v1/projects/:id/relationships', relationshipsRoutes);
+app.use(
+  '/api/v1/projects/:id/entities/:entityId/relationships',
+  entityRelationshipsRouter
+);
+app.use(
+  '/api/v1/projects/:id/documents/:documentId/related',
+  documentRelationshipsRouter
+);
 
 // Error handling
 app.use(notFoundHandler);
