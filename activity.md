@@ -2,10 +2,10 @@
 
 ## Current Status
 
-**Last Updated:** 2026-01-28
-**Phase:** 2C - Knowledge Graph (COMPLETE)
-**Tasks Completed:** 34/46
-**Current Task:** Phase 2C Integration Testing - COMPLETE
+**Last Updated:** 2026-01-29
+**Phase:** 3 - AI Intelligence (IN PROGRESS)
+**Tasks Completed:** 35/46
+**Current Task:** Database schema for AI features - COMPLETE
 
 ---
 
@@ -26,12 +26,71 @@
 | 2A - Foundation | COMPLETE | 17 | 17 |
 | 2B - Extraction | COMPLETE | 11 | 11 |
 | 2C - Knowledge Graph | COMPLETE | 7 | 7 |
-| 3 - AI Intelligence | Not Started | 10 | 0 |
+| 3 - AI Intelligence | IN PROGRESS | 10 | 1 |
 | Cross-Cutting | Not Started | 3 | 0 |
 
 ---
 
 ## Session Log
+
+### 2026-01-29 - Phase 3 Database Schema
+
+**Objective:** Implement database schema for AI chat features (Phase 3 task 1)
+
+**Task Completed:**
+- Category: database
+- Phase: 3
+- Description: Database schema for AI features
+
+**What Was Implemented:**
+
+1. **ChatConversation Model** (`backend/prisma/schema.prisma`)
+   - Fields: `id`, `projectId`, `title`, `createdById`, `createdAt`, `updatedAt`
+   - Relations to Project and User (ConversationCreator)
+   - Indexes on `projectId`, `projectId + createdAt`, and `createdById`
+
+2. **ChatMessage Model** (`backend/prisma/schema.prisma`)
+   - Fields: `id`, `conversationId`, `role`, `content`, `citations`, `createdAt`
+   - Role enum: USER, ASSISTANT, SYSTEM
+   - Citations stored as JSON (array of { documentId, pageNumber, snippet })
+   - Relation to ChatConversation (cascade delete)
+   - Indexes on `conversationId` and `conversationId + createdAt`
+
+3. **ChatMessageRole Enum** (`backend/prisma/schema.prisma`)
+   - Values: USER, ASSISTANT, SYSTEM
+
+4. **User Model Update**
+   - Added `chatConversations` relation for ConversationCreator
+
+5. **Project Model Update**
+   - Added `chatConversations` relation
+
+6. **Migration** (`backend/prisma/migrations/20260129000000_add_chat_schema/migration.sql`)
+   - Creates ChatMessageRole enum
+   - Creates ChatConversation and ChatMessage tables
+   - Creates all indexes and foreign key constraints
+   - Migration applied successfully
+
+**Files Created:**
+- `backend/prisma/migrations/20260129000000_add_chat_schema/migration.sql`
+
+**Files Modified:**
+- `backend/prisma/schema.prisma` - Added ChatConversation, ChatMessage models and ChatMessageRole enum
+
+**Verification:**
+- Prisma client regenerated successfully
+- New models accessible via Prisma queries (verified with node script)
+- Migration applied to database
+
+**Notes:**
+- Pre-existing TypeScript errors in the codebase are unrelated to this schema change
+- Chat schema designed to support multi-turn conversations with document citations
+- Citations stored as JSON to allow flexible citation structure
+
+**Next Task:**
+- Python microservice - LLM chat (Phase 3)
+
+---
 
 ### 2025-01-24 - Planning Session
 

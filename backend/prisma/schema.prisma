@@ -35,6 +35,9 @@ model User {
   // Phase 2B Relations
   verifiedAnnotations DocumentAnnotation[] @relation("AnnotationVerifier")
   rejectedAnnotations DocumentAnnotation[] @relation("AnnotationRejecter")
+
+  // Phase 3 Relations (AI Chat)
+  chatConversations ChatConversation[] @relation("ConversationCreator")
 }
 
 // ============================================
@@ -63,6 +66,9 @@ model Project {
 
   // Phase 2B Relations
   masterEntities MasterEntity[]
+
+  // Phase 3 Relations (AI Chat)
+  chatConversations ChatConversation[]
 }
 
 model ProjectMember {
@@ -523,6 +529,59 @@ model DocumentAnnotation {
   @@index([riskLevel])
   @@index([isVerified])
   @@index([isRejected])
+}
+
+// ============================================
+// AI CHAT (Phase 3)
+// ============================================
+
+model ChatConversation {
+  id        String @id @default(uuid())
+  projectId String
+
+  // Conversation details
+  title     String?  // Auto-generated or user-set title
+  createdById String
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User          @relation("ConversationCreator", fields: [createdById], references: [id])
+  messages  ChatMessage[]
+
+  @@index([projectId])
+  @@index([projectId, createdAt])
+  @@index([createdById])
+}
+
+model ChatMessage {
+  id             String @id @default(uuid())
+  conversationId String
+
+  // Message content
+  role    ChatMessageRole // USER, ASSISTANT, SYSTEM
+  content String          @db.Text
+
+  // For assistant messages: citations to source documents
+  citations Json? // Array of { documentId, pageNumber, snippet }
+
+  // Timestamps
+  createdAt DateTime @default(now())
+
+  // Relations
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([conversationId, createdAt])
+}
+
+enum ChatMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
 }
 
 // ============================================

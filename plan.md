@@ -558,7 +558,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Run prisma migrate",
       "Create indexes for chat queries"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "backend",
