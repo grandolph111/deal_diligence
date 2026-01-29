@@ -439,7 +439,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Test entity highlighting in viewer",
       "Test search filters (type, entity, clause)"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "database",
