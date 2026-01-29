@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-29
 **Phase:** 3 - AI Intelligence (IN PROGRESS)
-**Tasks Completed:** 35/46
-**Current Task:** Database schema for AI features - COMPLETE
+**Tasks Completed:** 36/46
+**Current Task:** Python microservice - LLM chat - COMPLETE
 
 ---
 
@@ -26,7 +26,7 @@
 | 2A - Foundation | COMPLETE | 17 | 17 |
 | 2B - Extraction | COMPLETE | 11 | 11 |
 | 2C - Knowledge Graph | COMPLETE | 7 | 7 |
-| 3 - AI Intelligence | IN PROGRESS | 10 | 1 |
+| 3 - AI Intelligence | IN PROGRESS | 10 | 2 |
 | Cross-Cutting | Not Started | 3 | 0 |
 
 ---
@@ -89,6 +89,76 @@
 
 **Next Task:**
 - Python microservice - LLM chat (Phase 3)
+
+---
+
+### 2026-01-29 - Python Microservice LLM Chat
+
+**Objective:** Implement BerryDB LLMAgent integration for AI chat functionality (Phase 3 task 2)
+
+**Task Completed:**
+- Category: backend
+- Phase: 3
+- Description: Python microservice - LLM chat
+
+**What Was Implemented:**
+
+1. **Enhanced Chat Method** (`python-service/app/services/berrydb.py`)
+   - Implemented proper BerryDB LLMAgent integration
+   - Added multi-turn conversation support with history context
+   - Added conversation history processing (uses last 5 messages for context)
+   - Implemented folder access filtering (filters by accessible_folder_ids)
+   - Added citation extraction with page number estimation
+   - Improved logging for debugging and monitoring
+
+2. **Mock Chat Response Generator** (`python-service/app/services/berrydb.py`)
+   - Added `_generate_mock_chat_response()` method for development mode
+   - Context-aware responses based on message content:
+     - Liability/indemnification questions get relevant mock responses
+     - Termination questions get appropriate mock responses
+     - Risk questions get risk-focused mock responses
+     - Follow-up questions leverage conversation history
+   - Returns realistic citations with document IDs, filenames, page numbers, and excerpts
+
+3. **Comprehensive Test Suite** (`python-service/tests/test_chat.py`)
+   - 19 tests covering all chat endpoint functionality:
+     - Basic chat functionality
+     - Conversation ID handling (generation and preservation)
+     - Multi-turn conversation support with history
+     - Folder access restrictions
+     - Citation structure and validation
+     - Input validation (empty message, missing project_id)
+     - Edge cases (long messages, special characters, unicode)
+     - Processing time recording
+
+**Files Created:**
+- `python-service/tests/test_chat.py` - Comprehensive test suite (19 tests)
+
+**Files Modified:**
+- `python-service/app/services/berrydb.py` - Enhanced chat() method and added mock response generator
+
+**Test Results:**
+```
+tests/test_chat.py - 19 passed
+```
+
+**Features Implemented per Task Steps:**
+| Step | Status |
+|------|--------|
+| Implement BerryDB LLMAgent integration | ✓ Uses BerryDB chat with RAG |
+| Add POST /chat endpoint | ✓ Already existed, enhanced |
+| Support multi-turn conversations | ✓ History parameter with context building |
+| Return citations with page numbers | ✓ Citation extraction from documents |
+| Filter context by user's accessible documents | ✓ accessible_folder_ids filtering |
+| Handle conversation ID for context | ✓ New ID generation and preservation |
+| Write tests for chat endpoint | ✓ 19 comprehensive tests |
+
+**Tasks Completed:** 36/46
+
+**Phase 3 Progress:** 2/10 tasks
+
+**Next Task:**
+- Chat API (Phase 3) - Node.js backend chat endpoints
 
 ---
 

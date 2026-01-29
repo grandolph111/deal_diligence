@@ -573,7 +573,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Handle conversation ID for context",
       "Write tests for chat endpoint"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "backend",
