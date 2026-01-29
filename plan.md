@@ -533,7 +533,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Display shared entities for each related doc",
       "Click to navigate to related document"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "testing",

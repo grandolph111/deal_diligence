@@ -21,6 +21,7 @@ import {
   ChevronUp,
   ChevronDown,
   Tags,
+  Link2,
 } from 'lucide-react';
 import type { Document, DocumentEntity, DocumentClause, DocumentType, RiskLevel } from '../../../types/api';
 import { EntitiesPanel } from './EntitiesPanel';
@@ -28,6 +29,7 @@ import { EntityDetailsModal } from './EntityDetailsModal';
 import { ClausesPanel } from './ClausesPanel';
 import { ClauseDetailsModal } from './ClauseDetailsModal';
 import { ClassificationDropdown } from './ClassificationDropdown';
+import { RelatedDocumentsPanel } from './RelatedDocumentsPanel';
 import { useEntities } from '../hooks/useEntities';
 import { useClauses } from '../hooks/useClauses';
 import { documentsService } from '../../../api/services/documents.service';
@@ -50,9 +52,10 @@ interface DocumentViewerProps {
   onDownload?: (document: Document) => void;
   canEditClassification?: boolean;
   onDocumentUpdate?: (document: Document) => void;
+  onNavigateToDocument?: (documentId: string, documentName: string) => void;
 }
 
-type SidebarTab = 'details' | 'entities' | 'clauses';
+type SidebarTab = 'details' | 'entities' | 'clauses' | 'related';
 
 type ZoomLevel = 0.5 | 0.75 | 1 | 1.25 | 1.5 | 2 | 3;
 
@@ -100,6 +103,7 @@ export function DocumentViewer({
   onDownload,
   canEditClassification = false,
   onDocumentUpdate,
+  onNavigateToDocument,
 }: DocumentViewerProps) {
   // Local document state for classification updates
   const [currentDocument, setCurrentDocument] = useState<Document>(document);
@@ -850,6 +854,13 @@ export function DocumentViewer({
                     <span className="tab-badge">{clauses.length}</span>
                   )}
                 </button>
+                <button
+                  className={`viewer-sidebar-tab ${sidebarTab === 'related' ? 'active' : ''}`}
+                  onClick={() => setSidebarTab('related')}
+                >
+                  <Link2 size={14} />
+                  Related
+                </button>
               </div>
 
               {/* Details tab content */}
@@ -990,6 +1001,16 @@ export function DocumentViewer({
                   onToggleTypeHighlight={toggleClauseTypeHighlight}
                   onSelectClause={handleSelectClause}
                   onNavigateToPage={handleNavigateToPage}
+                />
+              )}
+
+              {/* Related tab content */}
+              {sidebarTab === 'related' && (
+                <RelatedDocumentsPanel
+                  projectId={projectId}
+                  documentId={document.id}
+                  documentName={document.name}
+                  onNavigateToDocument={onNavigateToDocument}
                 />
               )}
             </aside>

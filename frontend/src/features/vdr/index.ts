@@ -41,6 +41,9 @@ export { ClauseDetailsModal } from './components/ClauseDetailsModal';
 // Classification components
 export { ClassificationDropdown } from './components/ClassificationDropdown';
 
+// Related Documents components
+export { RelatedDocumentsPanel } from './components/RelatedDocumentsPanel';
+
 // Hooks
 export { useFolders } from './hooks/useFolders';
 export { useSearch } from './hooks/useSearch';

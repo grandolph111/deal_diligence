@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-28
 **Phase:** 2C - Knowledge Graph (IN PROGRESS)
-**Tasks Completed:** 32/46
-**Current Task:** Visual graph explorer - COMPLETE
+**Tasks Completed:** 33/46
+**Current Task:** Related documents UI - COMPLETE
 
 ---
 
@@ -25,7 +25,7 @@
 |-------|--------|-------|-----------|
 | 2A - Foundation | COMPLETE | 17 | 17 |
 | 2B - Extraction | COMPLETE | 11 | 11 |
-| 2C - Knowledge Graph | IN PROGRESS | 7 | 5 |
+| 2C - Knowledge Graph | IN PROGRESS | 7 | 6 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
 | Cross-Cutting | Not Started | 3 | 0 |
 
@@ -3489,6 +3489,77 @@ Upon investigation, the Related Documents API was already implemented as part of
 
 **Next Task:**
 - Phase 2C: Related documents UI
+
+---
+
+### 2026-01-28 - Related Documents UI Implementation
+
+**Objective:** Implement Related Documents UI for Phase 2C knowledge graph
+
+**Task Completed:**
+- Category: frontend
+- Phase: 2C
+- Description: Related documents UI
+
+**What Was Implemented:**
+
+1. **RelatedDocumentsPanel Component** (`frontend/src/features/vdr/components/RelatedDocumentsPanel.tsx`)
+   - Displays documents related to the current document based on shared entities
+   - Fetches related documents from the relationships API
+   - Expandable list items showing document details
+   - Shows shared entities with type icons and color coding
+   - Click to navigate to related document
+   - Loading, error, and empty states
+
+2. **DocumentViewer Integration** (`frontend/src/features/vdr/components/DocumentViewer.tsx`)
+   - Added "Related" tab to sidebar tabs (Details / Entities / Clauses / Related)
+   - Integrated RelatedDocumentsPanel in Related tab
+   - Added `onNavigateToDocument` prop for navigation callback
+   - Extended SidebarTab type to include 'related'
+
+3. **CSS Styles** (`frontend/src/features/vdr/vdr.css`)
+   - ~180 lines of new styles for related documents panel
+   - Related document item styling with expand/collapse animation
+   - Shared entities badges with entity type colors
+   - View Document button
+   - Loading, error, and empty states
+
+4. **Module Exports** (`frontend/src/features/vdr/index.ts`)
+   - Exported RelatedDocumentsPanel component
+
+**Files Created:**
+- `frontend/src/features/vdr/components/RelatedDocumentsPanel.tsx`
+
+**Files Modified:**
+- `frontend/src/features/vdr/components/DocumentViewer.tsx` - Added Related tab
+- `frontend/src/features/vdr/vdr.css` - Added ~180 lines of related documents styles
+- `frontend/src/features/vdr/index.ts` - Exported RelatedDocumentsPanel
+
+**Verification:**
+- Related documents UI module TypeScript compiles without errors
+- Pre-existing TypeScript errors in settings module remain (unrelated to this change)
+
+**Features Implemented per Task Steps:**
+| Step | Status |
+|------|--------|
+| Add 'Related Documents' panel to document viewer | ✓ Related tab in sidebar |
+| Show related docs ranked by relevance | ✓ Ranked by sharedEntityCount |
+| Display shared entities for each related doc | ✓ Shared entities badges |
+| Click to navigate to related document | ✓ View Document button |
+
+**Notes:**
+- Related documents are fetched from `/api/v1/projects/:id/documents/:documentId/related`
+- Results are ranked by shared entity count (descending)
+- Panel shows loading state while fetching
+- Empty state displayed when no related documents found
+- Pre-existing TypeScript errors in codebase (unrelated to this change) remain
+
+**Tasks Completed:** 33/46
+
+**Phase 2C Progress:** 6/7 tasks
+
+**Next Task:**
+- Phase 2C: Integration testing
 
 ---
 
