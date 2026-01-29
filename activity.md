@@ -4,8 +4,8 @@
 
 **Last Updated:** 2026-01-28
 **Phase:** 2C - Knowledge Graph (IN PROGRESS)
-**Tasks Completed:** 30/46
-**Current Task:** Relationship mapping API - COMPLETE
+**Tasks Completed:** 31/46
+**Current Task:** Entity management UI - COMPLETE
 
 ---
 
@@ -25,7 +25,7 @@
 |-------|--------|-------|-----------|
 | 2A - Foundation | COMPLETE | 17 | 17 |
 | 2B - Extraction | COMPLETE | 11 | 11 |
-| 2C - Knowledge Graph | IN PROGRESS | 7 | 2 |
+| 2C - Knowledge Graph | IN PROGRESS | 7 | 4 |
 | 3 - AI Intelligence | Not Started | 10 | 0 |
 | Cross-Cutting | Not Started | 3 | 0 |
 
@@ -3239,6 +3239,142 @@ Upon investigation, the Related Documents API was already implemented as part of
 
 **Next Task:**
 - Phase 2C: Entity management UI (frontend)
+
+---
+
+### 2026-01-28 - Entity Management UI Implementation
+
+**Objective:** Implement Entity Management UI for Phase 2C knowledge graph
+
+**Task Completed:**
+- Category: frontend
+- Phase: 2C
+- Description: Entity management UI
+
+**What Was Implemented:**
+
+1. **Master Entities API Service** (`frontend/src/api/services/master-entities.service.ts`)
+   - `listMasterEntities()` - List all master entities with filtering and pagination
+   - `getMasterEntity()` - Get single entity with full details
+   - `createMasterEntity()` - Create new master entity
+   - `updateMasterEntity()` - Update entity name/aliases
+   - `deleteMasterEntity()` - Delete master entity
+   - `getMasterEntityDocuments()` - Get documents associated with entity
+   - `findDuplicates()` - Find potential duplicate entities
+   - `runDeduplication()` - Run batch deduplication
+   - `mergeEntities()` - Merge multiple entities into one
+   - `splitEntity()` - Split document entities into new master entity
+
+2. **API Types** (`frontend/src/types/api.ts`)
+   - `MasterEntityWithCount` - Entity with document count
+   - `MasterEntityListResponse` - Paginated list response
+   - `MasterEntityDetail` - Full entity details with relationships
+   - `MasterEntityDocumentsResponse` - Documents mentioning entity
+   - `DocumentWithMentions` - Document with entity mentions grouped
+   - `DuplicatePair` - Potential duplicate entity pair
+   - `DuplicatePairsResponse` - Duplicates list response
+   - `DeduplicationStats` - Stats from deduplication run
+
+3. **useMasterEntities Hook** (`frontend/src/features/vdr/hooks/useMasterEntities.ts`)
+   - Manages entity list state with filtering and pagination
+   - Handles entity detail loading
+   - Tracks potential duplicates
+   - Entity type and search query filters
+   - CRUD operations (update, delete, merge, split)
+   - Run deduplication action
+
+4. **MasterEntityList Component** (`frontend/src/features/vdr/components/MasterEntityList.tsx`)
+   - Displays master entities in a table format
+   - Search and entity type filter
+   - Entity type icons and color-coded badges
+   - Document count display
+   - Duplicates panel with merge suggestions
+   - Pagination controls
+   - Run deduplication button (admin only)
+
+5. **MasterEntityDetailModal Component** (`frontend/src/features/vdr/components/MasterEntityDetailModal.tsx`)
+   - View entity canonical name and type
+   - Edit entity name and aliases
+   - View all document mentions grouped by document
+   - View related entities from knowledge graph
+   - Split entity functionality (select mentions to create new entity)
+   - Delete entity (with confirmation)
+   - Navigate to document from mention
+
+6. **EntityMergeModal Component** (`frontend/src/features/vdr/components/EntityMergeModal.tsx`)
+   - Merge two or more entities into one
+   - Select source entities (to be deleted)
+   - Select target entity (to keep)
+   - Swap source/target functionality
+   - Add more entities to merge
+   - Custom canonical name option
+   - Shows merge summary with document counts
+
+7. **EntitiesPage** (`frontend/src/pages/EntitiesPage.tsx`)
+   - Full-page entity management view
+   - Back navigation to project
+   - Link to VDR documents view
+   - Integrates all entity components
+   - Deduplication result notification
+   - Admin permissions for merge/split/delete
+
+8. **Entity Management Styles** (`frontend/src/features/vdr/entities.css`)
+   - ~500 lines of CSS styles
+   - Entities page layout
+   - Entity list table and rows
+   - Duplicates panel
+   - Entity detail modal styles
+   - Merge modal styles
+   - Split mode styles
+   - Document mentions list
+   - Related entities list
+   - Pagination controls
+
+9. **Route and Navigation** (`frontend/src/router.tsx`)
+   - Added `/projects/:projectId/entities` route
+   - EntitiesPage accessible from VDR
+
+**Files Created:**
+- `frontend/src/api/services/master-entities.service.ts`
+- `frontend/src/features/vdr/hooks/useMasterEntities.ts`
+- `frontend/src/features/vdr/components/MasterEntityList.tsx`
+- `frontend/src/features/vdr/components/MasterEntityDetailModal.tsx`
+- `frontend/src/features/vdr/components/EntityMergeModal.tsx`
+- `frontend/src/pages/EntitiesPage.tsx`
+- `frontend/src/features/vdr/entities.css`
+
+**Files Modified:**
+- `frontend/src/types/api.ts` - Added master entity types
+- `frontend/src/api/index.ts` - Exported masterEntitiesService
+- `frontend/src/features/vdr/index.ts` - Exported new components and hook
+- `frontend/src/pages/index.ts` - Exported EntitiesPage
+- `frontend/src/router.tsx` - Added entities route
+
+**Verification:**
+- Entity management module TypeScript compiles without errors
+- Pre-existing TypeScript errors in settings module remain (unrelated to this change)
+
+**Features Implemented per Task Steps:**
+| Step | Status |
+|------|--------|
+| Create entity list page | ✓ EntitiesPage with MasterEntityList |
+| Show entity with document count | ✓ documentCount in table |
+| Implement entity detail view | ✓ MasterEntityDetailModal |
+| Show all documents mentioning entity | ✓ Grouped by document with mentions |
+| Add admin merge entity functionality | ✓ EntityMergeModal |
+| Add admin split entity functionality | ✓ Split mode in detail modal |
+
+**Notes:**
+- Entity management accessible at `/projects/:projectId/entities`
+- Admin-only features: merge, split, delete, run deduplication
+- Pre-existing TypeScript errors in codebase (unrelated to this change) remain
+
+**Tasks Completed:** 31/46
+
+**Phase 2C Progress:** 4/7 tasks
+
+**Next Task:**
+- Phase 2C: Visual graph explorer
 
 ---
 

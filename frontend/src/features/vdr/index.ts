@@ -25,6 +25,11 @@ export { SimilarDocumentsModal } from './components/SimilarDocumentsModal';
 export { EntitiesPanel } from './components/EntitiesPanel';
 export { EntityDetailsModal } from './components/EntityDetailsModal';
 
+// Master Entity (Knowledge Graph) components
+export { MasterEntityList } from './components/MasterEntityList';
+export { MasterEntityDetailModal } from './components/MasterEntityDetailModal';
+export { EntityMergeModal } from './components/EntityMergeModal';
+
 // Clause components
 export { ClausesPanel } from './components/ClausesPanel';
 export { ClauseDetailsModal } from './components/ClauseDetailsModal';
@@ -38,3 +43,4 @@ export { useSearch } from './hooks/useSearch';
 export { useDocuments } from './hooks/useDocuments';
 export { useEntities } from './hooks/useEntities';
 export { useClauses } from './hooks/useClauses';
+export { useMasterEntities } from './hooks/useMasterEntities';

@@ -11,6 +11,7 @@ import {
   KanbanPage,
   SettingsPage,
   VDRPage,
+  EntitiesPage,
 } from './pages';
 
 /**
@@ -67,6 +68,10 @@ export const router = createBrowserRouter([
           {
             path: 'vdr',
             element: <VDRPage />,
+          },
+          {
+            path: 'entities',
+            element: <EntitiesPage />,
           },
           {
             path: 'members',

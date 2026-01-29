@@ -759,3 +759,116 @@ export interface ClausesListResponse {
     totalPages: number;
   };
 }
+
+// ============================================
+// MASTER ENTITIES (Knowledge Graph)
+// ============================================
+
+// Master entity with document count
+export interface MasterEntityWithCount extends MasterEntity {
+  documentCount: number;
+  _count?: {
+    documentEntities: number;
+  };
+}
+
+// Master entity list response
+export interface MasterEntityListResponse {
+  entities: MasterEntityWithCount[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+// Document entity mention (from a master entity)
+export interface DocumentEntityMention {
+  id: string;
+  text: string;
+  pageNumber: number | null;
+  confidence: number;
+}
+
+// Document with mentions from a master entity
+export interface DocumentWithMentions {
+  document: Pick<Document, 'id' | 'name' | 'folderId' | 'documentType' | 'createdAt'>;
+  mentions: DocumentEntityMention[];
+}
+
+// Master entity detail with relationships and document entities
+export interface MasterEntityDetail extends MasterEntityWithCount {
+  documentEntities: Array<{
+    id: string;
+    text: string;
+    pageNumber: number | null;
+    confidence: number;
+    documentId: string;
+    document: Pick<Document, 'id' | 'name' | 'folderId'>;
+  }>;
+  relatedEntities: Array<{
+    targetEntity: {
+      id: string;
+      canonicalName: string;
+      entityType: EntityType;
+    };
+  }>;
+  relatedFrom: Array<{
+    sourceEntity: {
+      id: string;
+      canonicalName: string;
+      entityType: EntityType;
+    };
+  }>;
+}
+
+// Master entity documents response
+export interface MasterEntityDocumentsResponse {
+  entity: {
+    id: string;
+    canonicalName: string;
+    entityType: EntityType;
+  };
+  documents: DocumentWithMentions[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+// Duplicate pair for deduplication suggestions
+export interface DuplicatePair {
+  entity1: {
+    id: string;
+    canonicalName: string;
+    entityType: EntityType;
+  };
+  entity2: {
+    id: string;
+    canonicalName: string;
+    entityType: EntityType;
+  };
+  similarity: number;
+}
+
+// Response from find duplicates endpoint
+export interface DuplicatePairsResponse {
+  duplicates: DuplicatePair[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+// Deduplication statistics
+export interface DeduplicationStats {
+  processed: number;
+  newMasterEntities: number;
+  linkedToExisting: number;
+  skipped: number;
+}

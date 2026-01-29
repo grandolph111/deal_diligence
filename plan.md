@@ -505,7 +505,7 @@ Implementation plan for DealDiligence.ai's Virtual Data Room (VDR) and AI-Powere
       "Add admin merge entity functionality",
       "Add admin split entity functionality"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "frontend",
