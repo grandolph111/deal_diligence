@@ -11,11 +11,12 @@ interface Auth0UserInfo {
 export const authService = {
   /**
    * Find or create a user based on Auth0 information
+   * Handles account linking when same email is used with different Auth0 providers
    */
   async findOrCreateUser(auth0Info: Auth0UserInfo): Promise<User> {
     const { sub: auth0Id, email, name, picture } = auth0Info;
 
-    // Try to find existing user
+    // Try to find existing user by auth0Id
     let user = await prisma.user.findUnique({
       where: { auth0Id },
     });
@@ -33,6 +34,27 @@ export const authService = {
         });
       }
       return user;
+    }
+
+    // User not found by auth0Id - check if email already exists
+    // This handles cases where user logs in with different Auth0 providers (Google vs email/password)
+    if (email) {
+      const existingUserByEmail = await prisma.user.findUnique({
+        where: { email },
+      });
+
+      if (existingUserByEmail) {
+        // Link this auth0Id to the existing account by updating it
+        user = await prisma.user.update({
+          where: { id: existingUserByEmail.id },
+          data: {
+            auth0Id, // Update to new auth0Id
+            name: name || existingUserByEmail.name,
+            avatarUrl: picture || existingUserByEmail.avatarUrl,
+          },
+        });
+        return user;
+      }
     }
 
     // Create new user

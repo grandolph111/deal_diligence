@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Search } from 'lucide-react';
+import { ArrowLeft, Search, MessageSquare } from 'lucide-react';
 import {
   FolderTree,
   DocumentList,
@@ -16,10 +16,12 @@ import {
   useFolders,
   useDocuments,
 } from '../features/vdr';
+import { ChatPanel } from '../features/chat';
 import { membersService, apiClient, documentsService } from '../api';
 import { useAuth } from '../auth';
 import type { ProjectMember, Document, FolderTreeNode } from '../types/api';
 import '../features/vdr/vdr.css';
+import '../features/chat/chat.css';
 
 /**
  * Find a folder by ID in the tree
@@ -134,6 +136,10 @@ export function VDRPage() {
 
   // Search panel state
   const [showSearchPanel, setShowSearchPanel] = useState(false);
+
+  // Chat panel state
+  const [showChatPanel, setShowChatPanel] = useState(false);
+  const [chatInitialDocument, setChatInitialDocument] = useState<{ id: string; name: string } | null>(null);
 
   // Get current user's membership info
   const currentUserMember = members.find((m) => m.user?.email === user?.email);
@@ -412,6 +418,39 @@ export function VDRPage() {
     setShowSearchPanel(false);
   }, []);
 
+  // Handle chat panel open/close
+  const handleOpenChat = useCallback(() => {
+    setShowChatPanel(true);
+  }, []);
+
+  const handleCloseChat = useCallback(() => {
+    setShowChatPanel(false);
+    setChatInitialDocument(null);
+  }, []);
+
+  // Handle opening chat with a specific document context
+  const handleOpenChatWithDocument = useCallback((doc: Document) => {
+    setChatInitialDocument({ id: doc.id, name: doc.name });
+    setShowChatPanel(true);
+  }, []);
+
+  // Handle document click from chat citations
+  const handleChatDocumentClick = useCallback((documentId: string) => {
+    // Close chat panel
+    setShowChatPanel(false);
+
+    // Find the document to get its folder
+    const doc = documents.find((d) => d.id === documentId);
+    if (doc) {
+      // Navigate to the folder
+      if (doc.folderId !== selectedFolderId) {
+        handleSelectFolder(doc.folderId);
+      }
+      // Open the document viewer
+      handleDocumentClick(doc);
+    }
+  }, [documents, selectedFolderId, handleSelectFolder, handleDocumentClick]);
+
   // Handle document click from search results
   const handleSearchDocumentClick = useCallback((documentId: string, folderId: string | null) => {
     // Navigate to the folder containing the document
@@ -489,7 +528,13 @@ export function VDRPage() {
           {/* Search button */}
           <button className="button secondary" onClick={handleOpenSearch}>
             <Search size={16} />
-            Search Documents
+            Search
+          </button>
+
+          {/* Chat button */}
+          <button className="button secondary" onClick={handleOpenChat}>
+            <MessageSquare size={16} />
+            AI Chat
           </button>
         </div>
       </div>
@@ -624,6 +669,7 @@ export function VDRPage() {
           onDownload={handleDocumentDownload}
           canEditClassification={isAdmin}
           onDocumentUpdate={handleDocumentUpdate}
+          onAskAI={handleOpenChatWithDocument}
         />
       )}
 
@@ -635,6 +681,15 @@ export function VDRPage() {
         onClose={handleCloseSearch}
         onDocumentClick={handleSearchDocumentClick}
         onRequestAccess={handleRequestAccessById}
+      />
+
+      {/* Chat Panel */}
+      <ChatPanel
+        projectId={projectId}
+        isOpen={showChatPanel}
+        onClose={handleCloseChat}
+        onDocumentClick={handleChatDocumentClick}
+        initialDocument={chatInitialDocument}
       />
     </div>
   );

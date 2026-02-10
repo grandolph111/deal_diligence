@@ -22,6 +22,7 @@ import {
   ChevronDown,
   Tags,
   Link2,
+  MessageSquare,
 } from 'lucide-react';
 import type { Document, DocumentEntity, DocumentClause, DocumentType, RiskLevel } from '../../../types/api';
 import { EntitiesPanel } from './EntitiesPanel';
@@ -53,6 +54,7 @@ interface DocumentViewerProps {
   canEditClassification?: boolean;
   onDocumentUpdate?: (document: Document) => void;
   onNavigateToDocument?: (documentId: string, documentName: string) => void;
+  onAskAI?: (document: Document) => void;
 }
 
 type SidebarTab = 'details' | 'entities' | 'clauses' | 'related';
@@ -104,6 +106,7 @@ export function DocumentViewer({
   canEditClassification = false,
   onDocumentUpdate,
   onNavigateToDocument,
+  onAskAI,
 }: DocumentViewerProps) {
   // Local document state for classification updates
   const [currentDocument, setCurrentDocument] = useState<Document>(document);
@@ -480,6 +483,13 @@ export function DocumentViewer({
     }
   }, [document, isViewOnly, onDownload]);
 
+  // Handle Ask AI
+  const handleAskAI = useCallback(() => {
+    if (onAskAI) {
+      onAskAI(document);
+    }
+  }, [document, onAskAI]);
+
   // Handle entity selection and show details
   const handleSelectEntity = useCallback(
     (entity: DocumentEntity | null) => {
@@ -727,6 +737,18 @@ export function DocumentViewer({
                 title="Download"
               >
                 <Download size={18} />
+              </button>
+            )}
+
+            {/* Ask AI */}
+            {onAskAI && (
+              <button
+                className="icon-button"
+                onClick={handleAskAI}
+                disabled={loading}
+                title="Ask AI about this document"
+              >
+                <MessageSquare size={18} />
               </button>
             )}
 

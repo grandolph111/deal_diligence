@@ -48,6 +48,7 @@ import {
   entityRelationshipsRouter,
   documentRelationshipsRouter,
 } from './modules/relationships/relationships.routes';
+import chatRoutes from './modules/chat/chat.routes';
 import mockS3Routes from './routes/mock-s3.routes';
 
 const app = express();
@@ -204,6 +205,7 @@ app.use(
   '/api/v1/projects/:id/documents/:documentId/related',
   documentRelationshipsRouter
 );
+app.use('/api/v1/projects/:id/chat', chatRoutes);
 
 // Error handling
 app.use(notFoundHandler);

@@ -872,3 +872,61 @@ export interface DeduplicationStats {
   linkedToExisting: number;
   skipped: number;
 }
+
+// ============================================
+// AI CHAT (Phase 3)
+// ============================================
+
+// Chat message role
+export type ChatMessageRole = 'USER' | 'ASSISTANT' | 'SYSTEM';
+
+// Citation from AI response
+export interface Citation {
+  documentId: string;
+  filename: string;
+  pageNumber: number | null;
+  textExcerpt: string;
+  relevanceScore: number;
+}
+
+// Chat message model
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  role: ChatMessageRole;
+  content: string;
+  citations: Citation[] | null;
+  createdAt: string;
+}
+
+// Chat conversation model
+export interface ChatConversation extends Timestamps {
+  id: string;
+  projectId: string;
+  title: string | null;
+  createdById: string;
+  createdBy: Pick<User, 'id' | 'email' | 'name' | 'avatarUrl'>;
+  messages?: ChatMessage[];
+  messageCount: number;
+}
+
+// Chat DTOs
+export interface CreateConversationDto {
+  title?: string;
+}
+
+export interface UpdateConversationDto {
+  title: string;
+}
+
+export interface SendMessageDto {
+  content: string;
+  documentIds?: string[];
+}
+
+// Response from sending a message
+export interface SendMessageResponse {
+  userMessage: ChatMessage;
+  assistantMessage: ChatMessage;
+  citations: Citation[];
+}
