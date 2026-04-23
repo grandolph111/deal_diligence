@@ -9,12 +9,13 @@ import {
   useTeamMembers,
   useInvitations,
 } from '../features/settings';
-import { apiClient } from '../api';
+import { PlaybookTab } from '../features/settings/components/PlaybookTab';
+import { apiClient, foldersService } from '../api';
 import { useAuth } from '../auth';
-import type { Role } from '../types/api';
+import type { Role, FolderTreeNode } from '../types/api';
 import '../features/settings/settings.css';
 
-type TabType = 'general' | 'team';
+type TabType = 'general' | 'team' | 'playbook';
 
 export function SettingsPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -56,6 +57,7 @@ export function SettingsPage() {
 
   // Local state
   const [initialized, setInitialized] = useState(false);
+  const [folderTree, setFolderTree] = useState<FolderTreeNode[]>([]);
 
   // Get current user's role
   const currentUserMember = members.find((m) => m.user?.email === user?.email);
@@ -68,11 +70,13 @@ export function SettingsPage() {
     if (!projectId || authLoading || !apiClient.isReady()) return;
 
     try {
-      await Promise.all([
+      const [, , , tree] = await Promise.all([
         fetchProject(),
         fetchMembers(),
         fetchInvitations(),
+        foldersService.getFolderTree(projectId).catch(() => [] as FolderTreeNode[]),
       ]);
+      setFolderTree(tree);
     } catch (err) {
       // Error handled in hooks
     } finally {
@@ -159,7 +163,7 @@ export function SettingsPage() {
             <ArrowLeft size={16} />
             Back to Project
           </Link>
-          <h1>Project Settings</h1>
+          <h1>Project Admin</h1>
         </div>
       </div>
 
@@ -175,7 +179,9 @@ export function SettingsPage() {
           onUpdateProject={async (data) => {
             await updateProject(data);
           }}
-          onArchiveProject={archiveProject}
+          onArchiveProject={async (isArchived) => {
+            await archiveProject(isArchived);
+          }}
           onDeleteProject={handleDeleteProject}
           onTransferOwnership={handleTransferOwnership}
         />
@@ -185,17 +191,26 @@ export function SettingsPage() {
         <TeamTab
           members={members}
           invitations={invitations}
+          folderTree={folderTree}
           currentUserId={currentUserId}
           currentUserRole={currentUserRole}
           membersLoading={membersLoading}
           invitationsLoading={invitationsLoading}
-          onUpdateMember={updateMember}
+          onUpdateMember={async (memberId, data) => {
+            await updateMember(memberId, data);
+          }}
           onRemoveMember={removeMember}
           onCreateInvitation={createInvitation}
-          onResendInvitation={resendInvitation}
+          onResendInvitation={async (invitationId) => {
+            await resendInvitation(invitationId);
+          }}
           onCancelInvitation={cancelInvitation}
           onRefresh={fetchAllData}
         />
+      )}
+
+      {activeTab === 'playbook' && projectId && (
+        <PlaybookTab projectId={projectId} canEdit={isAdmin} />
       )}
     </div>
   );

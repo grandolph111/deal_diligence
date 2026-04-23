@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { ApiError } from '../../utils/ApiError';
-import { processingService } from '../../services/processing.service';
+import { reconciliationService } from '../../services/reconciliation.service';
 import { masterEntitiesService } from '../master-entities/master-entities.service';
 import {
   CreateRelationshipInput,
@@ -324,26 +324,27 @@ export const relationshipsService = {
   },
 
   /**
-   * Extract relationships from a document using Python service
+   * Trigger a project-level relationship reconciliation. Individual-document
+   * relationship extraction happens inside the first-pass Claude extraction;
+   * cross-document reconciliation runs over all project fact sheets.
    */
   async extractRelationships(documentId: string, projectId: string) {
-    // Verify document exists and belongs to project
     const document = await prisma.document.findFirst({
       where: { id: documentId, projectId },
     });
-
-    if (!document) {
-      throw ApiError.notFound('Document not found');
-    }
-
-    // Call Python service to extract relationships
-    const result = await processingService.extractRelationships(
-      documentId,
-      document.berryDbId || undefined,
-      document.s3Key
-    );
-
-    return result;
+    if (!document) throw ApiError.notFound('Document not found');
+    await reconciliationService.rebuildProjectGraph(projectId);
+    const count = await prisma.entityRelationship.count({
+      where: {
+        sourceEntity: { projectId },
+      },
+    });
+    return {
+      document_id: documentId,
+      relationships: [] as unknown[],
+      processing_time_ms: 0,
+      reconciled: count,
+    };
   },
 
   /**

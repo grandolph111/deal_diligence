@@ -31,10 +31,16 @@ export const tasksService = {
   },
 
   /**
-   * Get tasks grouped by status for Kanban board view
+   * Get tasks grouped by status for a Kanban board. Pass `boardId` to scope
+   * to a specific board; omit to fetch the project-wide view.
    */
-  async getKanbanBoard(projectId: string): Promise<KanbanBoard> {
-    return apiClient.get<KanbanBoard>(`/projects/${projectId}/tasks/board`);
+  async getKanbanBoard(projectId: string, boardId?: string): Promise<KanbanBoard> {
+    const params: Record<string, string> = {};
+    if (boardId) params.boardId = boardId;
+    return apiClient.get<KanbanBoard>(
+      `/projects/${projectId}/tasks/board`,
+      params
+    );
   },
 
   /**
@@ -122,6 +128,31 @@ export const tasksService = {
   async removeTag(projectId: string, taskId: string, tagId: string): Promise<void> {
     return apiClient.delete(
       `/projects/${projectId}/tasks/${taskId}/tags/${tagId}`
+    );
+  },
+
+  /**
+   * Fetch the Claude-generated risk report markdown for an AI task.
+   */
+  async getAiReport(projectId: string, taskId: string): Promise<string> {
+    return apiClient.getText(`/projects/${projectId}/tasks/${taskId}/ai-report`);
+  },
+
+  async runAi(projectId: string, taskId: string): Promise<{ success: true }> {
+    return apiClient.post<{ success: true }>(
+      `/projects/${projectId}/tasks/${taskId}/run-ai`
+    );
+  },
+
+  async approveAiReport(projectId: string, taskId: string): Promise<Task> {
+    return apiClient.post<Task>(
+      `/projects/${projectId}/tasks/${taskId}/ai-approve`
+    );
+  },
+
+  async requestAiChanges(projectId: string, taskId: string): Promise<Task> {
+    return apiClient.post<Task>(
+      `/projects/${projectId}/tasks/${taskId}/ai-request-changes`
     );
   },
 };

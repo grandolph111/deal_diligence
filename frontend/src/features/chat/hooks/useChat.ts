@@ -4,7 +4,6 @@ import type {
   ChatConversation,
   ChatMessage,
   Citation,
-  Document,
 } from '../../../types/api';
 
 interface UseChatOptions {

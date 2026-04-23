@@ -14,7 +14,7 @@ export const membersController = {
    * List all members of a project
    */
   listMembers: asyncHandler(async (req: Request, res: Response) => {
-    const { id: projectId } = req.params;
+    const { id: projectId } = req.params as Record<string, string>;
 
     const members = await membersService.getProjectMembers(projectId);
 
@@ -26,7 +26,7 @@ export const membersController = {
    * Invite a user to the project
    */
   inviteMember: asyncHandler(async (req: Request, res: Response) => {
-    const { id: projectId } = req.params;
+    const { id: projectId } = req.params as Record<string, string>;
 
     if (!req.user) {
       throw ApiError.unauthorized('User not found');
@@ -47,7 +47,7 @@ export const membersController = {
    * Get a single member
    */
   getMember: asyncHandler(async (req: Request, res: Response) => {
-    const { memberId } = req.params;
+    const { memberId } = req.params as Record<string, string>;
 
     const member = await membersService.getMemberById(memberId);
 
@@ -63,7 +63,7 @@ export const membersController = {
    * Update a member's role or permissions
    */
   updateMember: asyncHandler(async (req: Request, res: Response) => {
-    const { memberId } = req.params;
+    const { memberId } = req.params as Record<string, string>;
 
     if (!req.projectMember) {
       throw ApiError.forbidden('Project membership required');
@@ -84,7 +84,7 @@ export const membersController = {
    * Remove a member from the project
    */
   removeMember: asyncHandler(async (req: Request, res: Response) => {
-    const { memberId } = req.params;
+    const { memberId } = req.params as Record<string, string>;
 
     if (!req.projectMember) {
       throw ApiError.forbidden('Project membership required');
@@ -100,7 +100,7 @@ export const membersController = {
    * Leave a project
    */
   leaveProject: asyncHandler(async (req: Request, res: Response) => {
-    const { id: projectId } = req.params;
+    const { id: projectId } = req.params as Record<string, string>;
 
     if (!req.user) {
       throw ApiError.unauthorized('User not found');
@@ -116,7 +116,7 @@ export const membersController = {
    * Transfer project ownership to another member
    */
   transferOwnership: asyncHandler(async (req: Request, res: Response) => {
-    const { id: projectId } = req.params;
+    const { id: projectId } = req.params as Record<string, string>;
 
     if (!req.user) {
       throw ApiError.unauthorized('User not found');

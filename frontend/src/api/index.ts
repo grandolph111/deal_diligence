@@ -20,3 +20,7 @@ export { clausesService } from './services/clauses.service';
 export { masterEntitiesService } from './services/master-entities.service';
 export { relationshipsService } from './services/relationships.service';
 export { chatService } from './services/chat.service';
+export { dashboardService } from './services/dashboard.service';
+export { briefService } from './services/brief.service';
+export { playbookService } from './services/playbook.service';
+export { boardsService } from './services/boards.service';

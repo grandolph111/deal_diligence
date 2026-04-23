@@ -18,7 +18,7 @@ import {
   X,
   ShieldAlert,
   Tag,
-  Sparkles,
+  ScrollText,
 } from 'lucide-react';
 import type { Document, DocumentStatus, DocumentType, RiskLevel } from '../../../types/api';
 import { DOCUMENT_TYPE_LABELS, DOCUMENT_TYPE_COLORS, RISK_LEVEL_COLORS } from '../../../types/api';
@@ -37,6 +37,7 @@ interface DocumentListProps {
   onBulkDownload?: (documents: Document[]) => void;
   onRequestAccess?: (document: Document) => void;
   onFindSimilar?: (document: Document) => void;
+  onViewExtraction?: (document: Document) => void;
   isAdmin?: boolean;
   canUpload?: boolean;
   selectedFolderName?: string;
@@ -113,6 +114,7 @@ interface DocumentCardProps {
   onMove?: () => void;
   onRequestAccess?: () => void;
   onFindSimilar?: () => void;
+  onViewExtraction?: () => void;
   isAdmin?: boolean;
   isSelected?: boolean;
   onSelectChange?: (selected: boolean) => void;
@@ -129,7 +131,7 @@ function DocumentCard({
   onDelete,
   onMove,
   onRequestAccess,
-  onFindSimilar,
+  onViewExtraction,
   isAdmin,
   isSelected,
   onSelectChange,
@@ -257,9 +259,9 @@ function DocumentCard({
             <button onClick={() => { onClick?.(); setShowMenu(false); }}>
               <Eye size={14} /> View
             </button>
-            {document.processingStatus === 'COMPLETE' && onFindSimilar && (
-              <button onClick={() => { onFindSimilar(); setShowMenu(false); }}>
-                <Sparkles size={14} /> Find Similar
+            {document.processingStatus === 'COMPLETE' && onViewExtraction && (
+              <button onClick={() => { onViewExtraction(); setShowMenu(false); }}>
+                <ScrollText size={14} /> View Extraction
               </button>
             )}
             {!document.isViewOnly && onDownload && (
@@ -294,7 +296,7 @@ function DocumentRow({
   onDelete,
   onMove,
   onRequestAccess,
-  onFindSimilar,
+  onViewExtraction,
   isAdmin,
   isSelected,
   onSelectChange,
@@ -387,9 +389,9 @@ function DocumentRow({
         <button className="icon-button" onClick={(e) => { e.stopPropagation(); onClick?.(); }} title="View">
           <Eye size={16} />
         </button>
-        {document.processingStatus === 'COMPLETE' && onFindSimilar && (
-          <button className="icon-button" onClick={(e) => { e.stopPropagation(); onFindSimilar(); }} title="Find Similar">
-            <Sparkles size={16} />
+        {document.processingStatus === 'COMPLETE' && onViewExtraction && (
+          <button className="icon-button" onClick={(e) => { e.stopPropagation(); onViewExtraction(); }} title="View Extraction">
+            <ScrollText size={16} />
           </button>
         )}
         {!document.isViewOnly && onDownload && (
@@ -429,6 +431,7 @@ export function DocumentList({
   onBulkDownload,
   onRequestAccess,
   onFindSimilar,
+  onViewExtraction,
   isAdmin = false,
   canUpload = false,
   selectedFolderName,
@@ -585,6 +588,7 @@ export function DocumentList({
                 onMove={() => onDocumentMove?.(doc)}
                 onRequestAccess={() => onRequestAccess?.(doc)}
                 onFindSimilar={() => onFindSimilar?.(doc)}
+                onViewExtraction={onViewExtraction ? () => onViewExtraction(doc) : undefined}
                 isAdmin={isAdmin}
                 isSelected={selectedIds.has(doc.id)}
                 onSelectChange={canSelect ? (selected) => handleSelectChange(doc.id, selected) : undefined}
@@ -630,6 +634,7 @@ export function DocumentList({
                   onMove={() => onDocumentMove?.(doc)}
                   onRequestAccess={() => onRequestAccess?.(doc)}
                   onFindSimilar={() => onFindSimilar?.(doc)}
+                  onViewExtraction={onViewExtraction ? () => onViewExtraction(doc) : undefined}
                   isAdmin={isAdmin}
                   isSelected={selectedIds.has(doc.id)}
                   onSelectChange={canSelect ? (selected) => handleSelectChange(doc.id, selected) : undefined}

@@ -33,24 +33,7 @@ export const citationSchema = z.object({
   relevanceScore: z.number().min(0).max(1),
 });
 
-/**
- * Response from Python service chat endpoint
- */
-export const pythonChatResponseSchema = z.object({
-  message: z.string(),
-  conversation_id: z.string(),
-  citations: z.array(z.object({
-    document_id: z.string(),
-    filename: z.string(),
-    page_number: z.number().nullable().optional(),
-    text_excerpt: z.string(),
-    relevance_score: z.number().min(0).max(1),
-  })),
-  processing_time_ms: z.number(),
-});
-
 export type CreateConversationInput = z.infer<typeof createConversationSchema>;
 export type UpdateConversationInput = z.infer<typeof updateConversationSchema>;
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
 export type Citation = z.infer<typeof citationSchema>;
-export type PythonChatResponse = z.infer<typeof pythonChatResponseSchema>;

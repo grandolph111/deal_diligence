@@ -6,14 +6,14 @@ import { asyncHandler } from '../../utils/asyncHandler';
 
 export const commentsController = {
   listComments: asyncHandler(async (req: Request, res: Response) => {
-    const { taskId } = req.params;
+    const { taskId } = req.params as Record<string, string>;
 
     const comments = await commentsService.getTaskComments(taskId);
     res.json(comments);
   }),
 
   createComment: asyncHandler(async (req: Request, res: Response) => {
-    const { taskId } = req.params;
+    const { taskId } = req.params as Record<string, string>;
 
     if (!req.user) {
       throw ApiError.unauthorized('User not found');
@@ -26,7 +26,7 @@ export const commentsController = {
   }),
 
   updateComment: asyncHandler(async (req: Request, res: Response) => {
-    const { id: projectId, commentId } = req.params;
+    const { id: projectId, commentId } = req.params as Record<string, string>;
 
     if (!req.user) {
       throw ApiError.unauthorized('User not found');
@@ -44,7 +44,7 @@ export const commentsController = {
   }),
 
   deleteComment: asyncHandler(async (req: Request, res: Response) => {
-    const { id: projectId, commentId } = req.params;
+    const { id: projectId, commentId } = req.params as Record<string, string>;
 
     if (!req.user) {
       throw ApiError.unauthorized('User not found');

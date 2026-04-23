@@ -9,3 +9,5 @@ export { SettingsPage } from './SettingsPage';
 export { VDRPage } from './VDRPage';
 export { EntitiesPage } from './EntitiesPage';
 export { GraphExplorerPage } from './GraphExplorerPage';
+export { DealBriefPage } from './DealBriefPage';
+export { BoardsIndexPage } from './BoardsIndexPage';

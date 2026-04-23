@@ -216,10 +216,13 @@ export const relationshipsService = {
     projectId: string,
     entityTypeFilter?: EntityType
   ): Promise<GraphData> {
-    // Fetch master entities with document counts
+    // Fetch master entities with document counts. Backend caps limit at 100
+    // per request; if a deal has more, the graph renders the top 100 and users
+    // can filter by entity type to narrow further. For the prototype scale
+    // (dozens of docs per deal), one page is sufficient.
     const entitiesUrl = entityTypeFilter
-      ? `/projects/${projectId}/master-entities?entityType=${entityTypeFilter}&limit=500`
-      : `/projects/${projectId}/master-entities?limit=500`;
+      ? `/projects/${projectId}/master-entities?entityType=${entityTypeFilter}&limit=100`
+      : `/projects/${projectId}/master-entities?limit=100`;
 
     const [entitiesResponse, relationshipsResponse] = await Promise.all([
       apiClient.get<{
@@ -230,7 +233,7 @@ export const relationshipsService = {
           documentCount: number;
         }>;
       }>(entitiesUrl),
-      this.listRelationships(projectId, { limit: 1000 }),
+      this.listRelationships(projectId, { limit: 100 }),
     ]);
 
     // Build nodes from entities

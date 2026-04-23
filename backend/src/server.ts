@@ -1,7 +1,8 @@
 import app from './app';
-import { config } from './config';
+import { config, isClaudeConfigured } from './config';
 import { prisma } from './config/database';
 import { s3Service } from './services/s3.service';
+import { boardsService } from './services/boards.service';
 
 const startServer = async () => {
   try {
@@ -21,29 +22,27 @@ const startServer = async () => {
       console.log('  VDR document uploads will not work until S3 is properly configured');
     }
 
-    // Check Python microservice (non-blocking)
+    // Backfill: ensure every project has an "All Documents" board,
+    // and every task has a boardId. Idempotent — safe on every boot.
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
-      const pythonRes = await fetch(`${config.pythonService.url}/health`, {
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      if (pythonRes.ok) {
-        const pythonHealth = (await pythonRes.json()) as { berrydb_configured?: boolean };
-        console.log(`✓ Python microservice connected at ${config.pythonService.url}`);
-        if (pythonHealth.berrydb_configured) {
-          console.log('  ✓ BerryDB is configured');
-        } else {
-          console.log('  ⚠ BerryDB not configured - AI search will use fallback');
-        }
-      } else {
-        console.log(`⚠ Python microservice returned status ${pythonRes.status}`);
+      const { created, linked } = await boardsService.ensureDefaultBoardsForAllProjects();
+      if (created > 0 || linked > 0) {
+        console.log(`✓ Kanban: created ${created} default board(s), linked ${linked} task(s)`);
       }
-    } catch {
-      console.log(`⚠ Python microservice not available at ${config.pythonService.url}`);
-      console.log('  AI-powered search will use PostgreSQL fallback');
+    } catch (err) {
+      console.warn('⚠ Kanban default-board backfill failed (non-fatal):', err instanceof Error ? err.message : err);
+    }
+
+    // Check Claude configuration
+    if (isClaudeConfigured()) {
+      const provider = config.claude.provider;
+      const model = provider === 'bedrock'
+        ? config.claude.bedrockModels.extraction
+        : config.claude.models.extraction;
+      console.log(`✓ Claude configured (provider: ${provider}, extraction: ${model})`);
+    } else {
+      console.log('⚠ Claude not configured — extraction will run in MOCK mode.');
+      console.log('  Set ANTHROPIC_API_KEY for dev, or CLAUDE_PROVIDER=bedrock for prod.');
     }
 
     app.listen(config.port, () => {

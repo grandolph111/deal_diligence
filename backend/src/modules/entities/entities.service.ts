@@ -1,5 +1,4 @@
 import { prisma } from '../../config/database';
-import { config } from '../../config';
 import { ApiError } from '../../utils/ApiError';
 import {
   CreateEntityInput,
@@ -9,23 +8,6 @@ import {
   UpdateEntityInput,
   LOW_CONFIDENCE_THRESHOLD,
 } from './entities.validators';
-
-/**
- * Response from Python microservice entity extraction
- */
-interface PythonEntityResponse {
-  document_id: string;
-  entities: Array<{
-    text: string;
-    entity_type: string;
-    confidence: number;
-    start_offset: number;
-    end_offset: number;
-    page_number: number | null;
-    normalized_value: string | null;
-  }>;
-  processing_time_ms: number;
-}
 
 export const entitiesService = {
   /**
@@ -175,59 +157,22 @@ export const entitiesService = {
   },
 
   /**
-   * Call Python microservice to extract entities from a document
+   * Re-run entity extraction on a document by re-triggering the Claude pipeline.
+   * In the Claude-native architecture, entities are extracted as part of the
+   * single-pass document extraction — so "re-extract entities" is the same as
+   * "re-run extraction".
    */
   async extractEntitiesFromDocument(documentId: string, projectId: string) {
     const document = await this.verifyDocumentInProject(documentId, projectId);
-
     if (document.processingStatus !== 'COMPLETE') {
-      throw ApiError.badRequest('Document processing is not complete');
-    }
-
-    // Check if Python service is configured
-    if (!config.pythonService.url) {
-      throw ApiError.internal('Python service is not configured');
+      throw ApiError.badRequest('Document extraction is not complete');
     }
 
     try {
-      const response = await fetch(`${config.pythonService.url}/analyze/entities`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          document_id: documentId,
-          berrydb_id: document.berryDbId,
-          s3_key: document.s3Key,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Python service error: ${response.status} - ${errorText}`);
-      }
-
-      const result = (await response.json()) as PythonEntityResponse;
-
-      // Transform Python response to our schema format
-      const syncInput: SyncEntitiesInput = {
-        entities: result.entities.map((entity) => ({
-          text: entity.text,
-          entityType: entity.entity_type.toUpperCase() as SyncEntitiesInput['entities'][0]['entityType'],
-          confidence: entity.confidence,
-          startOffset: entity.start_offset,
-          endOffset: entity.end_offset,
-          pageNumber: entity.page_number,
-          normalizedValue: entity.normalized_value,
-        })),
-      };
-
-      // Sync to database
-      await this.syncEntitiesFromPython(documentId, projectId, syncInput);
-
-      return {
-        documentId,
-        extractedCount: result.entities.length,
-        processingTimeMs: result.processing_time_ms,
-      };
+      const { extractionService } = await import('../../services/extraction.service');
+      await extractionService.manualRetry(documentId);
+      const entities = await prisma.documentEntity.count({ where: { documentId } });
+      return { documentId, extractedCount: entities, processingTimeMs: 0 };
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw ApiError.internal(

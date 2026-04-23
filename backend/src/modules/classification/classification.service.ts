@@ -1,5 +1,4 @@
 import { prisma } from '../../config/database';
-import { config } from '../../config';
 import { ApiError } from '../../utils/ApiError';
 import {
   ClassifyDocumentInput,
@@ -9,17 +8,6 @@ import {
   DocumentType,
   RiskLevel,
 } from './classification.validators';
-
-interface PythonClassifyResponse {
-  document_id: string;
-  document_type: string;
-  document_type_confidence: number;
-  risk_level?: string;
-  risk_level_confidence?: number;
-  language?: string;
-  currency?: string;
-  region?: string;
-}
 
 export const classificationService = {
   /**
@@ -55,62 +43,30 @@ export const classificationService = {
   },
 
   /**
-   * Classify a document by calling the Python microservice
+   * Re-classify a document by re-running the Claude extraction pipeline.
+   * Classification (document type, risk level, language, currency, region) is
+   * produced as part of single-pass extraction in the Claude-native architecture.
    */
   async classifyViaAI(documentId: string, projectId: string): Promise<ClassificationResult> {
     const document = await this.verifyDocumentInProject(documentId, projectId);
-
-    // Check if Python service is configured
-    if (!config.pythonService.url) {
-      throw ApiError.internal('Classification service not configured');
-    }
-
     try {
-      const response = await fetch(`${config.pythonService.url}/analyze/classify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          document_id: document.id,
-          project_id: projectId,
-          s3_key: document.s3Key,
-          filename: document.name,
-          mime_type: document.mimeType,
-        }),
+      const { extractionService } = await import('../../services/extraction.service');
+      await extractionService.manualRetry(documentId);
+      const fresh = await prisma.document.findUniqueOrThrow({
+        where: { id: documentId },
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Classification service error: ${response.status} - ${errorText}`);
-      }
-
-      const result = (await response.json()) as PythonClassifyResponse;
-
-      // Map to our classification result format
-      const classification: ClassificationResult = {
+      return {
         documentId: document.id,
-        documentType: this.normalizeDocumentType(result.document_type),
-        documentTypeConfidence: result.document_type_confidence,
-        riskLevel: result.risk_level
-          ? this.normalizeRiskLevel(result.risk_level)
+        documentType: this.normalizeDocumentType(fresh.documentType ?? 'OTHER'),
+        documentTypeConfidence: 1.0,
+        riskLevel: fresh.riskLevel
+          ? this.normalizeRiskLevel(fresh.riskLevel)
           : undefined,
-        riskLevelConfidence: result.risk_level_confidence,
-        language: result.language,
-        currency: result.currency,
-        region: result.region,
+        riskLevelConfidence: fresh.riskLevel ? 1.0 : undefined,
+        language: fresh.language ?? undefined,
+        currency: fresh.currency ?? undefined,
+        region: fresh.region ?? undefined,
       };
-
-      // Save classification to database
-      await this.syncClassification(documentId, projectId, {
-        documentType: classification.documentType,
-        documentTypeConfidence: classification.documentTypeConfidence,
-        riskLevel: classification.riskLevel,
-        riskLevelConfidence: classification.riskLevelConfidence,
-        language: classification.language,
-        currency: classification.currency,
-        region: classification.region,
-      });
-
-      return classification;
     } catch (error) {
       if (error instanceof ApiError) {
         throw error;

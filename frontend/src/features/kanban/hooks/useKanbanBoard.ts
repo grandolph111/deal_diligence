@@ -2,7 +2,10 @@ import { useState, useCallback } from 'react';
 import { tasksService } from '../../../api/services/tasks.service';
 import type { Task, KanbanBoard, TaskStatus, CreateTaskDto } from '../../../types/api';
 
-export function useKanbanBoard(projectId: string | undefined) {
+export function useKanbanBoard(
+  projectId: string | undefined,
+  boardId?: string
+) {
   const [board, setBoard] = useState<KanbanBoard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -13,7 +16,7 @@ export function useKanbanBoard(projectId: string | undefined) {
     try {
       setLoading(true);
       setError(null);
-      const data = await tasksService.getKanbanBoard(projectId);
+      const data = await tasksService.getKanbanBoard(projectId, boardId);
       setBoard(data);
     } catch (err) {
       setError('Failed to load board');
@@ -21,15 +24,19 @@ export function useKanbanBoard(projectId: string | undefined) {
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, boardId]);
 
   const createTask = useCallback(async (data: CreateTaskDto): Promise<Task> => {
     if (!projectId) throw new Error('No project ID');
 
-    const task = await tasksService.createTask(projectId, data);
+    // New tasks land on the active board by default.
+    const task = await tasksService.createTask(projectId, {
+      ...data,
+      boardId: data.boardId ?? boardId,
+    });
     await fetchBoard();
     return task;
-  }, [projectId, fetchBoard]);
+  }, [projectId, boardId, fetchBoard]);
 
   const updateTaskStatus = useCallback(async (taskId: string, status: TaskStatus): Promise<void> => {
     if (!projectId) return;

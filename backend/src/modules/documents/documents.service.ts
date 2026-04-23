@@ -4,7 +4,7 @@ import { s3Service } from '../../services/s3.service';
 import { ApiError } from '../../utils/ApiError';
 import { InitiateUploadInput, ListDocumentsQuery } from './documents.validators';
 import { foldersService } from '../folders/folders.service';
-import { processingService } from '../../services/processing.service';
+import { extractionService } from '../../services/extraction.service';
 
 export interface DocumentUploadResult {
   documentId: string;
@@ -88,6 +88,24 @@ export const documentsService = {
   },
 
   /**
+   * Get the extracted fact-sheet markdown for a document.
+   * Returns the raw markdown string. Throws 404 if no extraction has run yet.
+   */
+  async getFactSheetMarkdown(documentId: string, projectId: string): Promise<string> {
+    const document = await this.getDocumentById(documentId, projectId);
+    if (!document.extractionS3Key) {
+      throw ApiError.notFound(
+        'No extraction available yet. This document has not completed processing.'
+      );
+    }
+    try {
+      return await s3Service.getObjectText(document.extractionS3Key);
+    } catch {
+      throw ApiError.notFound('Extraction file not found in storage.');
+    }
+  },
+
+  /**
    * Get a document with download URL
    * Note: Download is allowed regardless of processing status since file is in S3
    * Processing only extracts metadata (document type, risk level, etc.)
@@ -119,7 +137,8 @@ export const documentsService = {
     uploadedById: string,
     data: InitiateUploadInput
   ): Promise<DocumentUploadResult> {
-    if (!s3Service.isConfigured()) {
+    // Allow uploads if S3 is configured OR in mock mode (development)
+    if (!s3Service.isConfigured() && !s3Service.isMockMode()) {
       throw ApiError.internal('S3 is not configured');
     }
 
@@ -200,12 +219,10 @@ export const documentsService = {
       throw ApiError.badRequest('Document upload already confirmed');
     }
 
-    // Trigger processing pipeline (async - does not wait for completion)
-    // Processing will update status to PROCESSING -> COMPLETE/FAILED
-    processingService.triggerProcessing(documentId).catch((error) => {
-      // Log error but don't fail the request - processing can be retried
+    // Trigger Claude extraction pipeline (async - does not wait for completion)
+    extractionService.triggerExtraction(documentId).catch((error: unknown) => {
       // eslint-disable-next-line no-console
-      console.error(`Failed to trigger processing for document ${documentId}:`, error);
+      console.error(`Failed to trigger extraction for document ${documentId}:`, error);
     });
 
     // Return the document (still in PENDING status, processing runs async)

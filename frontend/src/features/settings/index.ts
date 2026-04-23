@@ -7,6 +7,7 @@ export { DangerZone } from './components/DangerZone';
 export { MemberList } from './components/MemberList';
 export { MemberRow } from './components/MemberRow';
 export { MemberEditModal } from './components/MemberEditModal';
+export { FolderScopePicker } from './components/FolderScopePicker';
 export { InvitationList } from './components/InvitationList';
 export { InvitationRow } from './components/InvitationRow';
 export { InviteMemberModal } from './components/InviteMemberModal';

@@ -13,6 +13,8 @@ import {
   VDRPage,
   EntitiesPage,
   GraphExplorerPage,
+  DealBriefPage,
+  BoardsIndexPage,
 } from './pages';
 
 /**
@@ -63,7 +65,21 @@ export const router = createBrowserRouter([
             element: <ProjectOverviewPage />,
           },
           {
+            path: 'brief',
+            element: <DealBriefPage />,
+          },
+          {
+            // Legacy single-board URL: redirect to the boards index which
+            // will send users to the default "All Documents" board.
             path: 'board',
+            element: <Navigate to="../boards" replace />,
+          },
+          {
+            path: 'boards',
+            element: <BoardsIndexPage />,
+          },
+          {
+            path: 'boards/:boardId',
             element: <KanbanPage />,
           },
           {

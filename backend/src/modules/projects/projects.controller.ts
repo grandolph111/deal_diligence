@@ -30,7 +30,7 @@ export const projectsController = {
    * Get a single project
    */
   getProject: asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const { id } = req.params as Record<string, string>;
 
     const project = await projectsService.getProjectById(id);
 
@@ -66,7 +66,7 @@ export const projectsController = {
    * Update a project
    */
   updateProject: asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const { id } = req.params as Record<string, string>;
     const data = updateProjectSchema.parse(req.body);
 
     const project = await projectsService.updateProject(id, data);
@@ -79,7 +79,7 @@ export const projectsController = {
    * Delete a project (OWNER only)
    */
   deleteProject: asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const { id } = req.params as Record<string, string>;
 
     await projectsService.deleteProject(id);
 
@@ -106,7 +106,7 @@ export const projectsController = {
    * Archive or unarchive a project (OWNER/ADMIN only)
    */
   archiveProject: asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const { id } = req.params as Record<string, string>;
     const data = archiveProjectSchema.parse(req.body);
 
     const project = await projectsService.archiveProject(id, data);
@@ -123,7 +123,7 @@ export const projectsController = {
       throw ApiError.unauthorized('User not found');
     }
 
-    const { id } = req.params;
+    const { id } = req.params as Record<string, string>;
     const data = transferOwnershipSchema.parse(req.body);
 
     await projectsService.transferOwnership(id, req.user.id, data);

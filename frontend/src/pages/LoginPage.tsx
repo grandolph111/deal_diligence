@@ -15,14 +15,25 @@ export function LoginPage() {
   const returnTo = (location.state as { returnTo?: string })?.returnTo || '/dashboard';
 
   useEffect(() => {
-    // If already authenticated, redirect to dashboard
+    // If already authenticated, redirect to dashboard or stored redirect path
     if (isAuthenticated && !isLoading) {
-      navigate(returnTo, { replace: true });
+      const storedRedirect = localStorage.getItem('mock_auth_redirect');
+      const finalReturnTo = storedRedirect || returnTo;
+      if (storedRedirect) {
+        localStorage.removeItem('mock_auth_redirect');
+      }
+      navigate(finalReturnTo, { replace: true });
     }
   }, [isAuthenticated, isLoading, navigate, returnTo]);
 
   const handleLogin = () => {
-    login(returnTo);
+    // In development with mock auth, just navigate directly
+    if (import.meta.env.MODE === 'development') {
+      localStorage.setItem('mock_auth_logged_in', 'true');
+      navigate(returnTo || '/projects', { replace: true });
+    } else {
+      login(returnTo);
+    }
   };
 
   if (isLoading) {
@@ -39,17 +50,21 @@ export function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-container">
+        <div className="login-brandmark">
+          <span className="mark" aria-hidden="true" />
+          <span className="wordmark">DealDiligence</span>
+        </div>
         <div className="login-header">
-          <h1>DealDiligence</h1>
-          <p>M&A due diligence platform</p>
+          <h1>Due diligence,<br />written by AI.</h1>
+          <p>Upload a data room. AI reads every document end-to-end, produces CUAD-aligned fact sheets, scores risk, and answers in natural language.</p>
         </div>
         <div className="login-content">
           <button className="login-button" onClick={handleLogin}>
             <LogIn size={18} />
-            Sign In
+            Sign in
           </button>
           <p className="login-hint">
-            Sign in with your account to access your projects
+            Continue with your corporate account
           </p>
         </div>
       </div>

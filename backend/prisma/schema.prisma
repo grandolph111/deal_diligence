@@ -24,6 +24,7 @@ model User {
   memberships      ProjectMember[]
   assignedTasks    TaskAssignee[]
   createdTasks     Task[]          @relation("TaskCreator")
+  createdBoards    KanbanBoard[]   @relation("BoardCreator")
   comments         TaskComment[]   @relation("CommentAuthor")
   assignedSubtasks Subtask[]       @relation("SubtaskAssignee")
 
@@ -53,10 +54,17 @@ model Project {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  // Playbook (standard positions + red flags) conditioning extraction risk.
+  playbook Json?
+
+  // Deal brief scope manifest: { [scopeKey]: { s3Key, updatedAt } }
+  briefManifest Json?
+
   // Relations
   members            ProjectMember[]
   pendingInvitations PendingInvitation[]
   tasks              Task[]
+  boards             KanbanBoard[]
   documents          Document[]
   tags               Tag[]
 
@@ -118,12 +126,47 @@ model PendingInvitation {
 }
 
 // ============================================
-// KANBAN TASKS
+// KANBAN TASKS (multi-board)
 // ============================================
+
+model KanbanBoard {
+  id          String   @id @default(uuid())
+  projectId   String
+  name        String
+  description String?
+  // Default board = auto-migrated "All Documents" board. Cannot be deleted.
+  isDefault   Boolean  @default(false)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project   Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User                @relation("BoardCreator", fields: [createdById], references: [id])
+  folders   KanbanBoardFolder[]
+  tasks     Task[]
+
+  @@unique([projectId, name])
+  @@index([projectId])
+}
+
+// N:N join: which data-room folders a board covers.
+model KanbanBoardFolder {
+  boardId  String
+  folderId String
+
+  board  KanbanBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  folder Folder      @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@id([boardId, folderId])
+  @@index([boardId])
+  @@index([folderId])
+}
 
 model Task {
   id           String       @id @default(uuid())
   projectId    String
+  // Nullable during migration window — tightened to NOT NULL after backfill.
+  boardId      String?
   title        String
   description  String?
   status       TaskStatus   @default(TODO)
@@ -134,12 +177,25 @@ model Task {
   dueDate      DateTime?
   timeEstimate Int?
 
+  // AI workflow fields (null = plain task; non-null = AI task)
+  aiPrompt           String?       @db.Text
+  aiStatus           TaskAiStatus?
+  aiReportS3Key      String?
+  aiReportSummary    String?       @db.Text
+  aiModel            String?
+  aiConfidenceScore  Int?
+  aiConfidenceReason String?       @db.Text
+  aiStartedAt        DateTime?
+  aiCompletedAt      DateTime?
+  aiError            String?       @db.Text
+
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Relations
   project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  board         KanbanBoard?     @relation(fields: [boardId], references: [id], onDelete: SetNull)
   createdBy     User             @relation("TaskCreator", fields: [createdById], references: [id])
   assignees     TaskAssignee[]
   tags          TaskTag[]
@@ -149,7 +205,10 @@ model Task {
   taskDocuments TaskDocument[]
 
   @@index([projectId])
+  @@index([boardId])
+  @@index([boardId, status])
   @@index([projectId, status])
+  @@index([projectId, aiStatus])
   @@index([createdById])
 }
 
@@ -158,6 +217,14 @@ enum TaskStatus {
   IN_PROGRESS
   IN_REVIEW
   COMPLETE
+}
+
+enum TaskAiStatus {
+  IDLE
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
 }
 
 enum TaskPriority {
@@ -275,10 +342,11 @@ model Folder {
   updatedAt DateTime @updatedAt
 
   // Relations
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  parent    Folder?    @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
-  children  Folder[]   @relation("FolderHierarchy")
-  documents Document[]
+  project      Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent       Folder?             @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Folder[]            @relation("FolderHierarchy")
+  documents    Document[]
+  kanbanBoards KanbanBoardFolder[]
 
   @@unique([projectId, parentId, name])
   @@index([projectId])
@@ -296,22 +364,44 @@ model Document {
   mimeType  String
   sizeBytes Int
 
-  // BerryDB integration
-  berryDbId        String?        @unique
-  processingStatus DocumentStatus @default(PENDING)
-
   // Processing pipeline
-  retryCount Int?     @default(0)
-  lastError  String?
+  processingStatus DocumentStatus @default(PENDING)
+  retryCount       Int?           @default(0)
+  lastError        String?
 
-  // Extracted metadata (synced from BerryDB)
-  documentType  String?
-  riskLevel     String?
-  pageCount     Int?
-  extractedText String? @db.Text
-  language      String?
-  currency      String?
-  region        String?
+  // Claude extraction output
+  extractionS3Key       String? // S3 pointer to fact-sheet markdown
+  extractionSummary     String? @db.Text // first ~200 chars for list views
+  extractionContentHash String? // S3 ETag + model ID composite; idempotency key
+  extractionModel       String? // audit
+
+  // Risk assessment (produced by first-pass extraction)
+  riskScore   Int? // 0-10 scale
+  riskLevel   String? // LOW | MEDIUM | HIGH (derived from riskScore)
+  riskSummary String? @db.Text // prose top-3-risks summary
+
+  // Deal metadata (produced by first-pass extraction)
+  documentType           String?
+  documentTypeConfidence Float?
+  pageCount              Int?
+  extractedText          String? @db.Text
+  language               String?
+  currency               String?
+  region                 String?
+  dealValue              Decimal?
+  effectiveDate          DateTime?
+  governingLaw           String?
+
+  // Self-reported confidence in extraction quality (0-100)
+  confidenceScore  Int?
+  confidenceReason String? @db.Text
+
+  // Verification pass (Sonnet, two-pass quality gate)
+  verificationStatus String? // VERIFIED | NEEDS_REVIEW | FAILED | null
+  verificationIssues Json? // array of {type, severity, description, location, suggestedCorrection}
+
+  // Peer-group anomaly flags from reconciliation
+  anomalyFlags Json? // array of {clauseType, thisValue, peerValue, peerSize, reason}
 
   // Access control
   isViewOnly Boolean @default(false)
@@ -326,7 +416,6 @@ model Document {
   folder          Folder?          @relation(fields: [folderId], references: [id], onDelete: SetNull)
   uploadedBy      User             @relation("DocumentUploader", fields: [uploadedById], references: [id])
   taskAttachments TaskAttachment[]
-  chunks          DocumentChunk[]
   taskDocuments   TaskDocument[]
 
   // Phase 2B Relations
@@ -337,6 +426,7 @@ model Document {
   @@index([projectId, folderId])
   @@index([projectId, documentType])
   @@index([projectId, processingStatus])
+  @@index([projectId, riskScore])
 }
 
 enum DocumentStatus {
@@ -344,20 +434,6 @@ enum DocumentStatus {
   PROCESSING
   COMPLETE
   FAILED
-}
-
-model DocumentChunk {
-  id         String @id @default(uuid())
-  documentId String
-  chunkIndex Int
-  content    String @db.Text
-  pageNumber Int?
-  tokenCount Int?
-  // embedding  Unsupported("vector(1536)")  // Uncomment for pgvector
-
-  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-
-  @@index([documentId, chunkIndex])
 }
 
 // ============================================

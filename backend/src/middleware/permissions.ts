@@ -18,7 +18,8 @@ export const loadProjectMembership = async (
   next: NextFunction
 ) => {
   try {
-    const projectId = req.params.id || req.params.projectId;
+    const params = req.params as Record<string, string>;
+    const projectId = params.id || params.projectId;
     const userId = req.user?.id;
 
     if (!projectId) {

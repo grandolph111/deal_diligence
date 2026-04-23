@@ -1,4 +1,4 @@
-import { Edit2, Trash2 } from 'lucide-react';
+import { Edit2, Trash2, FolderLock } from 'lucide-react';
 import type { ProjectMember, Role } from '../../../types/api';
 
 interface MemberRowProps {
@@ -60,6 +60,17 @@ export function MemberRow({
       <span className={`member-role ${member.role.toLowerCase()}`}>
         {member.role}
       </span>
+      {member.role !== 'OWNER' && member.role !== 'ADMIN' &&
+        (member.permissions?.restrictedFolders?.length ?? 0) > 0 && (
+          <span
+            className="member-scope-chip"
+            title={`Restricted to ${member.permissions?.restrictedFolders?.length} folder(s)`}
+          >
+            <FolderLock size={12} />
+            {member.permissions?.restrictedFolders?.length} folder
+            {(member.permissions?.restrictedFolders?.length ?? 0) === 1 ? '' : 's'}
+          </span>
+        )}
       {canModify && !isCurrentUser && (
         <div className="member-actions">
           <button

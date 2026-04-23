@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
+  Tag,
 } from 'lucide-react';
 import type { DocumentEntity, EntityType } from '../../../types/api';
 import { ENTITY_TYPE_COLORS, ENTITY_TYPE_LABELS } from '../../../types/api';
@@ -22,8 +23,10 @@ interface EntityDetailsModalProps {
   onNavigateToPage?: (pageNumber: number) => void;
 }
 
-// Icons for each entity type
-const ENTITY_TYPE_ICONS: Record<EntityType, React.ElementType> = {
+// Icons for each entity type. Partial<> + fallback handles entity types the
+// backend extractor emits that aren't in the frontend's closed enum (e.g.
+// ADDRESS, REGULATOR, ROLE from Claude's free-form entityType output).
+const ENTITY_TYPE_ICONS: Partial<Record<EntityType, React.ElementType>> = {
   PERSON: User,
   ORGANIZATION: Building2,
   DATE: Calendar,
@@ -34,6 +37,16 @@ const ENTITY_TYPE_ICONS: Record<EntityType, React.ElementType> = {
   CLAUSE_TYPE: Scale,
   JURISDICTION: Globe,
 };
+
+const DEFAULT_ENTITY_ICON: React.ElementType = Tag;
+const DEFAULT_ENTITY_COLOR = '#6b7280';
+
+const humanizeEntityType = (type: string): string =>
+  type
+    .toLowerCase()
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 
 /**
  * Format confidence score as percentage with color
@@ -66,7 +79,12 @@ export function EntityDetailsModal({
   onClose,
   onNavigateToPage,
 }: EntityDetailsModalProps) {
-  const Icon = ENTITY_TYPE_ICONS[entity.entityType];
+  const Icon = ENTITY_TYPE_ICONS[entity.entityType] ?? DEFAULT_ENTITY_ICON;
+  const entityColor =
+    ENTITY_TYPE_COLORS[entity.entityType] ?? DEFAULT_ENTITY_COLOR;
+  const entityLabel =
+    ENTITY_TYPE_LABELS[entity.entityType] ??
+    humanizeEntityType(entity.entityType);
   const confidenceClass = getConfidenceClass(entity.confidence);
 
   const handleGoToPage = () => {
@@ -82,14 +100,14 @@ export function EntityDetailsModal({
         className="entity-details-modal"
         onClick={(e) => e.stopPropagation()}
         style={{
-          '--entity-color': ENTITY_TYPE_COLORS[entity.entityType],
+          '--entity-color': entityColor,
         } as React.CSSProperties}
       >
         {/* Header */}
         <div className="entity-details-header">
           <div className="entity-details-type">
             <Icon size={18} />
-            <span>{ENTITY_TYPE_LABELS[entity.entityType]}</span>
+            <span>{entityLabel}</span>
           </div>
           <button className="icon-button" onClick={onClose} title="Close">
             <X size={18} />

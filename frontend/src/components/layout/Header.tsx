@@ -12,6 +12,7 @@ export function Header() {
     <header className="app-header">
       <div className="header-left">
         <Link to="/dashboard" className="logo">
+          <span className="logo-mark" aria-hidden="true" />
           DealDiligence
         </Link>
         <nav className="header-nav">

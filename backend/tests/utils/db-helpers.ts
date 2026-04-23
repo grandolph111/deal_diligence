@@ -25,7 +25,6 @@ export async function cleanDatabase(): Promise<void> {
   await prisma.documentEntity.deleteMany();
   await prisma.documentAnnotation.deleteMany();
   await prisma.masterEntity.deleteMany();
-  await prisma.documentChunk.deleteMany();
   await prisma.document.deleteMany();
   await prisma.folder.deleteMany();
   await prisma.auditLog.deleteMany();
@@ -108,14 +107,14 @@ export async function addProjectMember(
   projectId: string,
   userId: string,
   role: ProjectRole = ProjectRole.MEMBER,
-  permissions?: Record<string, boolean>
+  permissions?: Record<string, boolean | string[]>
 ) {
   return prisma.projectMember.create({
     data: {
       projectId,
       userId,
       role,
-      permissions: permissions || null,
+      permissions: permissions ?? undefined,
       acceptedAt: new Date(),
     },
   });
@@ -358,54 +357,53 @@ export async function createTestFolder(
 
 /**
  * Create a test document
- * Supports two signatures:
+ * Supports three signatures:
  *   createTestDocument(projectId, uploadedById, options?)
+ *   createTestDocument(projectId, { uploadedById, ...options })
  *   createTestDocument({ projectId, uploadedById, ...options })
  */
+type CreateDocOptions = {
+  name?: string;
+  folderId?: string;
+  s3Key?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  processingStatus?: DocumentStatus;
+};
+
+type CreateDocOptionsWithUploader = CreateDocOptions & { uploadedById: string };
+
 export async function createTestDocument(
   projectIdOrData:
     | string
-    | {
+    | ({
         projectId: string;
         uploadedById: string;
-        name?: string;
-        folderId?: string;
-        s3Key?: string;
-        mimeType?: string;
-        sizeBytes?: number;
-        processingStatus?: DocumentStatus;
-      },
-  uploadedById?: string,
-  options: {
-    name?: string;
-    folderId?: string;
-    s3Key?: string;
-    mimeType?: string;
-    sizeBytes?: number;
-    processingStatus?: DocumentStatus;
-  } = {}
+      } & CreateDocOptions),
+  uploadedByIdOrOptions?: string | CreateDocOptionsWithUploader,
+  options: CreateDocOptions = {}
 ) {
-  // Support both old and new signature
-  let data: {
-    projectId: string;
-    uploadedById: string;
-    name?: string;
-    folderId?: string;
-    s3Key?: string;
-    mimeType?: string;
-    sizeBytes?: number;
-    processingStatus?: DocumentStatus;
-  };
+  let data: { projectId: string; uploadedById: string } & CreateDocOptions;
 
   if (typeof projectIdOrData === 'string') {
-    // Old signature: createTestDocument(projectId, uploadedById, options?)
-    data = {
-      projectId: projectIdOrData,
-      uploadedById: uploadedById!,
-      ...options,
-    };
+    if (typeof uploadedByIdOrOptions === 'string') {
+      // (projectId, uploadedById, options?)
+      data = {
+        projectId: projectIdOrData,
+        uploadedById: uploadedByIdOrOptions,
+        ...options,
+      };
+    } else if (uploadedByIdOrOptions) {
+      // (projectId, { uploadedById, ...options })
+      data = {
+        projectId: projectIdOrData,
+        ...uploadedByIdOrOptions,
+      };
+    } else {
+      throw new Error('createTestDocument: uploadedById is required');
+    }
   } else {
-    // New signature: createTestDocument({ projectId, uploadedById, ...options })
+    // ({ projectId, uploadedById, ...options })
     data = projectIdOrData;
   }
 
@@ -529,7 +527,7 @@ export async function createTestMasterEntity(
       canonicalName: data.canonicalName || 'Test Entity',
       entityType: data.entityType || 'ORGANIZATION',
       aliases: data.aliases || [],
-      metadata: data.metadata,
+      metadata: data.metadata as import('@prisma/client').Prisma.InputJsonValue | undefined,
     },
   });
 }
@@ -554,7 +552,7 @@ export async function createTestEntityRelationship(
       relationshipType: data.relationshipType || 'CONTRACTS_WITH',
       confidence: data.confidence ?? 0.95,
       documentId: data.documentId,
-      metadata: data.metadata,
+      metadata: data.metadata as import('@prisma/client').Prisma.InputJsonValue | undefined,
     },
   });
 }

@@ -1,9 +1,17 @@
 import { useState, useEffect } from 'react';
 import { UserCog } from 'lucide-react';
-import type { ProjectMember, Role, UpdateMemberDto, MemberPermissions } from '../../../types/api';
+import type {
+  ProjectMember,
+  Role,
+  UpdateMemberDto,
+  MemberPermissions,
+  FolderTreeNode,
+} from '../../../types/api';
+import { FolderScopePicker } from './FolderScopePicker';
 
 interface MemberEditModalProps {
   member: ProjectMember | null;
+  folderTree: FolderTreeNode[];
   currentUserRole: Role;
   isOpen: boolean;
   saving: boolean;
@@ -13,6 +21,7 @@ interface MemberEditModalProps {
 
 export function MemberEditModal({
   member,
+  folderTree,
   currentUserRole,
   isOpen,
   saving,
@@ -23,6 +32,7 @@ export function MemberEditModal({
   const [canAccessKanban, setCanAccessKanban] = useState(true);
   const [canAccessVDR, setCanAccessVDR] = useState(false);
   const [canUploadDocs, setCanUploadDocs] = useState(false);
+  const [restrictedFolders, setRestrictedFolders] = useState<string[]>([]);
 
   useEffect(() => {
     if (member) {
@@ -30,6 +40,7 @@ export function MemberEditModal({
       setCanAccessKanban(member.permissions?.canAccessKanban ?? true);
       setCanAccessVDR(member.permissions?.canAccessVDR ?? false);
       setCanUploadDocs(member.permissions?.canUploadDocs ?? false);
+      setRestrictedFolders(member.permissions?.restrictedFolders ?? []);
     }
   }, [member]);
 
@@ -40,6 +51,7 @@ export function MemberEditModal({
       canAccessKanban,
       canAccessVDR,
       canUploadDocs,
+      restrictedFolders,
     };
 
     await onSave(member.id, { role, permissions });
@@ -180,6 +192,24 @@ export function MemberEditModal({
                   />
                   <span className="toggle-slider"></span>
                 </label>
+              </div>
+
+              <div className="permission-label" style={{ marginTop: 'var(--space-2)' }}>
+                <span className="permission-title">Folder Access</span>
+                <span
+                  className="permission-description"
+                  style={{ marginBottom: 'var(--space-2)', display: 'block' }}
+                >
+                  Select the Data Room folders this member can access. Their Kanban boards
+                  are scoped to these folders too — they'll only see boards whose folders
+                  are fully contained in this set. Leave empty for full project access.
+                </span>
+                <FolderScopePicker
+                  folderTree={folderTree}
+                  selectedFolderIds={restrictedFolders}
+                  onChange={setRestrictedFolders}
+                  disabled={saving}
+                />
               </div>
             </div>
           )}

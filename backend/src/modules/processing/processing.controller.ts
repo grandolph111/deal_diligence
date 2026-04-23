@@ -1,99 +1,63 @@
 /**
  * Processing Pipeline Controller
  *
- * Handles webhook callbacks from Python microservice
- * and provides endpoints for managing document processing.
+ * Admin-facing endpoints for inspecting and retrying document extraction.
+ * The pipeline itself is synchronous (Node → Claude), so no webhook callback
+ * exists anymore. Extraction is triggered on upload confirmation.
  */
 
 import { Request, Response } from 'express';
+import { prisma } from '../../config/database';
 import { asyncHandler } from '../../utils/asyncHandler';
-import {
-  processingService,
-  ProcessingCallbackPayload,
-} from '../../services/processing.service';
-import {
-  processingCallbackSchema,
-  retryDocumentSchema,
-} from './processing.validators';
+import { extractionService } from '../../services/extraction.service';
+import { retryDocumentSchema } from './processing.validators';
 import { ApiError } from '../../utils/ApiError';
 
 export const processingController = {
-  /**
-   * POST /api/v1/processing/callback
-   * Webhook endpoint for Python microservice to call when processing completes
-   */
-  handleCallback: asyncHandler(async (req: Request, res: Response) => {
-    const payload = processingCallbackSchema.parse(req.body) as ProcessingCallbackPayload;
-
-    await processingService.handleCallback(payload);
-
-    res.json({ success: true });
-  }),
-
-  /**
-   * GET /api/v1/projects/:id/processing/status/:documentId
-   * Get processing status for a document
-   */
   getStatus: asyncHandler(async (req: Request, res: Response) => {
     const documentId = req.params.documentId as string;
-
-    const status = await processingService.getProcessingStatus(documentId);
-
+    const status = await extractionService.getStatus(documentId);
     res.json(status);
   }),
 
-  /**
-   * POST /api/v1/projects/:id/processing/retry
-   * Manually retry a failed document
-   */
   retryDocument: asyncHandler(async (req: Request, res: Response) => {
     const { documentId } = retryDocumentSchema.parse(req.body);
-
-    // Get document to verify it exists
-    const status = await processingService.getProcessingStatus(documentId);
-
-    if (!status) {
-      throw ApiError.notFound('Document not found');
-    }
-
-    await processingService.manualRetry(documentId);
-
+    const status = await extractionService.getStatus(documentId).catch(() => null);
+    if (!status) throw ApiError.notFound('Document not found');
+    await extractionService.manualRetry(documentId);
     res.json({ success: true, message: 'Document queued for reprocessing' });
   }),
 
-  /**
-   * GET /api/v1/projects/:id/processing/pending
-   * Get all pending documents in a project
-   */
   getPendingDocuments: asyncHandler(async (req: Request, res: Response) => {
     const projectId = req.params.id as string;
-
-    const documents = await processingService.getPendingDocuments(projectId);
-
+    const documents = await prisma.document.findMany({
+      where: { projectId, processingStatus: 'PENDING' },
+      orderBy: { createdAt: 'asc' },
+    });
     res.json({ documents });
   }),
 
-  /**
-   * GET /api/v1/projects/:id/processing/failed
-   * Get all failed documents in a project
-   */
   getFailedDocuments: asyncHandler(async (req: Request, res: Response) => {
     const projectId = req.params.id as string;
-
-    const documents = await processingService.getFailedDocuments(projectId);
-
+    const documents = await prisma.document.findMany({
+      where: { projectId, processingStatus: 'FAILED' },
+      orderBy: { createdAt: 'desc' },
+    });
     res.json({ documents });
   }),
 
-  /**
-   * POST /api/v1/projects/:id/processing/process-all
-   * Process all pending documents in a project
-   */
   processAllPending: asyncHandler(async (req: Request, res: Response) => {
     const projectId = req.params.id as string;
-
-    await processingService.processPendingDocuments(projectId);
-
-    res.json({ success: true, message: 'Processing started for all pending documents' });
+    const pending = await prisma.document.findMany({
+      where: { projectId, processingStatus: 'PENDING' },
+      select: { id: true },
+    });
+    for (const doc of pending) {
+      extractionService.triggerExtraction(doc.id).catch(() => undefined);
+    }
+    res.json({
+      success: true,
+      message: `Extraction triggered for ${pending.length} pending documents`,
+    });
   }),
 };

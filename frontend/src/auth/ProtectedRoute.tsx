@@ -1,5 +1,5 @@
-import { useAuth0 } from '@auth0/auth0-react';
 import { Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from './useAuth';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -10,7 +10,7 @@ interface ProtectedRouteProps {
  * Redirects to login if user is not authenticated
  */
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading } = useAuth0();
+  const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
 
   // Show loading state while checking authentication

@@ -11,11 +11,13 @@ import type {
   UpdateMemberDto,
   CreateInvitationDto,
   InvitationResult,
+  FolderTreeNode,
 } from '../../../types/api';
 
 interface TeamTabProps {
   members: ProjectMember[];
   invitations: PendingInvitation[];
+  folderTree: FolderTreeNode[];
   currentUserId: string;
   currentUserRole: Role;
   membersLoading: boolean;
@@ -31,6 +33,7 @@ interface TeamTabProps {
 export function TeamTab({
   members,
   invitations,
+  folderTree,
   currentUserId,
   currentUserRole,
   membersLoading,
@@ -137,6 +140,7 @@ export function TeamTab({
       {/* Edit Member Modal */}
       <MemberEditModal
         member={editingMember}
+        folderTree={folderTree}
         currentUserRole={currentUserRole}
         isOpen={!!editingMember}
         saving={saving}
@@ -148,6 +152,7 @@ export function TeamTab({
       <InviteMemberModal
         isOpen={showInviteModal}
         inviting={inviting}
+        folderTree={folderTree}
         currentUserRole={currentUserRole}
         onInvite={handleInvite}
         onCancel={() => setShowInviteModal(false)}

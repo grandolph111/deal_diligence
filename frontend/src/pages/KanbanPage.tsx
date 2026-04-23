@@ -1,19 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, UserPlus } from 'lucide-react';
+import { ArrowLeft, UserPlus, FolderOpen } from 'lucide-react';
 import { KanbanBoard, InviteMemberModal } from '../features/kanban';
-import { membersService, apiClient } from '../api';
+import { membersService, boardsService, apiClient } from '../api';
 import { useAuth } from '../auth';
-import type { ProjectMember } from '../types/api';
+import type { ProjectMember, KanbanBoardDetail } from '../types/api';
 import '../features/kanban/kanban.css';
 
 export function KanbanPage() {
-  const { projectId } = useParams<{ projectId: string }>();
+  const { projectId, boardId } = useParams<{ projectId: string; boardId: string }>();
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [board, setBoard] = useState<KanbanBoardDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
 
   // Get current user's membership info (match by email from Auth0)
@@ -35,24 +37,33 @@ export function KanbanPage() {
   };
 
   useEffect(() => {
-    if (authLoading || !apiClient.isReady() || !projectId) {
-      return;
-    }
+    if (authLoading || !apiClient.isReady() || !projectId || !boardId) return;
 
-    async function fetchMembers() {
+    let cancelled = false;
+    (async () => {
       try {
         setLoading(true);
-        const membersData = await membersService.getMembers(projectId!);
+        setError(null);
+        const [boardData, membersData] = await Promise.all([
+          boardsService.get(projectId, boardId),
+          membersService.getMembers(projectId).catch(() => [] as ProjectMember[]),
+        ]);
+        if (cancelled) return;
+        setBoard(boardData);
         setMembers(membersData);
       } catch (err) {
-        // Silently handle - board will still work
+        if (cancelled) return;
+        const msg = err instanceof Error ? err.message : 'Failed to load board';
+        setError(msg);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    }
+    })();
 
-    fetchMembers();
-  }, [projectId, authLoading]);
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, boardId, authLoading]);
 
   const handleInviteSuccess = async () => {
     if (!projectId) return;
@@ -64,7 +75,20 @@ export function KanbanPage() {
     return (
       <div className="loading-container">
         <div className="loading-spinner" />
-        <p>Loading...</p>
+        <p>Loading board…</p>
+      </div>
+    );
+  }
+
+  if (error || !board) {
+    return (
+      <div className="kanban-page" style={{ padding: 'var(--space-6) var(--space-8)' }}>
+        <Link to={`/projects/${projectId}/boards`} className="button ghost sm">
+          <ArrowLeft size={14} /> All boards
+        </Link>
+        <div className="error-container" style={{ marginTop: 'var(--space-4)' }}>
+          <span className="error-message">{error ?? 'Board not found'}</span>
+        </div>
       </div>
     );
   }
@@ -72,9 +96,9 @@ export function KanbanPage() {
   return (
     <div className="kanban-page">
       <div className="page-header">
-        <Link to={`/projects/${projectId}`} className="back-link">
+        <Link to={`/projects/${projectId}/boards`} className="back-link">
           <ArrowLeft size={16} />
-          Back to Project
+          All Boards
         </Link>
         {canInvite && (
           <button className="button secondary" onClick={() => setShowInviteModal(true)}>
@@ -84,8 +108,33 @@ export function KanbanPage() {
         )}
       </div>
 
+      <div
+        style={{
+          padding: 'var(--space-4) var(--space-6) 0',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-2)',
+        }}
+      >
+        <h1 style={{ margin: 0 }}>{board.name}</h1>
+        {board.description && (
+          <p style={{ color: 'var(--text-secondary)', margin: 0 }}>{board.description}</p>
+        )}
+        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+          {board.folders.map((f) => (
+            <span key={f.id} className="chip">
+              <FolderOpen size={11} /> {f.name}
+            </span>
+          ))}
+        </div>
+      </div>
+
       <KanbanBoard
         projectId={projectId}
+        boardId={board.id}
+        // Default "All Documents" board covers the full project — don't
+        // scope-filter the attach-doc picker. Named boards pass their folder set.
+        boardFolderIds={board.isDefault ? undefined : board.folders.map((f) => f.id)}
         currentUserId={currentUserId}
         isAdmin={isAdmin}
         isMember={isMember}

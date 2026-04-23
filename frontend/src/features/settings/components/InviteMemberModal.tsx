@@ -1,11 +1,19 @@
-import { useState, FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { UserPlus } from 'lucide-react';
-import type { Role, CreateInvitationDto, MemberPermissions, InvitationResult } from '../../../types/api';
+import type {
+  Role,
+  CreateInvitationDto,
+  MemberPermissions,
+  InvitationResult,
+  FolderTreeNode,
+} from '../../../types/api';
+import { FolderScopePicker } from './FolderScopePicker';
 
 interface InviteMemberModalProps {
   isOpen: boolean;
   inviting: boolean;
   currentUserRole: Role;
+  folderTree: FolderTreeNode[];
   onInvite: (data: CreateInvitationDto) => Promise<InvitationResult>;
   onCancel: () => void;
 }
@@ -14,6 +22,7 @@ export function InviteMemberModal({
   isOpen,
   inviting,
   currentUserRole,
+  folderTree,
   onInvite,
   onCancel,
 }: InviteMemberModalProps) {
@@ -22,6 +31,7 @@ export function InviteMemberModal({
   const [canAccessKanban, setCanAccessKanban] = useState(true);
   const [canAccessVDR, setCanAccessVDR] = useState(false);
   const [canUploadDocs, setCanUploadDocs] = useState(false);
+  const [restrictedFolders, setRestrictedFolders] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -31,6 +41,7 @@ export function InviteMemberModal({
     setCanAccessKanban(true);
     setCanAccessVDR(false);
     setCanUploadDocs(false);
+    setRestrictedFolders([]);
     setError(null);
     setSuccess(null);
   };
@@ -46,6 +57,7 @@ export function InviteMemberModal({
       canAccessKanban,
       canAccessVDR,
       canUploadDocs,
+      restrictedFolders,
     };
 
     try {
@@ -204,6 +216,24 @@ export function InviteMemberModal({
                     />
                     <span className="toggle-slider"></span>
                   </label>
+                </div>
+
+                <div className="permission-label" style={{ marginTop: 'var(--space-2)' }}>
+                  <span className="permission-title">Folder Access</span>
+                  <span
+                    className="permission-description"
+                    style={{ marginBottom: 'var(--space-2)', display: 'block' }}
+                  >
+                    Select the Data Room folders this member can access. Their Kanban boards
+                    are scoped to these folders too — they'll only see boards whose folders
+                    are fully contained in this set. Leave empty for full project access.
+                  </span>
+                  <FolderScopePicker
+                    folderTree={folderTree}
+                    selectedFolderIds={restrictedFolders}
+                    onChange={setRestrictedFolders}
+                    disabled={inviting}
+                  />
                 </div>
               </div>
             )}

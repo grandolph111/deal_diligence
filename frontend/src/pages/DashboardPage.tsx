@@ -1,9 +1,28 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Users, CheckSquare, FolderOpen } from 'lucide-react';
+import {
+  Plus,
+  Users,
+  CheckSquare,
+  FolderOpen,
+  ArrowUpRight,
+  FileText,
+  Sparkles,
+} from 'lucide-react';
 import { useAuth } from '../auth';
 import { projectsService, apiClient } from '../api';
 import type { Project } from '../types/api';
+
+const relativeTime = (iso?: string) => {
+  if (!iso) return '';
+  const diff = Date.now() - new Date(iso).getTime();
+  const day = 86400000;
+  if (diff < day) return 'today';
+  if (diff < 2 * day) return 'yesterday';
+  if (diff < 30 * day) return `${Math.floor(diff / day)}d ago`;
+  if (diff < 365 * day) return `${Math.floor(diff / (30 * day))}mo ago`;
+  return `${Math.floor(diff / (365 * day))}y ago`;
+};
 
 /**
  * Dashboard page - shows user's projects
@@ -79,26 +98,57 @@ export function DashboardPage() {
 
         {!authLoading && !loading && !error && projects.length > 0 && (
           <div className="projects-grid">
-            {projects.map((project) => (
-              <Link
-                key={project.id}
-                to={`/projects/${project.id}`}
-                className="project-card"
-              >
-                <h3>{project.name}</h3>
-                {project.description && <p>{project.description}</p>}
-                <div className="project-stats">
-                  <span>
-                    <Users size={14} />
-                    {project.memberCount ?? 0} members
-                  </span>
-                  <span>
-                    <CheckSquare size={14} />
-                    {project.taskCount ?? 0} tasks
-                  </span>
-                </div>
-              </Link>
-            ))}
+            {projects.map((project) => {
+              const hasBrief = project.briefManifest != null;
+              const showDescription =
+                project.description && project.description.trim() && project.description !== 'x';
+              const updated = relativeTime(project.updatedAt);
+
+              return (
+                <Link
+                  key={project.id}
+                  to={`/projects/${project.id}`}
+                  className="project-card"
+                >
+                  <div className="project-card-meta">
+                    {project.role === 'OWNER' || project.role === 'ADMIN' ? (
+                      <span className="chip primary">{project.role?.toLowerCase()}</span>
+                    ) : null}
+                    {hasBrief ? (
+                      <span className="chip accent">
+                        <Sparkles size={11} /> Brief ready
+                      </span>
+                    ) : (
+                      <span className="chip">Awaiting brief</span>
+                    )}
+                    <ArrowUpRight size={16} className="project-card-go" aria-hidden="true" />
+                  </div>
+                  <h3>{project.name}</h3>
+                  {showDescription ? (
+                    <p>{project.description}</p>
+                  ) : (
+                    <p className="project-card-placeholder">No description yet.</p>
+                  )}
+                  <div className="project-card-footer">
+                    <div className="project-stats">
+                      <span title="Documents">
+                        <FileText size={14} />
+                        {project.documentCount ?? 0}
+                      </span>
+                      <span title="Tasks">
+                        <CheckSquare size={14} />
+                        {project.taskCount ?? 0}
+                      </span>
+                      <span title="Members">
+                        <Users size={14} />
+                        {project.memberCount ?? 0}
+                      </span>
+                    </div>
+                    {updated && <span className="project-card-time">Updated {updated}</span>}
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         )}
       </div>

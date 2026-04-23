@@ -13,6 +13,10 @@ import type { Task, TaskStatus, ProjectMember } from '../../../types/api';
 
 interface KanbanBoardProps {
   projectId: string | undefined;
+  /** The Kanban board to scope this view to. Required for multi-board mode. */
+  boardId?: string;
+  /** Folder IDs this board covers — used to scope the task-attachment picker. */
+  boardFolderIds?: string[];
   currentUserId: string | undefined;
   isAdmin: boolean;
   isMember: boolean;
@@ -27,12 +31,12 @@ const columns: { status: TaskStatus; title: string }[] = [
   { status: 'COMPLETE', title: 'Completed' },
 ];
 
-export function KanbanBoard({ projectId, currentUserId, isAdmin, isMember, members = [], onViewDocument }: KanbanBoardProps) {
+export function KanbanBoard({ projectId, boardId, boardFolderIds, currentUserId, isAdmin, isMember, members = [], onViewDocument }: KanbanBoardProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createStatus, setCreateStatus] = useState<TaskStatus>('TODO');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
-  const { board, loading, error, fetchBoard, createTask, moveTask, deleteTask } = useKanbanBoard(projectId);
+  const { board, loading, error, fetchBoard, createTask, moveTask, deleteTask } = useKanbanBoard(projectId, boardId);
   const { task: taskDetail, loading: taskLoading, fetchTask, updateTask, clearTask, addAssignee, removeAssignee } = useTaskDetail(projectId);
   const { activeId, overId, handleDragStart, handleDragOver, handleDragEnd, handleDragCancel } = useDragAndDrop(moveTask);
 
@@ -164,6 +168,7 @@ export function KanbanBoard({ projectId, currentUserId, isAdmin, isMember, membe
           task={taskDetail || selectedTask}
           loading={taskLoading}
           projectId={projectId}
+          boardFolderIds={boardFolderIds}
           currentUserId={currentUserId}
           isAdmin={isAdmin}
           isMember={isMember}

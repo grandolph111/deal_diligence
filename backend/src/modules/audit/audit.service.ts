@@ -1,5 +1,9 @@
 import { prisma } from '../../config/database';
 import { AuditLog, Prisma } from '@prisma/client';
+
+type AuditLogWithUser = Prisma.AuditLogGetPayload<{
+  include: { user: { select: { id: true; name: true; email: true } } };
+}>;
 import { Request } from 'express';
 import {
   CreateAuditLogInput,
@@ -414,7 +418,7 @@ export const auditService = {
   async queryLogs(
     projectId: string,
     options: QueryAuditLogInput
-  ): Promise<{ logs: AuditLog[]; total: number }> {
+  ): Promise<{ logs: AuditLogWithUser[]; total: number }> {
     const where: Prisma.AuditLogWhereInput = {
       projectId,
     };

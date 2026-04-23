@@ -172,6 +172,15 @@ export const documentsService = {
   },
 
   /**
+   * Fetch the extracted fact-sheet markdown for a document.
+   */
+  async getFactSheet(projectId: string, documentId: string): Promise<string> {
+    return apiClient.getText(
+      `/projects/${projectId}/documents/${documentId}/fact-sheet`
+    );
+  },
+
+  /**
    * Get document with download URL
    */
   async getDocumentWithDownloadUrl(

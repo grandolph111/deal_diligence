@@ -2,6 +2,46 @@ import { prisma } from '../../config/database';
 import { Task, TaskStatus, Prisma } from '@prisma/client';
 import { CreateTaskInput, UpdateTaskInput, TaskFilters } from './tasks.validators';
 import { ApiError } from '../../utils/ApiError';
+import { boardsService } from '../../services/boards.service';
+
+/**
+ * Verify every document the caller wants to attach to a task is in one of
+ * the board's folders. Strict board-folder confinement — tasks never cross
+ * board boundaries.
+ */
+const verifyDocumentsInBoardScope = async (
+  projectId: string,
+  boardId: string,
+  documentIds: string[]
+): Promise<void> => {
+  if (!documentIds.length) return;
+  // Default "All Documents" board covers the whole project, including
+  // root-level (folderId=null) docs — no scope check needed.
+  const board = await prisma.kanbanBoard.findUnique({
+    where: { id: boardId },
+    select: { isDefault: true },
+  });
+  if (board?.isDefault) return;
+  const scopeFolderIds = await boardsService.expandedBoardFolderIds(
+    boardId,
+    projectId
+  );
+  if (scopeFolderIds.length === 0) return;
+  const docs = await prisma.document.findMany({
+    where: { id: { in: documentIds }, projectId },
+    select: { id: true, name: true, folderId: true },
+  });
+  const outOfScope = docs.filter(
+    (d) => !d.folderId || !scopeFolderIds.includes(d.folderId)
+  );
+  if (outOfScope.length > 0) {
+    throw ApiError.badRequest(
+      `Cannot attach ${outOfScope.length} document(s) — outside this board's folder scope: ${outOfScope
+        .map((d) => d.name)
+        .join(', ')}`
+    );
+  }
+};
 
 const taskInclude = {
   assignees: {
@@ -100,10 +140,18 @@ export const tasksService = {
   },
 
   /**
-   * Get all tasks for a project with optional filters
+   * Get all tasks for a project with optional filters.
+   * Pass `boardId` to scope to a single Kanban board.
    */
-  async getProjectTasks(projectId: string, filters: TaskFilters = {}) {
+  async getProjectTasks(
+    projectId: string,
+    filters: TaskFilters & { boardId?: string } = {}
+  ) {
     const where: Prisma.TaskWhereInput = { projectId };
+
+    if (filters.boardId) {
+      where.boardId = filters.boardId;
+    }
 
     if (filters.status) {
       where.status = filters.status;
@@ -161,10 +209,11 @@ export const tasksService = {
   },
 
   /**
-   * Get tasks grouped by status (for Kanban board)
+   * Get tasks grouped by status for a Kanban board. Pass `boardId` to
+   * scope to a single board (preferred). Omit for project-wide view.
    */
-  async getTasksByStatus(projectId: string) {
-    const tasks = await this.getProjectTasks(projectId);
+  async getTasksByStatus(projectId: string, boardId?: string) {
+    const tasks = await this.getProjectTasks(projectId, { boardId });
 
     const grouped = {
       TODO: [] as typeof tasks,
@@ -200,34 +249,88 @@ export const tasksService = {
   },
 
   /**
-   * Create a new task
+   * Create a new task. `data.boardId` is REQUIRED in practice — if omitted,
+   * the task lands on the project's default board.
    */
   async createTask(
     projectId: string,
     creatorId: string,
     data: CreateTaskInput
   ): Promise<Task> {
-    const { assigneeIds, tagIds, assignedDate, dueDate, ...taskData } = data;
+    const {
+      assigneeIds,
+      tagIds,
+      assignedDate,
+      dueDate,
+      aiPrompt,
+      attachedDocumentIds,
+      boardId: explicitBoardId,
+      ...taskData
+    } = data;
+
+    // Resolve boardId: explicit → validate in project; otherwise use default board.
+    let boardId = explicitBoardId;
+    if (boardId) {
+      const board = await prisma.kanbanBoard.findFirst({
+        where: { id: boardId, projectId },
+        select: { id: true },
+      });
+      if (!board) {
+        throw ApiError.badRequest('Board not found in this project');
+      }
+    } else {
+      const defaultBoard = await prisma.kanbanBoard.findFirst({
+        where: { projectId, isDefault: true },
+        select: { id: true },
+      });
+      if (!defaultBoard) {
+        throw ApiError.internal(
+          'Project has no default Kanban board. Contact an admin.'
+        );
+      }
+      boardId = defaultBoard.id;
+    }
+
+    // Enforce: attached documents must be within this board's folder scope.
+    if (attachedDocumentIds && attachedDocumentIds.length > 0) {
+      await verifyDocumentsInBoardScope(projectId, boardId, attachedDocumentIds);
+    }
 
     const task = await prisma.task.create({
       data: {
         ...taskData,
         projectId,
+        boardId,
         createdById: creatorId,
         assignedDate: assignedDate ? new Date(assignedDate) : null,
         dueDate: dueDate ? new Date(dueDate) : null,
+        aiPrompt: aiPrompt ?? null,
+        aiStatus: aiPrompt ? 'IDLE' : null,
         assignees: assigneeIds?.length
-          ? {
-              create: assigneeIds.map((userId) => ({ userId })),
-            }
+          ? { create: assigneeIds.map((userId) => ({ userId })) }
           : undefined,
         tags: tagIds?.length
-          ? {
-              create: tagIds.map((tagId) => ({ tagId })),
-            }
+          ? { create: tagIds.map((tagId) => ({ tagId })) }
           : undefined,
+        attachments:
+          attachedDocumentIds && attachedDocumentIds.length > 0
+            ? {
+                create: attachedDocumentIds.map((documentId) => ({
+                  documentId,
+                })),
+              }
+            : undefined,
       },
     });
+
+    // eslint-disable-next-line no-console
+    console.log(
+      `[kanban] task created id=${task.id.slice(0, 8)} board=${boardId.slice(
+        0,
+        8
+      )} project=${projectId.slice(0, 8)} title="${task.title.slice(0, 60)}" ` +
+        `ai=${aiPrompt ? 'yes' : 'no'} attachments=${attachedDocumentIds?.length ?? 0}`
+    );
 
     return task;
   },
@@ -236,7 +339,7 @@ export const tasksService = {
    * Update a task
    */
   async updateTask(taskId: string, data: UpdateTaskInput): Promise<Task> {
-    const { assignedDate, dueDate, ...rest } = data;
+    const { assignedDate, dueDate, attachedDocumentIds, aiPrompt, ...rest } = data;
 
     const updateData: Prisma.TaskUpdateInput = { ...rest };
 
@@ -248,20 +351,65 @@ export const tasksService = {
       updateData.dueDate = dueDate ? new Date(dueDate) : null;
     }
 
-    return prisma.task.update({
+    if (aiPrompt !== undefined) {
+      updateData.aiPrompt = aiPrompt;
+      if (aiPrompt && aiPrompt.length > 0) {
+        const current = await prisma.task.findUnique({
+          where: { id: taskId },
+          select: { aiStatus: true },
+        });
+        if (!current?.aiStatus) updateData.aiStatus = 'IDLE';
+      }
+    }
+
+    const updated = await prisma.task.update({
       where: { id: taskId },
       data: updateData,
     });
+
+    // Replace attachments if provided. Enforce board-folder confinement.
+    if (attachedDocumentIds !== undefined) {
+      if (attachedDocumentIds.length > 0) {
+        const task = await prisma.task.findUnique({
+          where: { id: taskId },
+          select: { projectId: true, boardId: true },
+        });
+        if (task?.boardId) {
+          await verifyDocumentsInBoardScope(
+            task.projectId,
+            task.boardId,
+            attachedDocumentIds
+          );
+        }
+      }
+      await prisma.taskAttachment.deleteMany({ where: { taskId } });
+      if (attachedDocumentIds.length > 0) {
+        await prisma.taskAttachment.createMany({
+          data: attachedDocumentIds.map((documentId) => ({
+            taskId,
+            documentId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
+    return updated;
   },
 
   /**
    * Update task status (for drag-and-drop)
    */
   async updateTaskStatus(taskId: string, status: TaskStatus): Promise<Task> {
-    return prisma.task.update({
+    const task = await prisma.task.update({
       where: { id: taskId },
       data: { status },
     });
+    // eslint-disable-next-line no-console
+    console.log(
+      `[kanban] task ${taskId.slice(0, 8)} status → ${status}`
+    );
+    return task;
   },
 
   /**

@@ -1,6 +1,6 @@
-import { Settings, Users } from 'lucide-react';
+import { Settings, Users, BookOpen } from 'lucide-react';
 
-type TabType = 'general' | 'team';
+type TabType = 'general' | 'team' | 'playbook';
 
 interface SettingsTabsProps {
   activeTab: TabType;
@@ -23,6 +23,13 @@ export function SettingsTabs({ activeTab, onTabChange }: SettingsTabsProps) {
       >
         <Users size={16} />
         Team
+      </button>
+      <button
+        className={`settings-tab ${activeTab === 'playbook' ? 'active' : ''}`}
+        onClick={() => onTabChange('playbook')}
+      >
+        <BookOpen size={16} />
+        Playbook
       </button>
     </div>
   );

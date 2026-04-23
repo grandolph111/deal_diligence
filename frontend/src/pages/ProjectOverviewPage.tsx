@@ -1,299 +1,403 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import {
-  Users,
+  AlertCircle,
+  ArrowLeft,
+  Building2,
+  CheckCircle2,
   FileText,
   Kanban,
   Settings,
-  Trash2,
-  Calendar,
-  ArrowLeft,
+  ShieldAlert,
+  Sparkles,
 } from 'lucide-react';
-import { projectsService, membersService, apiClient } from '../api';
+import { apiClient, dashboardService } from '../api';
 import { useAuth } from '../auth';
-import type { Project, ProjectMember } from '../types/api';
+import { ConfidencePill } from '../components/ConfidencePill';
+import type { DashboardResponse } from '../api/services/dashboard.service';
 
-/**
- * Project Overview page - shows project details, stats, and quick actions
- */
+const formatCurrency = (value: number | null, currency: string | null) => {
+  if (value == null) return '—';
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency ?? 'USD',
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `${currency ?? ''} ${value.toLocaleString()}`.trim();
+  }
+};
+
+const formatDate = (value: string | null) => {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+const riskChipClass = (level: string | null) => {
+  if (level === 'HIGH') return 'chip risk-high';
+  if (level === 'MEDIUM') return 'chip risk-med';
+  if (level === 'LOW') return 'chip risk-low';
+  return 'chip';
+};
+
 export function ProjectOverviewPage() {
   const { projectId } = useParams<{ projectId: string }>();
-  const navigate = useNavigate();
   const { isLoading: authLoading } = useAuth();
 
-  const [project, setProject] = useState<Project | null>(null);
-  const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  // Get current user's role in the project
-  const currentUserMember = members.find((m) => m.user?.email);
-  const userRole = currentUserMember?.role;
-  const isOwner = userRole === 'OWNER';
-  const isAdmin = userRole === 'ADMIN' || isOwner;
 
   useEffect(() => {
-    if (authLoading || !apiClient.isReady() || !projectId) {
-      return;
-    }
+    if (authLoading || !apiClient.isReady() || !projectId) return;
 
-    async function fetchProjectData() {
+    let cancelled = false;
+    const fetchDashboard = async (isInitial: boolean) => {
       try {
-        setLoading(true);
-        setError(null);
-
-        // Fetch project and members in parallel
-        const [projectData, membersData] = await Promise.all([
-          projectsService.getProject(projectId!),
-          membersService.getMembers(projectId!),
-        ]);
-
-        setProject(projectData);
-        setMembers(membersData);
+        if (isInitial) {
+          setLoading(true);
+          setError(null);
+        }
+        const res = await dashboardService.getProjectDashboard(projectId);
+        if (cancelled) return;
+        setData(res);
+        if (isInitial) setError(null);
       } catch (err) {
-        console.error('Failed to fetch project:', err);
-        setError('Failed to load project');
+        if (cancelled) return;
+        if (isInitial) {
+          console.error('Failed to load dashboard:', err);
+          setError('Failed to load dashboard');
+        }
+        // Silently swallow background refresh errors to avoid flicker.
       } finally {
-        setLoading(false);
+        if (isInitial && !cancelled) setLoading(false);
       }
-    }
+    };
 
-    fetchProjectData();
+    // Initial load + periodic refresh so counts like "Open AI tasks" update
+    // while a task is running in the background.
+    fetchDashboard(true);
+    const interval = window.setInterval(() => fetchDashboard(false), 15_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
   }, [projectId, authLoading]);
-
-  const handleDelete = async () => {
-    if (!projectId) return;
-
-    setIsDeleting(true);
-    try {
-      await projectsService.deleteProject(projectId);
-      navigate('/dashboard');
-    } catch (err) {
-      console.error('Failed to delete project:', err);
-      setError('Failed to delete project');
-      setIsDeleting(false);
-      setShowDeleteConfirm(false);
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
 
   if (authLoading || loading) {
     return (
       <div className="loading-container">
         <div className="loading-spinner" />
-        <p>Loading project...</p>
+        <p>Loading deal dashboard…</p>
       </div>
     );
   }
 
-  if (error || !project) {
+  if (error || !data) {
     return (
-      <div className="project-overview-page">
-        <div className="page-header">
-          <Link to="/dashboard" className="back-link">
-            <ArrowLeft size={16} />
-            Back to Dashboard
-          </Link>
-        </div>
-        <div className="error-container">
-          <p className="error-message">{error || 'Project not found'}</p>
+      <div style={{ padding: 'var(--space-8)' }}>
+        <Link to="/dashboard" className="button ghost sm">
+          <ArrowLeft size={14} /> Back
+        </Link>
+        <div className="error-container" style={{ marginTop: 'var(--space-4)' }}>
+          <p className="error-message">{error ?? 'Project not found'}</p>
         </div>
       </div>
     );
   }
+
+  const { project, scope, header, riskStrip, documentsByRisk, entitySummary, recentReports } = data;
+
+  const riskScore = header.portfolioRiskScore;
+  const riskScoreLevel: 'LOW' | 'MEDIUM' | 'HIGH' | null =
+    riskScore == null ? null : riskScore >= 7 ? 'HIGH' : riskScore >= 4 ? 'MEDIUM' : 'LOW';
 
   return (
-    <div className="project-overview-page">
-      {/* Header */}
-      <div className="page-header">
-        <Link to="/dashboard" className="back-link">
-          <ArrowLeft size={16} />
-          Back to Dashboard
+    <div style={{ padding: 'var(--space-6) var(--space-8)', display: 'flex', flexDirection: 'column', gap: 'var(--space-8)' }}>
+      {/* Back + settings */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Link to="/dashboard" className="button ghost sm">
+          <ArrowLeft size={14} /> All deals
         </Link>
-        <div className="project-title-row">
+        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <span
+            className={scope.isFullAccess ? 'chip primary' : 'chip accent'}
+            title={scope.isFullAccess ? 'Full deal access' : `Scoped to ${scope.allowedFolderCount} folder(s)`}
+          >
+            {scope.isFullAccess ? 'Full deal access' : `Scoped · ${scope.allowedFolderCount} folder(s)`}
+          </span>
+          <Link to={`/projects/${projectId}/settings`} className="button secondary sm">
+            <Settings size={14} /> Admin
+          </Link>
+        </div>
+      </div>
+
+      {/* Deal header */}
+      <div className="card" style={{ padding: 'var(--space-6)', position: 'relative', overflow: 'hidden' }}>
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background:
+              'radial-gradient(600px 200px at 100% 0%, rgb(199 164 108 / 0.08), transparent 70%), radial-gradient(400px 200px at 0% 100%, rgb(30 58 95 / 0.05), transparent 70%)',
+            pointerEvents: 'none',
+          }}
+        />
+        <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: 'var(--space-6)', alignItems: 'center' }}>
           <div>
-            <h1>{project.name}</h1>
-            {project.description && <p>{project.description}</p>}
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 'var(--tracking-wide)', marginBottom: 'var(--space-2)' }}>
+              Deal
+            </div>
+            <h1 style={{ margin: 0 }}>{project.name}</h1>
+            {project.description && project.description !== 'x' && (
+              <p style={{ marginTop: 'var(--space-2)', color: 'var(--text-secondary)' }}>{project.description}</p>
+            )}
           </div>
-          {isAdmin && (
-            <Link
-              to={`/projects/${projectId}/settings`}
-              className="button secondary"
-            >
-              <Settings size={16} />
-              Settings
-            </Link>
-          )}
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon">
-            <Users size={20} />
-          </div>
-          <div className="stat-content">
-            <span className="stat-value">{project.memberCount ?? members.length}</span>
-            <span className="stat-label">Team Members</span>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon">
-            <Kanban size={20} />
-          </div>
-          <div className="stat-content">
-            <span className="stat-value">{project.taskCount ?? 0}</span>
-            <span className="stat-label">Tasks</span>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon">
-            <FileText size={20} />
-          </div>
-          <div className="stat-content">
-            <span className="stat-value">{project.documentCount ?? 0}</span>
-            <span className="stat-label">Documents</span>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon">
-            <Calendar size={20} />
-          </div>
-          <div className="stat-content">
-            <span className="stat-value">{formatDate(project.createdAt)}</span>
-            <span className="stat-label">Created</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="section">
-        <h2>Quick Actions</h2>
-        <div className="quick-actions-grid">
-          <Link
-            to={`/projects/${projectId}/board`}
-            className="quick-action-card"
+          <Metric label="Deal value" value={formatCurrency(header.dealValue, header.dealCurrency)} />
+          <Metric label="Effective" value={formatDate(header.effectiveDate)} />
+          <Metric label="Governing law" value={header.governingLaw ?? null} />
+          <div
+            title="Weighted average of each document's risk score (0–10), weighted by page count. LOW <4 · MEDIUM 4–6 · HIGH ≥7"
           >
-            <Kanban size={24} />
-            <span>Open Kanban Board</span>
-            <p>View and manage due diligence tasks</p>
-          </Link>
-
-          <Link
-            to={`/projects/${projectId}/settings`}
-            className="quick-action-card"
-          >
-            <Settings size={24} />
-            <span>Project Settings</span>
-            <p>Configure project details and preferences</p>
-          </Link>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 'var(--tracking-wide)' }}>
+              Portfolio risk
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)', marginTop: 'var(--space-1)' }}>
+              {riskScore != null ? (
+                <>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', fontWeight: 500 }}>
+                    {riskScore}
+                    <span style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-lg)' }}>/10</span>
+                  </div>
+                  {riskScoreLevel && <span className={riskChipClass(riskScoreLevel)}>{riskScoreLevel}</span>}
+                </>
+              ) : (
+                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 'var(--space-1)' }}>
+                  Awaiting extraction
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Team Members Preview */}
-      <div className="section">
-        <div className="section-header">
-          <h2>Team Members</h2>
-          <Link to={`/projects/${projectId}/members`} className="view-all-link">
-            View All
-          </Link>
-        </div>
-
-        <div className="members-list">
-          {members.slice(0, 5).map((member) => (
-            <div key={member.id} className="member-item">
-              <div className="member-avatar">
-                {member.user?.avatarUrl ? (
-                  <img src={member.user.avatarUrl} alt={member.user.name || ''} />
-                ) : (
-                  <span>{(member.user?.name || member.user?.email || '?')[0].toUpperCase()}</span>
-                )}
-              </div>
-              <div className="member-info">
-                <span className="member-name">
-                  {member.user?.name || member.user?.email}
-                </span>
-                <span className="member-role">{member.role}</span>
-              </div>
-            </div>
-          ))}
-
-          {members.length === 0 && (
-            <p className="no-members">No team members yet</p>
-          )}
-
-          {members.length > 5 && (
-            <p className="more-members">
-              +{members.length - 5} more members
-            </p>
-          )}
-        </div>
+      {/* Risk strip */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-4)' }}>
+        <StripCard icon={ShieldAlert} label="High-risk documents" value={riskStrip.highRiskDocuments} tone="risk-high" />
+        <StripCard icon={Sparkles} label="Open AI tasks" value={riskStrip.openAiTasks} tone="primary" />
+        <StripCard icon={CheckCircle2} label="Pending specialist reviews" value={riskStrip.pendingSpecialistReviews} tone="accent" />
+        <StripCard icon={AlertCircle} label="Flagged clauses" value={riskStrip.flaggedClauses} tone="risk-med" />
       </div>
 
-      {/* Danger Zone - Only for Owners */}
-      {isOwner && (
-        <div className="section danger-zone">
-          <h2>Danger Zone</h2>
-          <div className="danger-content">
-            <div className="danger-text">
-              <strong>Delete this project</strong>
-              <p>
-                Once deleted, all project data including tasks, members, and
-                documents will be permanently removed.
-              </p>
-            </div>
-            <button
-              className="button danger"
-              onClick={() => setShowDeleteConfirm(true)}
+      {/* Quick actions */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-4)' }}>
+        <Link to={`/projects/${projectId}/boards`} className="card interactive" style={{ padding: 'var(--space-5)' }}>
+          <Kanban size={20} style={{ color: 'var(--color-primary)' }} />
+          <div style={{ fontWeight: 500, marginTop: 'var(--space-3)' }}>Kanban · AI workflow</div>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-1)' }}>
+            Prompt the AI against attached documents. Reports land in review.
+          </p>
+        </Link>
+        <Link to={`/projects/${projectId}/vdr`} className="card interactive" style={{ padding: 'var(--space-5)' }}>
+          <FileText size={20} style={{ color: 'var(--color-primary)' }} />
+          <div style={{ fontWeight: 500, marginTop: 'var(--space-3)' }}>Data room</div>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-1)' }}>
+            Upload documents. Each gets a CUAD-aligned fact sheet + risk score.
+          </p>
+        </Link>
+        <Link to={`/projects/${projectId}/entities`} className="card interactive" style={{ padding: 'var(--space-5)' }}>
+          <Building2 size={20} style={{ color: 'var(--color-primary)' }} />
+          <div style={{ fontWeight: 500, marginTop: 'var(--space-3)' }}>Entities & graph</div>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-1)' }}>
+            Parties, people, jurisdictions, valuations aggregated across the deal.
+          </p>
+        </Link>
+      </div>
+
+      {/* Documents by risk */}
+      <section>
+        <h2 style={{ marginBottom: 'var(--space-4)' }}>Documents by risk</h2>
+        {documentsByRisk.length === 0 ? (
+          <div className="empty-state">
+            <FileText size={24} />
+            <h3>No documents yet</h3>
+            <p>Upload documents to the data room to start risk analysis.</p>
+          </div>
+        ) : (
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
+              <thead>
+                <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left' }}>
+                  <th style={{ padding: 'var(--space-3) var(--space-4)' }}>Document</th>
+                  <th style={{ padding: 'var(--space-3) var(--space-4)' }}>Type</th>
+                  <th style={{ padding: 'var(--space-3) var(--space-4)' }}>Risk</th>
+                  <th style={{ padding: 'var(--space-3) var(--space-4)' }}>Confidence</th>
+                  <th style={{ padding: 'var(--space-3) var(--space-4)' }}>Summary</th>
+                </tr>
+              </thead>
+              <tbody>
+                {documentsByRisk.slice(0, 12).map((d) => (
+                  <tr key={d.id} style={{ borderTop: '1px solid var(--border-primary)' }}>
+                    <td style={{ padding: 'var(--space-3) var(--space-4)', fontWeight: 500 }}>{d.name}</td>
+                    <td style={{ padding: 'var(--space-3) var(--space-4)', color: 'var(--text-secondary)' }}>{d.documentType ?? '—'}</td>
+                    <td style={{ padding: 'var(--space-3) var(--space-4)' }}>
+                      <span className={riskChipClass(d.riskLevel)}>
+                        {d.riskScore != null ? `${d.riskScore}/10` : d.riskLevel ?? '—'}
+                      </span>
+                    </td>
+                    <td style={{ padding: 'var(--space-3) var(--space-4)' }}>
+                      <ConfidencePill score={d.confidenceScore} reason={d.confidenceReason} />
+                    </td>
+                    <td style={{ padding: 'var(--space-3) var(--space-4)', color: 'var(--text-secondary)' }}>
+                      {d.riskSummary ?? d.extractionSummary ?? '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Entities + recent reports */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)', alignItems: 'stretch' }}>
+        <section style={{ display: 'flex', flexDirection: 'column' }}>
+          <h2 style={{ marginBottom: 'var(--space-4)' }}>Entity rollups</h2>
+          <div className="card" style={{ padding: 'var(--space-4)', flex: 1, display: 'flex', alignItems: 'center' }}>
+            {entitySummary.length === 0 ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', color: 'var(--text-tertiary)', width: '100%' }}>
+                <Building2 size={18} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                <span>Entities appear after your first document is analyzed.</span>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-3)', width: '100%' }}>
+                {entitySummary.map((e) => (
+                  <div key={e.entityType} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>{e.entityType}</span>
+                    <span style={{ fontWeight: 500 }}>{e.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section style={{ display: 'flex', flexDirection: 'column' }}>
+          <h2 style={{ marginBottom: 'var(--space-4)' }}>Recent AI reports</h2>
+          {recentReports.length === 0 ? (
+            <div
+              className="card"
+              style={{
+                padding: 'var(--space-5)',
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-3)',
+                color: 'var(--text-tertiary)',
+              }}
             >
-              <Trash2 size={16} />
-              Delete Project
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Delete Project</h3>
-            <p>
-              Are you sure you want to delete <strong>{project.name}</strong>?
-              This action cannot be undone.
-            </p>
-            <div className="modal-actions">
-              <button
-                className="button secondary"
-                onClick={() => setShowDeleteConfirm(false)}
-                disabled={isDeleting}
-              >
-                Cancel
-              </button>
-              <button
-                className="button danger"
-                onClick={handleDelete}
-                disabled={isDeleting}
-              >
-                {isDeleting ? 'Deleting...' : 'Delete Project'}
-              </button>
+              <Sparkles size={18} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+              <span>Run a Kanban AI task to produce a risk report.</span>
             </div>
-          </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', flex: 1 }}>
+              {recentReports.map((r) => (
+                <Link
+                  key={r.id}
+                  to={`/projects/${projectId}/boards`}
+                  className="card interactive"
+                  style={{ padding: 'var(--space-4)', display: 'block' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 'var(--space-2)' }}>
+                    <span style={{ fontWeight: 500 }}>{r.title}</span>
+                    <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                      <ConfidencePill score={r.aiConfidenceScore} reason={r.aiConfidenceReason} />
+                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+                        {formatDate(r.aiCompletedAt)}
+                      </span>
+                    </div>
+                  </div>
+                  {r.aiReportSummary && (
+                    <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--space-2)' }}>
+                      {r.aiReportSummary}
+                    </p>
+                  )}
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string | null }) {
+  const isEmpty = value == null || value === '—';
+  return (
+    <div>
+      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 'var(--tracking-wide)' }}>
+        {label}
+      </div>
+      {isEmpty ? (
+        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 'var(--space-2)' }}>
+          Not yet extracted
+        </div>
+      ) : (
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-xl)', fontWeight: 500, marginTop: 'var(--space-1)' }}>
+          {value}
         </div>
       )}
     </div>
   );
 }
+
+function StripCard({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: number;
+  tone: 'risk-high' | 'risk-med' | 'primary' | 'accent';
+}) {
+  const toneMap: Record<string, { bg: string; fg: string }> = {
+    'risk-high': { bg: 'var(--risk-high-bg)', fg: 'var(--risk-high)' },
+    'risk-med': { bg: 'var(--risk-med-bg)', fg: 'var(--risk-med)' },
+    primary: { bg: 'var(--color-primary-light)', fg: 'var(--color-primary)' },
+    accent: { bg: 'var(--color-accent-light)', fg: 'var(--color-gray-900)' },
+  };
+  const t = toneMap[tone];
+  return (
+    <div className="card" style={{ padding: 'var(--space-5)', display: 'flex', gap: 'var(--space-4)', alignItems: 'center' }}>
+      <div
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 'var(--radius-md)',
+          background: t.bg,
+          color: t.fg,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Icon size={20} />
+      </div>
+      <div>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-2xl)', fontWeight: 500 }}>{value}</div>
+        <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>{label}</div>
+      </div>
+    </div>
+  );
+}
+

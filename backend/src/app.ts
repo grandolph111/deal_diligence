@@ -17,6 +17,7 @@ import projectRoutes from './modules/projects/projects.routes';
 import memberRoutes from './modules/members/members.routes';
 import taskRoutes from './modules/tasks/tasks.routes';
 import tagRoutes from './modules/tasks/tags.routes';
+import boardRoutes from './modules/boards/boards.routes';
 import documentRoutes from './modules/documents/documents.routes';
 import folderRoutes from './modules/folders/folders.routes';
 import { auditRoutes } from './modules/audit/audit.routes';
@@ -25,10 +26,7 @@ import projectInvitationRoutes from './modules/invitations/project-invitations.r
 import commentRoutes from './modules/comments/comments.routes';
 import subtaskRoutes from './modules/subtasks/subtasks.routes';
 import taskDocumentsRoutes from './modules/task-documents/task-documents.routes';
-import {
-  processingWebhookRouter,
-  processingProjectRouter,
-} from './modules/processing/processing.routes';
+import { processingProjectRouter } from './modules/processing/processing.routes';
 import searchRoutes from './modules/search/search.routes';
 import {
   documentEntitiesRouter,
@@ -136,29 +134,14 @@ app.get('/health/detailed', async (req, res) => {
     health.status = health.status === 'unhealthy' ? 'unhealthy' : 'degraded';
   }
 
-  // Check Python microservice
-  try {
-    const pythonUrl = config.pythonService?.url || 'http://localhost:8000';
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
-
-    const pythonRes = await fetch(`${pythonUrl}/health`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (pythonRes.ok) {
-      const pythonHealth = (await pythonRes.json()) as { berrydb_configured?: boolean };
-      health.services.pythonService = {
-        status: 'connected',
-        berrydb: pythonHealth.berrydb_configured ? 'configured' : 'not configured',
-      };
-    } else {
-      health.services.pythonService = { status: 'error', code: pythonRes.status };
-      health.status = health.status === 'unhealthy' ? 'unhealthy' : 'degraded';
-    }
-  } catch {
-    health.services.pythonService = { status: 'unavailable' };
+  // Check Claude configuration
+  const { isClaudeConfigured } = await import('./config');
+  health.services.claude = {
+    provider: config.claude.provider,
+    configured: isClaudeConfigured(),
+    models: config.claude.models,
+  };
+  if (!isClaudeConfigured()) {
     health.status = health.status === 'unhealthy' ? 'unhealthy' : 'degraded';
   }
 
@@ -170,6 +153,7 @@ app.get('/health/detailed', async (req, res) => {
 app.use('/api/v1/auth', authRateLimiter, authRoutes);
 app.use('/api/v1/projects', projectRoutes);
 app.use('/api/v1/projects/:id/members', memberRoutes);
+app.use('/api/v1/projects/:id/boards', boardRoutes);
 app.use('/api/v1/projects/:id/tasks', taskRoutes);
 app.use('/api/v1/projects/:id/tags', tagRoutes);
 app.use('/api/v1/projects/:id/documents', documentRoutes);
@@ -180,7 +164,6 @@ app.use('/api/v1/invitations', invitationRoutes);
 app.use('/api/v1/projects/:id/tasks/:taskId/comments', commentRoutes);
 app.use('/api/v1/projects/:id/tasks/:taskId/subtasks', subtaskRoutes);
 app.use('/api/v1/projects/:id/tasks/:taskId/documents', taskDocumentsRoutes);
-app.use('/api/v1/processing', processingWebhookRouter);
 app.use('/api/v1/projects/:id/processing', processingProjectRouter);
 app.use('/api/v1/projects/:id/search', searchRoutes);
 app.use('/api/v1/projects/:id/documents/:documentId/entities', documentEntitiesRouter);

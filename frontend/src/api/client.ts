@@ -184,6 +184,24 @@ class ApiClient {
   }
 
   /**
+   * Make a GET request that returns plain text (e.g. markdown downloads).
+   */
+  async getText(path: string): Promise<string> {
+    const headers = await this.buildHeaders();
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: 'GET',
+      headers,
+    });
+    if (!response.ok) {
+      throw new ApiClientError(
+        `Request failed with status ${response.status}`,
+        response.status
+      );
+    }
+    return response.text();
+  }
+
+  /**
    * Make a request without authentication (for public endpoints)
    */
   async getPublic<T>(path: string): Promise<T> {

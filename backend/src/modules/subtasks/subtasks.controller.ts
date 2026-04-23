@@ -10,14 +10,14 @@ import { asyncHandler } from '../../utils/asyncHandler';
 
 export const subtasksController = {
   listSubtasks: asyncHandler(async (req: Request, res: Response) => {
-    const { taskId } = req.params;
+    const { taskId } = req.params as Record<string, string>;
 
     const subtasks = await subtasksService.getTaskSubtasks(taskId);
     res.json(subtasks);
   }),
 
   createSubtask: asyncHandler(async (req: Request, res: Response) => {
-    const { taskId } = req.params;
+    const { taskId } = req.params as Record<string, string>;
 
     if (!req.user) {
       throw ApiError.unauthorized('User not found');
@@ -30,7 +30,7 @@ export const subtasksController = {
   }),
 
   updateSubtask: asyncHandler(async (req: Request, res: Response) => {
-    const { id: projectId, subtaskId } = req.params;
+    const { id: projectId, subtaskId } = req.params as Record<string, string>;
 
     const data = updateSubtaskSchema.parse(req.body);
     const subtask = await subtasksService.updateSubtask(subtaskId, projectId, data);
@@ -39,7 +39,7 @@ export const subtasksController = {
   }),
 
   deleteSubtask: asyncHandler(async (req: Request, res: Response) => {
-    const { id: projectId, subtaskId } = req.params;
+    const { id: projectId, subtaskId } = req.params as Record<string, string>;
 
     await subtasksService.deleteSubtask(subtaskId, projectId);
 
@@ -47,7 +47,7 @@ export const subtasksController = {
   }),
 
   reorderSubtasks: asyncHandler(async (req: Request, res: Response) => {
-    const { taskId } = req.params;
+    const { taskId } = req.params as Record<string, string>;
 
     const { subtaskIds } = reorderSubtasksSchema.parse(req.body);
     const subtasks = await subtasksService.reorderSubtasks(taskId, subtaskIds);

@@ -44,6 +44,37 @@ router.get(
   tasksController.getTask
 );
 
+// GET /api/v1/projects/:id/tasks/:taskId/ai-report - Get the AI risk report markdown
+router.get(
+  '/:taskId/ai-report',
+  requirePermission('canAccessKanban'),
+  tasksController.getAiReport
+);
+
+// POST /api/v1/projects/:id/tasks/:taskId/run-ai - Trigger AI run immediately
+router.post(
+  '/:taskId/run-ai',
+  requireMinRole('MEMBER'),
+  requirePermission('canAccessKanban'),
+  tasksController.runAi
+);
+
+// POST /api/v1/projects/:id/tasks/:taskId/ai-approve - Approve report → COMPLETE
+router.post(
+  '/:taskId/ai-approve',
+  requireMinRole('MEMBER'),
+  requirePermission('canAccessKanban'),
+  tasksController.approveAi
+);
+
+// POST /api/v1/projects/:id/tasks/:taskId/ai-request-changes - Reject draft, reset AI state
+router.post(
+  '/:taskId/ai-request-changes',
+  requireMinRole('MEMBER'),
+  requirePermission('canAccessKanban'),
+  tasksController.requestAiChanges
+);
+
 // PATCH /api/v1/projects/:id/tasks/:taskId - Update task (OWNER, ADMIN, MEMBER)
 router.patch(
   '/:taskId',

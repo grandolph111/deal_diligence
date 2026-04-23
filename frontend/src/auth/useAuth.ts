@@ -17,11 +17,19 @@ export function useAuth() {
     error,
   } = useAuth0();
 
+  // Check for mock auth in localStorage
+  const isMockLoggedIn = localStorage.getItem('mock_auth_logged_in') === 'true';
+  const finalIsAuthenticated = isAuthenticated || isMockLoggedIn;
+  const finalUser = user || (isMockLoggedIn ? { sub: 'dev_user', email: 'dev@example.com', name: 'Dev User' } : null);
+
   /**
    * Get a valid access token for API calls
    * Automatically refreshes if expired
    */
   const getAccessToken = useCallback(async (): Promise<string> => {
+    if (isMockLoggedIn) {
+      return 'mock-dev-token-' + Date.now();
+    }
     try {
       const token = await getAccessTokenSilently({
         authorizationParams: {
@@ -34,7 +42,7 @@ export function useAuth() {
       console.error('Failed to get access token:', error);
       throw error;
     }
-  }, [getAccessTokenSilently]);
+  }, [getAccessTokenSilently, isMockLoggedIn]);
 
   /**
    * Redirect to Auth0 login page
@@ -49,9 +57,18 @@ export function useAuth() {
   );
 
   /**
-   * Logout and redirect to home page
+   * Logout and redirect to home page.
+   * Mock-auth dev path: just clear the flag + hard-navigate home. Calling
+   * auth0Logout here would redirect to a placeholder tenant (test.auth0.com)
+   * and hang forever, which is the "loading" bug.
    */
   const logout = useCallback(() => {
+    const wasMock = localStorage.getItem('mock_auth_logged_in') === 'true';
+    localStorage.removeItem('mock_auth_logged_in');
+    if (wasMock) {
+      window.location.href = '/';
+      return;
+    }
     auth0Logout({
       logoutParams: {
         returnTo: window.location.origin,
@@ -60,9 +77,9 @@ export function useAuth() {
   }, [auth0Logout]);
 
   return {
-    isAuthenticated,
+    isAuthenticated: finalIsAuthenticated,
     isLoading,
-    user,
+    user: finalUser,
     error,
     login,
     logout,

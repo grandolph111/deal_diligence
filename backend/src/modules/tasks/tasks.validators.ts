@@ -9,9 +9,13 @@ export const createTaskSchema = z.object({
   riskCategory: z.string().max(100).optional(),
   assignedDate: z.string().datetime().optional(),
   dueDate: z.string().datetime().optional(),
-  timeEstimate: z.number().int().positive().optional(), // minutes
+  timeEstimate: z.number().int().positive().optional(),
   assigneeIds: z.array(z.string().uuid()).optional(),
   tagIds: z.array(z.string().uuid()).optional(),
+  boardId: z.string().uuid().optional(),
+  // AI task fields
+  aiPrompt: z.string().max(10000).optional(),
+  attachedDocumentIds: z.array(z.string().uuid()).optional(),
 });
 
 export const updateTaskSchema = z.object({
@@ -23,6 +27,9 @@ export const updateTaskSchema = z.object({
   assignedDate: z.string().datetime().nullable().optional(),
   dueDate: z.string().datetime().nullable().optional(),
   timeEstimate: z.number().int().positive().nullable().optional(),
+  // AI task fields
+  aiPrompt: z.string().max(10000).nullable().optional(),
+  attachedDocumentIds: z.array(z.string().uuid()).optional(),
 });
 
 export const updateTaskStatusSchema = z.object({

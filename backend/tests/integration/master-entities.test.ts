@@ -19,6 +19,13 @@ describe('Master Entities API - Entity Deduplication', () => {
     name: 'Master Entities Test User 2',
   };
 
+  // setMockUser expects { sub, email, name } — map from the Prisma-shaped fixtures above.
+  const asMock = (u: { auth0Id: string; email: string; name: string }) => ({
+    sub: u.auth0Id,
+    email: u.email,
+    name: u.name,
+  });
+
   let projectId: string;
   let documentId: string;
 
@@ -94,7 +101,7 @@ describe('Master Entities API - Entity Deduplication', () => {
       where: { documentId },
     });
     await prisma.masterEntity.deleteMany({ where: { projectId } });
-    setMockUser(testUser);
+    setMockUser(asMock(testUser));
   });
 
   describe('POST /projects/:id/master-entities', () => {
@@ -153,7 +160,7 @@ describe('Master Entities API - Entity Deduplication', () => {
     });
 
     it('should require ADMIN role', async () => {
-      setMockUser(testUser2); // MEMBER role
+      setMockUser(asMock(testUser2)); // MEMBER role
 
       const res = await request(app)
         .post(`/api/v1/projects/${projectId}/master-entities`)
@@ -208,7 +215,7 @@ describe('Master Entities API - Entity Deduplication', () => {
     });
 
     it('should allow MEMBER role to list', async () => {
-      setMockUser(testUser2);
+      setMockUser(asMock(testUser2));
 
       const res = await request(app).get(
         `/api/v1/projects/${projectId}/master-entities`
@@ -293,7 +300,7 @@ describe('Master Entities API - Entity Deduplication', () => {
     });
 
     it('should require ADMIN role', async () => {
-      setMockUser(testUser2);
+      setMockUser(asMock(testUser2));
 
       const res = await request(app)
         .post(`/api/v1/projects/${projectId}/master-entities/deduplicate`)
@@ -587,7 +594,7 @@ describe('Master Entities API - Entity Deduplication', () => {
     });
 
     it('should allow MEMBER to view', async () => {
-      setMockUser(testUser2);
+      setMockUser(asMock(testUser2));
 
       const res = await request(app).get(
         `/api/v1/projects/${projectId}/master-entities/${masterEntityId}/documents`

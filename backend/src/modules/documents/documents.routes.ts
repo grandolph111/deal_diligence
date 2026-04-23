@@ -21,6 +21,13 @@ router.get('/', requirePermission('canAccessVDR'), documentsController.listDocum
 // GET /api/v1/projects/:projectId/documents/:documentId - Get document
 router.get('/:documentId', requirePermission('canAccessVDR'), documentsController.getDocument);
 
+// GET /api/v1/projects/:projectId/documents/:documentId/fact-sheet - Fetch extraction markdown
+router.get(
+  '/:documentId/fact-sheet',
+  requirePermission('canAccessVDR'),
+  documentsController.getFactSheet
+);
+
 // POST /api/v1/projects/:projectId/documents/initiate-upload - Initiate upload
 router.post(
   '/initiate-upload',

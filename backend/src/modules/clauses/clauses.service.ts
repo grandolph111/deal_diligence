@@ -1,5 +1,4 @@
 import { prisma } from '../../config/database';
-import { config } from '../../config';
 import { ApiError } from '../../utils/ApiError';
 import {
   CreateClauseInput,
@@ -10,25 +9,6 @@ import {
   ClauseStats,
   LOW_CONFIDENCE_THRESHOLD,
 } from './clauses.validators';
-
-/**
- * Response from Python microservice clause detection
- */
-interface PythonClauseResponse {
-  document_id: string;
-  clauses: Array<{
-    clause_type: string;
-    title: string | null;
-    content: string;
-    page_number: number | null;
-    start_offset: number | null;
-    end_offset: number | null;
-    confidence: number;
-    risk_level: string | null;
-    risk_reason: string | null;
-  }>;
-  processing_time_ms: number;
-}
 
 export const clausesService = {
   /**
@@ -206,60 +186,26 @@ export const clausesService = {
   },
 
   /**
-   * Call Python microservice to detect clauses in a document
+   * Re-run clause detection on a document. In the Claude-native architecture,
+   * clauses are produced as part of single-pass document extraction, so this
+   * is equivalent to re-running extraction.
    */
   async detectClausesInDocument(documentId: string, projectId: string) {
     const document = await this.verifyDocumentInProject(documentId, projectId);
-
     if (document.processingStatus !== 'COMPLETE') {
-      throw ApiError.badRequest('Document processing is not complete');
-    }
-
-    // Check if Python service is configured
-    if (!config.pythonService.url) {
-      throw ApiError.internal('Python service is not configured');
+      throw ApiError.badRequest('Document extraction is not complete');
     }
 
     try {
-      const response = await fetch(`${config.pythonService.url}/analyze/clauses`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          document_id: documentId,
-          berrydb_id: document.berryDbId,
-          s3_key: document.s3Key,
-        }),
+      const { extractionService } = await import('../../services/extraction.service');
+      await extractionService.manualRetry(documentId);
+      const count = await prisma.documentAnnotation.count({
+        where: { documentId, annotationType: 'CLAUSE' },
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Python service error: ${response.status} - ${errorText}`);
-      }
-
-      const result = (await response.json()) as PythonClauseResponse;
-
-      // Transform Python response to our schema format
-      const syncInput: SyncClausesInput = {
-        clauses: result.clauses.map((clause) => ({
-          clauseType: clause.clause_type.toUpperCase() as SyncClausesInput['clauses'][0]['clauseType'],
-          title: clause.title ?? undefined,
-          content: clause.content,
-          pageNumber: clause.page_number,
-          startOffset: clause.start_offset ?? undefined,
-          endOffset: clause.end_offset ?? undefined,
-          confidence: clause.confidence,
-          riskLevel: clause.risk_level?.toUpperCase() as SyncClausesInput['clauses'][0]['riskLevel'] | undefined,
-          riskReason: clause.risk_reason,
-        })),
-      };
-
-      // Sync to database
-      await this.syncClausesFromPython(documentId, projectId, syncInput);
-
       return {
         documentId,
-        detectedCount: result.clauses.length,
-        processingTimeMs: result.processing_time_ms,
+        detectedCount: count,
+        processingTimeMs: 0,
       };
     } catch (error) {
       if (error instanceof ApiError) throw error;

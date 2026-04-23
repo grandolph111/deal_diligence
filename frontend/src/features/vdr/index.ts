@@ -7,6 +7,7 @@ export { RenameFolderModal } from './components/RenameFolderModal';
 export { DeleteFolderModal } from './components/DeleteFolderModal';
 export { FolderContextMenu } from './components/FolderContextMenu';
 export { DocumentViewer } from './components/DocumentViewer';
+export { FactSheetModal } from './components/FactSheetModal';
 
 // Upload components
 export { UploadDropZone } from './components/UploadDropZone';

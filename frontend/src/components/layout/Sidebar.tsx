@@ -1,5 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, FileText, Kanban, Settings, FolderOpen } from 'lucide-react';
+import {
+  LayoutDashboard,
+  FileText,
+  Kanban,
+  Settings,
+  FolderOpen,
+  BookOpen,
+} from 'lucide-react';
 
 interface SidebarProps {
   projectId?: string;
@@ -41,13 +48,23 @@ export function Sidebar({ projectId }: SidebarProps) {
             </NavLink>
 
             <NavLink
-              to={`/projects/${projectId}/board`}
+              to={`/projects/${projectId}/brief`}
+              className={({ isActive }) =>
+                `sidebar-link ${isActive ? 'active' : ''}`
+              }
+            >
+              <BookOpen className="icon" size={20} />
+              <span>Deal Brief</span>
+            </NavLink>
+
+            <NavLink
+              to={`/projects/${projectId}/boards`}
               className={({ isActive }) =>
                 `sidebar-link ${isActive ? 'active' : ''}`
               }
             >
               <Kanban className="icon" size={20} />
-              <span>Kanban Board</span>
+              <span>Kanban Boards</span>
             </NavLink>
 
             <NavLink
@@ -67,7 +84,7 @@ export function Sidebar({ projectId }: SidebarProps) {
               }
             >
               <Settings className="icon" size={20} />
-              <span>Settings</span>
+              <span>Admin</span>
             </NavLink>
           </>
         )}

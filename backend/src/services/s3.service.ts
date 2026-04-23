@@ -4,8 +4,10 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import crypto from 'crypto';
 import path from 'path';
 import { config } from '../config';
 
@@ -153,6 +155,79 @@ export const s3Service = {
     });
 
     await s3Client.send(command);
+  },
+
+  /**
+   * Download an S3 object as raw bytes. Mock mode reads from in-memory storage.
+   */
+  async getObjectBytes(s3Key: string): Promise<Buffer> {
+    if (useMockS3 || !s3Client) {
+      const stored = mockStorage.get(s3Key);
+      if (!stored) throw new Error(`Mock S3: key not found: ${s3Key}`);
+      return stored.data;
+    }
+    const command = new GetObjectCommand({
+      Bucket: config.s3.bucket,
+      Key: s3Key,
+    });
+    const response = await s3Client.send(command);
+    if (!response.Body) throw new Error(`S3 object has no body: ${s3Key}`);
+    const chunks: Uint8Array[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for await (const chunk of response.Body as any) {
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
+  },
+
+  /**
+   * Download an S3 object as UTF-8 text.
+   */
+  async getObjectText(s3Key: string): Promise<string> {
+    const bytes = await this.getObjectBytes(s3Key);
+    return bytes.toString('utf8');
+  },
+
+  /**
+   * Upload UTF-8 text to S3 at the given key. Overwrites existing.
+   */
+  async putObjectText(
+    s3Key: string,
+    text: string,
+    mimeType = 'text/markdown; charset=utf-8'
+  ): Promise<void> {
+    const data = Buffer.from(text, 'utf8');
+    if (useMockS3 || !s3Client) {
+      mockStorage.set(s3Key, { data, mimeType });
+      return;
+    }
+    const command = new PutObjectCommand({
+      Bucket: config.s3.bucket,
+      Key: s3Key,
+      Body: data,
+      ContentType: mimeType,
+    });
+    await s3Client.send(command);
+  },
+
+  /**
+   * Return an object's ETag. Used as an idempotency key for extraction.
+   * Mock mode returns a content-hash-based ETag.
+   */
+  async getObjectETag(s3Key: string): Promise<string | null> {
+    if (useMockS3 || !s3Client) {
+      const stored = mockStorage.get(s3Key);
+      if (!stored) return null;
+      return crypto.createHash('md5').update(stored.data).digest('hex');
+    }
+    try {
+      const response = await s3Client.send(
+        new HeadObjectCommand({ Bucket: config.s3.bucket, Key: s3Key })
+      );
+      return response.ETag ? response.ETag.replace(/"/g, '') : null;
+    } catch {
+      return null;
+    }
   },
 
   /**

@@ -14,7 +14,7 @@ export const chatController = {
    * List all conversations for a project
    */
   listConversations: asyncHandler(async (req: Request, res: Response) => {
-    const { id: projectId } = req.params;
+    const { id: projectId } = req.params as Record<string, string>;
 
     const conversations = await chatService.getProjectConversations(projectId);
 
@@ -26,7 +26,7 @@ export const chatController = {
    * Create a new conversation
    */
   createConversation: asyncHandler(async (req: Request, res: Response) => {
-    const { id: projectId } = req.params;
+    const { id: projectId } = req.params as Record<string, string>;
 
     if (!req.user) {
       throw ApiError.unauthorized('User not found');
@@ -50,7 +50,7 @@ export const chatController = {
    * Get a conversation with all messages
    */
   getConversation: asyncHandler(async (req: Request, res: Response) => {
-    const { id: projectId, conversationId } = req.params;
+    const { id: projectId, conversationId } = req.params as Record<string, string>;
 
     // Verify conversation belongs to project (IDOR protection)
     await chatService.verifyConversationInProject(conversationId, projectId);
@@ -69,7 +69,7 @@ export const chatController = {
    * Update conversation title
    */
   updateConversation: asyncHandler(async (req: Request, res: Response) => {
-    const { id: projectId, conversationId } = req.params;
+    const { id: projectId, conversationId } = req.params as Record<string, string>;
 
     if (!req.user || !req.projectMember) {
       throw ApiError.unauthorized('User not found');
@@ -106,7 +106,7 @@ export const chatController = {
    * Delete a conversation
    */
   deleteConversation: asyncHandler(async (req: Request, res: Response) => {
-    const { id: projectId, conversationId } = req.params;
+    const { id: projectId, conversationId } = req.params as Record<string, string>;
 
     if (!req.user || !req.projectMember) {
       throw ApiError.unauthorized('User not found');
@@ -139,7 +139,7 @@ export const chatController = {
    * Send a message and get AI response
    */
   sendMessage: asyncHandler(async (req: Request, res: Response) => {
-    const { id: projectId, conversationId } = req.params;
+    const { id: projectId, conversationId } = req.params as Record<string, string>;
 
     if (!req.user || !req.projectMember) {
       throw ApiError.unauthorized('User not found');

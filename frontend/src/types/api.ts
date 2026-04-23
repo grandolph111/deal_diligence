@@ -42,6 +42,9 @@ export interface Project extends Timestamps {
   documentCount?: number;
   // User's role in project (only on list response)
   role?: Role;
+  // Non-null once reconciliation has produced at least one scoped Deal Brief;
+  // used by the dashboard to surface "Brief ready" vs. "Awaiting brief".
+  briefManifest?: unknown | null;
 }
 
 // Granular permissions for members
@@ -144,6 +147,49 @@ export interface Subtask {
   assignee: Pick<User, 'id' | 'email' | 'name' | 'avatarUrl'> | null;
 }
 
+// AI task status
+export type TaskAiStatus = 'IDLE' | 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
+
+// Kanban board (multi-board per project)
+export interface KanbanBoardSummary extends Timestamps {
+  id: string;
+  name: string;
+  description: string | null;
+  isDefault: boolean;
+  folders: Array<{ id: string; name: string }>;
+  taskCount: number;
+}
+
+export interface KanbanBoardDetail extends Timestamps {
+  id: string;
+  name: string;
+  description: string | null;
+  isDefault: boolean;
+  folders: Array<{ id: string; name: string; parentId?: string | null }>;
+}
+
+export interface CreateBoardDto {
+  name: string;
+  description?: string | null;
+  folderIds: string[];
+}
+
+export interface UpdateBoardDto {
+  name?: string;
+  description?: string | null;
+  folderIds?: string[];
+}
+
+// Shared confidence band helper — keep in sync with backend/claude/schema.ts
+export type ConfidenceBand = 'HIGH' | 'GOOD' | 'MODERATE' | 'LOW' | 'UNKNOWN';
+export const confidenceBand = (score: number | null | undefined): ConfidenceBand => {
+  if (score == null) return 'UNKNOWN';
+  if (score >= 90) return 'HIGH';
+  if (score >= 80) return 'GOOD';
+  if (score >= 70) return 'MODERATE';
+  return 'LOW';
+};
+
 // Task model
 export interface Task extends Timestamps {
   id: string;
@@ -157,6 +203,17 @@ export interface Task extends Timestamps {
   assignedDate: string | null;
   dueDate: string | null;
   timeEstimate: number | null;
+  // AI workflow
+  aiPrompt: string | null;
+  aiStatus: TaskAiStatus | null;
+  aiReportS3Key: string | null;
+  aiReportSummary: string | null;
+  aiModel: string | null;
+  aiConfidenceScore: number | null;
+  aiConfidenceReason: string | null;
+  aiStartedAt: string | null;
+  aiCompletedAt: string | null;
+  aiError: string | null;
   assignees: TaskAssignee[];
   tags: TaskTag[];
   createdBy: User;
@@ -221,6 +278,9 @@ export interface CreateTaskDto {
   timeEstimate?: number;
   assigneeIds?: string[];
   tagIds?: string[];
+  boardId?: string;
+  aiPrompt?: string;
+  attachedDocumentIds?: string[];
 }
 
 export interface UpdateTaskDto {
@@ -231,6 +291,8 @@ export interface UpdateTaskDto {
   riskCategory?: string;
   dueDate?: string;
   timeEstimate?: number;
+  aiPrompt?: string | null;
+  attachedDocumentIds?: string[];
 }
 
 export interface UpdateTaskStatusDto {
@@ -292,6 +354,7 @@ export type DocumentStatus = 'PENDING' | 'PROCESSING' | 'COMPLETE' | 'FAILED';
 
 // Document type classification
 export type DocumentType =
+  // manual classification
   | 'CONTRACT'
   | 'FINANCIAL'
   | 'LEGAL'
@@ -302,7 +365,15 @@ export type DocumentType =
   | 'IP'
   | 'COMMERCIAL'
   | 'OPERATIONAL'
-  | 'OTHER';
+  | 'OTHER'
+  // extraction pipeline output
+  | 'SPA'
+  | 'APA'
+  | 'LOI'
+  | 'NDA'
+  | 'EMPLOYMENT'
+  | 'LEASE'
+  | 'GENERIC';
 
 // Risk level classification
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
@@ -320,20 +391,38 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   COMMERCIAL: 'Commercial',
   OPERATIONAL: 'Operational',
   OTHER: 'Other',
+  // extraction-pipeline labels
+  SPA: 'SPA (Stock Purchase)',
+  APA: 'APA (Asset Purchase)',
+  LOI: 'LOI',
+  NDA: 'NDA',
+  EMPLOYMENT: 'Employment',
+  LEASE: 'Lease',
+  GENERIC: 'Generic',
 };
 
+// Document-type badge colors — desaturated, coordinated with the navy/brass
+// palette in index.css. Each tone sits between 35–55% luminance so white text
+// stays legible, and no two adjacent types collide in hue.
 export const DOCUMENT_TYPE_COLORS: Record<DocumentType, string> = {
-  CONTRACT: '#3b82f6',    // blue
-  FINANCIAL: '#10b981',   // green
-  LEGAL: '#8b5cf6',       // purple
-  CORPORATE: '#f59e0b',   // amber
-  TECHNICAL: '#06b6d4',   // cyan
-  TAX: '#ef4444',         // red
-  HR: '#ec4899',          // pink
-  IP: '#14b8a6',          // teal
-  COMMERCIAL: '#f97316',  // orange
-  OPERATIONAL: '#6366f1', // indigo
-  OTHER: '#6b7280',       // gray
+  CONTRACT: '#1e3a5f',    // navy (brand primary)
+  FINANCIAL: '#046c4e',   // deep forest
+  LEGAL: '#4a4e8a',       // muted indigo
+  CORPORATE: '#a87a3d',   // deep brass (brand accent)
+  TECHNICAL: '#0e6e84',   // steel teal
+  TAX: '#991b1b',         // oxblood
+  HR: '#8a2f5a',          // mulberry
+  IP: '#0f6e66',          // pine
+  COMMERCIAL: '#c7a46c',  // warm brass
+  OPERATIONAL: '#475569', // slate
+  OTHER: '#6b7486',       // neutral gray
+  SPA: '#1e3a5f',
+  APA: '#1e3a5f',
+  LOI: '#4a4e8a',
+  NDA: '#8a2f5a',
+  EMPLOYMENT: '#0e6e84',
+  LEASE: '#a87a3d',
+  GENERIC: '#6b7486',
 };
 
 // Risk level display labels and colors
@@ -344,11 +433,13 @@ export const RISK_LEVEL_LABELS: Record<RiskLevel, string> = {
   CRITICAL: 'Critical Risk',
 };
 
+// Risk-level colors — mirror the --risk-* tokens in index.css so chip/badge
+// consumers stay in the same palette as the card variants.
 export const RISK_LEVEL_COLORS: Record<RiskLevel, string> = {
-  LOW: '#10b981',     // green
-  MEDIUM: '#f59e0b',  // amber
-  HIGH: '#ef4444',    // red
-  CRITICAL: '#dc2626', // dark red
+  LOW: '#047857',     // forest — matches --risk-low
+  MEDIUM: '#b45309',  // burnt ochre — matches --risk-med
+  HIGH: '#b91c1c',    // oxblood — matches --risk-high
+  CRITICAL: '#7f1d1d', // deep oxblood
 };
 
 // Folder model
@@ -373,6 +464,25 @@ export interface FolderTreeNode extends Folder {
 }
 
 // Document model
+export type VerificationStatus = 'VERIFIED' | 'NEEDS_REVIEW' | 'FAILED';
+
+export interface VerificationIssue {
+  type: string;
+  severity: string;
+  description: string;
+  location?: { section?: string; pageNumber?: number | null } | null;
+  suggestedCorrection?: string | null;
+}
+
+export interface AnomalyFlag {
+  documentId: string;
+  clauseType: string;
+  thisValue: string;
+  peerValue: string;
+  peerSize: number;
+  reason: string;
+}
+
 export interface Document extends Timestamps {
   id: string;
   projectId: string;
@@ -381,15 +491,59 @@ export interface Document extends Timestamps {
   s3Key: string;
   mimeType: string;
   sizeBytes: number;
-  berryDbId: string | null;
   processingStatus: DocumentStatus;
-  documentType: string | null;
+  // Extraction outputs
+  extractionS3Key: string | null;
+  extractionSummary: string | null;
+  extractionModel: string | null;
+  // Risk
+  riskScore: number | null;
   riskLevel: string | null;
+  riskSummary: string | null;
+  // Extraction confidence (Claude self-reported, 0-100)
+  confidenceScore: number | null;
+  confidenceReason: string | null;
+  // Deal metadata
+  documentType: string | null;
+  documentTypeConfidence: number | null;
   pageCount: number | null;
+  dealValue: number | null;
+  effectiveDate: string | null;
+  governingLaw: string | null;
+  currency: string | null;
+  // Verification
+  verificationStatus: VerificationStatus | null;
+  verificationIssues: VerificationIssue[] | null;
+  // Anomaly flags from cross-document reconciliation
+  anomalyFlags: AnomalyFlag[] | null;
   isViewOnly: boolean;
   uploadedById: string;
   uploadedBy?: Pick<User, 'id' | 'email' | 'name' | 'avatarUrl'>;
   folder?: Pick<Folder, 'id' | 'name'>;
+}
+
+// Playbook (per-project standard positions conditioning extraction)
+export interface PlaybookStandardPosition {
+  clauseType: string;
+  preferredLanguage?: string;
+  fallbacks: string[];
+  riskIfDeviates: 'LOW' | 'MEDIUM' | 'HIGH';
+  notes?: string;
+}
+
+export interface Playbook {
+  version: 1;
+  dealContext?: string;
+  redFlags: string[];
+  standardPositions: PlaybookStandardPosition[];
+}
+
+// Deal brief response
+export interface DealBrief {
+  scopeKey: string;
+  scopeLabel: string;
+  markdown: string | null;
+  updatedAt: string | null;
 }
 
 // Folder path breadcrumb
@@ -523,17 +677,22 @@ export interface SimilarDocumentsResponse {
 // ENTITY EXTRACTION
 // ============================================
 
-// Entity types that can be extracted from documents
-export type EntityType =
-  | 'PERSON'
-  | 'ORGANIZATION'
-  | 'DATE'
-  | 'MONEY'
-  | 'PERCENTAGE'
-  | 'LOCATION'
-  | 'CONTRACT_TERM'
-  | 'CLAUSE_TYPE'
-  | 'JURISDICTION';
+// Canonical entity types (aligned with backend extraction prompt).
+// Keep in lockstep with backend/src/services/extraction.service.ts
+// ENTITY_TYPE_ALIASES — the backend normalizes COMPANY→ORGANIZATION,
+// AMOUNT→MONEY, etc. at write time so this list is exhaustive.
+export const ENTITY_TYPES = [
+  'PERSON',
+  'ORGANIZATION',
+  'DATE',
+  'MONEY',
+  'PERCENTAGE',
+  'LOCATION',
+  'CONTRACT_TERM',
+  'CLAUSE_TYPE',
+  'JURISDICTION',
+] as const;
+export type EntityType = (typeof ENTITY_TYPES)[number];
 
 // Document entity (extracted from a document)
 export interface DocumentEntity extends Timestamps {
@@ -615,91 +774,195 @@ export const ENTITY_TYPE_LABELS: Record<EntityType, string> = {
 // CLAUSE DETECTION
 // ============================================
 
-// Clause types that can be detected in documents
-export type ClauseType =
-  | 'TERMINATION'
-  | 'LIABILITY'
-  | 'INDEMNIFICATION'
-  | 'CONFIDENTIALITY'
-  | 'NON_COMPETE'
-  | 'CHANGE_OF_CONTROL'
-  | 'ASSIGNMENT'
-  | 'GOVERNING_LAW'
-  | 'DISPUTE_RESOLUTION'
-  | 'PAYMENT_TERMS'
-  | 'WARRANTY'
-  | 'INTELLECTUAL_PROPERTY'
-  | 'FORCE_MAJEURE'
-  | 'REPRESENTATIONS'
-  | 'COVENANTS'
-  | 'CONDITIONS_PRECEDENT'
-  | 'MATERIAL_ADVERSE_CHANGE'
-  | 'OTHER';
+// ----------------------------------------------------------------------
+// CANONICAL CLAUSE VOCABULARY
+//
+// Single source of truth. Mirrors the CUAD-aligned list in
+// backend/src/integrations/claude/prompts/extraction/shared.ts —
+// when adding a clause type, edit that prompt AND this constant together.
+// TypeScript's Record<ClauseType, …> below enforces that every map
+// (labels, colors, icons) has an entry for every type.
+// ----------------------------------------------------------------------
 
-// Clause display labels
+export const CLAUSE_TYPES = [
+  // Dates
+  'AGREEMENT_DATE',
+  'EFFECTIVE_DATE',
+  'EXPIRATION_DATE',
+  // Core M&A risk
+  'CAP_ON_LIABILITY',
+  'UNCAPPED_LIABILITY',
+  'INDEMNIFICATION',
+  'REPRESENTATIONS_AND_WARRANTIES',
+  'CHANGE_OF_CONTROL',
+  'TERMINATION_FOR_CONVENIENCE',
+  'MATERIAL_ADVERSE_CHANGE',
+  'CONDITIONS_PRECEDENT',
+  'COVENANTS',
+  'COVENANT_NOT_TO_SUE',
+  // Restrictions
+  'EXCLUSIVITY',
+  'NON_COMPETE',
+  'NON_DISPARAGEMENT',
+  'NO_SOLICIT_CUSTOMERS',
+  'NO_SOLICIT_EMPLOYEES',
+  'VOLUME_RESTRICTION',
+  'PRICE_RESTRICTIONS',
+  'COMPETITIVE_RESTRICTION_EXCEPTION',
+  'ANTI_ASSIGNMENT',
+  // IP / license
+  'IP_OWNERSHIP_ASSIGNMENT',
+  'JOINT_IP_OWNERSHIP',
+  'LICENSE_GRANT',
+  'IRREVOCABLE_OR_PERPETUAL_LICENSE',
+  'NON_TRANSFERABLE_LICENSE',
+  'UNLIMITED_LICENSE',
+  'SOURCE_CODE_ESCROW',
+  // Commercial
+  'MINIMUM_COMMITMENT',
+  'REVENUE_OR_PROFIT_SHARING',
+  'MOST_FAVORED_NATION',
+  'ROFR_ROFO_ROFN',
+  'THIRD_PARTY_BENEFICIARY',
+  // Payment / warranty
+  'PAYMENT_TERMS',
+  'LIQUIDATED_DAMAGES',
+  'WARRANTY_DURATION',
+  // Renewal
+  'RENEWAL_TERM',
+  'NOTICE_PERIOD_TO_TERMINATE_RENEWAL',
+  'POST_TERMINATION_SERVICES',
+  // Ops
+  'AUDIT_RIGHTS',
+  'INSURANCE',
+  'CONFIDENTIALITY',
+  // Jurisdiction / law
+  'GOVERNING_LAW',
+  'DISPUTE_RESOLUTION',
+  'FORCE_MAJEURE',
+  // Rollup
+  'ASSIGNMENT',
+  'INTELLECTUAL_PROPERTY',
+  'LIABILITY',
+  'TERMINATION',
+  'WARRANTY',
+  'REPRESENTATIONS',
+  'OTHER',
+] as const;
+export type ClauseType = (typeof CLAUSE_TYPES)[number];
+
+// Human-readable labels. Record<ClauseType, …> forces exhaustiveness.
 export const CLAUSE_TYPE_LABELS: Record<ClauseType, string> = {
-  TERMINATION: 'Termination',
-  LIABILITY: 'Liability',
+  AGREEMENT_DATE: 'Agreement Date',
+  EFFECTIVE_DATE: 'Effective Date',
+  EXPIRATION_DATE: 'Expiration Date',
+  CAP_ON_LIABILITY: 'Cap on Liability',
+  UNCAPPED_LIABILITY: 'Uncapped Liability',
   INDEMNIFICATION: 'Indemnification',
-  CONFIDENTIALITY: 'Confidentiality',
-  NON_COMPETE: 'Non-Compete',
+  REPRESENTATIONS_AND_WARRANTIES: 'Representations & Warranties',
   CHANGE_OF_CONTROL: 'Change of Control',
-  ASSIGNMENT: 'Assignment',
+  TERMINATION_FOR_CONVENIENCE: 'Termination for Convenience',
+  MATERIAL_ADVERSE_CHANGE: 'Material Adverse Change',
+  CONDITIONS_PRECEDENT: 'Conditions Precedent',
+  COVENANTS: 'Covenants',
+  COVENANT_NOT_TO_SUE: 'Covenant Not to Sue',
+  EXCLUSIVITY: 'Exclusivity',
+  NON_COMPETE: 'Non-Compete',
+  NON_DISPARAGEMENT: 'Non-Disparagement',
+  NO_SOLICIT_CUSTOMERS: 'No-Solicit Customers',
+  NO_SOLICIT_EMPLOYEES: 'No-Solicit Employees',
+  VOLUME_RESTRICTION: 'Volume Restriction',
+  PRICE_RESTRICTIONS: 'Price Restrictions',
+  COMPETITIVE_RESTRICTION_EXCEPTION: 'Competitive Restriction Exception',
+  ANTI_ASSIGNMENT: 'Anti-Assignment',
+  IP_OWNERSHIP_ASSIGNMENT: 'IP Ownership Assignment',
+  JOINT_IP_OWNERSHIP: 'Joint IP Ownership',
+  LICENSE_GRANT: 'License Grant',
+  IRREVOCABLE_OR_PERPETUAL_LICENSE: 'Irrevocable / Perpetual License',
+  NON_TRANSFERABLE_LICENSE: 'Non-Transferable License',
+  UNLIMITED_LICENSE: 'Unlimited License',
+  SOURCE_CODE_ESCROW: 'Source Code Escrow',
+  MINIMUM_COMMITMENT: 'Minimum Commitment',
+  REVENUE_OR_PROFIT_SHARING: 'Revenue / Profit Sharing',
+  MOST_FAVORED_NATION: 'Most Favored Nation',
+  ROFR_ROFO_ROFN: 'ROFR / ROFO / ROFN',
+  THIRD_PARTY_BENEFICIARY: 'Third-Party Beneficiary',
+  PAYMENT_TERMS: 'Payment Terms',
+  LIQUIDATED_DAMAGES: 'Liquidated Damages',
+  WARRANTY_DURATION: 'Warranty Duration',
+  RENEWAL_TERM: 'Renewal Term',
+  NOTICE_PERIOD_TO_TERMINATE_RENEWAL: 'Notice Period to Terminate Renewal',
+  POST_TERMINATION_SERVICES: 'Post-Termination Services',
+  AUDIT_RIGHTS: 'Audit Rights',
+  INSURANCE: 'Insurance',
+  CONFIDENTIALITY: 'Confidentiality',
   GOVERNING_LAW: 'Governing Law',
   DISPUTE_RESOLUTION: 'Dispute Resolution',
-  PAYMENT_TERMS: 'Payment Terms',
-  WARRANTY: 'Warranty',
-  INTELLECTUAL_PROPERTY: 'Intellectual Property',
   FORCE_MAJEURE: 'Force Majeure',
+  ASSIGNMENT: 'Assignment',
+  INTELLECTUAL_PROPERTY: 'Intellectual Property',
+  LIABILITY: 'Liability',
+  TERMINATION: 'Termination',
+  WARRANTY: 'Warranty',
   REPRESENTATIONS: 'Representations',
-  COVENANTS: 'Covenants',
-  CONDITIONS_PRECEDENT: 'Conditions Precedent',
-  MATERIAL_ADVERSE_CHANGE: 'Material Adverse Change',
   OTHER: 'Other',
 };
 
-// Clause type colors (distinct colors for each type)
+// Muted, semantically grouped color palette.
 export const CLAUSE_TYPE_COLORS: Record<ClauseType, string> = {
-  TERMINATION: '#ef4444',         // Red
-  LIABILITY: '#f97316',           // Orange
-  INDEMNIFICATION: '#f59e0b',     // Amber
-  CONFIDENTIALITY: '#84cc16',     // Lime
-  NON_COMPETE: '#22c55e',         // Green
-  CHANGE_OF_CONTROL: '#14b8a6',   // Teal
-  ASSIGNMENT: '#06b6d4',          // Cyan
-  GOVERNING_LAW: '#0ea5e9',       // Sky
-  DISPUTE_RESOLUTION: '#3b82f6',  // Blue
-  PAYMENT_TERMS: '#6366f1',       // Indigo
-  WARRANTY: '#8b5cf6',            // Violet
-  INTELLECTUAL_PROPERTY: '#a855f7', // Purple
-  FORCE_MAJEURE: '#d946ef',       // Fuchsia
-  REPRESENTATIONS: '#ec4899',     // Pink
-  COVENANTS: '#f43f5e',           // Rose
-  CONDITIONS_PRECEDENT: '#78716c',// Stone
-  MATERIAL_ADVERSE_CHANGE: '#dc2626', // Dark Red (high importance)
-  OTHER: '#6b7280',               // Gray
-};
-
-// Clause type icons (for UI display)
-export const CLAUSE_TYPE_ICONS: Record<ClauseType, string> = {
-  TERMINATION: 'X',
-  LIABILITY: 'Shield',
-  INDEMNIFICATION: 'ShieldCheck',
-  CONFIDENTIALITY: 'Lock',
-  NON_COMPETE: 'Ban',
-  CHANGE_OF_CONTROL: 'RefreshCw',
-  ASSIGNMENT: 'ArrowRight',
-  GOVERNING_LAW: 'Scale',
-  DISPUTE_RESOLUTION: 'Gavel',
-  PAYMENT_TERMS: 'DollarSign',
-  WARRANTY: 'CheckCircle',
-  INTELLECTUAL_PROPERTY: 'Lightbulb',
-  FORCE_MAJEURE: 'AlertTriangle',
-  REPRESENTATIONS: 'FileText',
-  COVENANTS: 'FileCheck',
-  CONDITIONS_PRECEDENT: 'GitBranch',
-  MATERIAL_ADVERSE_CHANGE: 'AlertOctagon',
-  OTHER: 'MoreHorizontal',
+  AGREEMENT_DATE: '#0ea5e9',
+  EFFECTIVE_DATE: '#0ea5e9',
+  EXPIRATION_DATE: '#0ea5e9',
+  CAP_ON_LIABILITY: '#f97316',
+  UNCAPPED_LIABILITY: '#dc2626',
+  INDEMNIFICATION: '#f59e0b',
+  REPRESENTATIONS_AND_WARRANTIES: '#ec4899',
+  CHANGE_OF_CONTROL: '#14b8a6',
+  TERMINATION_FOR_CONVENIENCE: '#ef4444',
+  MATERIAL_ADVERSE_CHANGE: '#dc2626',
+  CONDITIONS_PRECEDENT: '#78716c',
+  COVENANTS: '#f43f5e',
+  COVENANT_NOT_TO_SUE: '#f43f5e',
+  EXCLUSIVITY: '#22c55e',
+  NON_COMPETE: '#22c55e',
+  NON_DISPARAGEMENT: '#22c55e',
+  NO_SOLICIT_CUSTOMERS: '#22c55e',
+  NO_SOLICIT_EMPLOYEES: '#22c55e',
+  VOLUME_RESTRICTION: '#84cc16',
+  PRICE_RESTRICTIONS: '#84cc16',
+  COMPETITIVE_RESTRICTION_EXCEPTION: '#84cc16',
+  ANTI_ASSIGNMENT: '#06b6d4',
+  IP_OWNERSHIP_ASSIGNMENT: '#a855f7',
+  JOINT_IP_OWNERSHIP: '#a855f7',
+  LICENSE_GRANT: '#a855f7',
+  IRREVOCABLE_OR_PERPETUAL_LICENSE: '#a855f7',
+  NON_TRANSFERABLE_LICENSE: '#a855f7',
+  UNLIMITED_LICENSE: '#a855f7',
+  SOURCE_CODE_ESCROW: '#a855f7',
+  MINIMUM_COMMITMENT: '#6366f1',
+  REVENUE_OR_PROFIT_SHARING: '#6366f1',
+  MOST_FAVORED_NATION: '#6366f1',
+  ROFR_ROFO_ROFN: '#6366f1',
+  THIRD_PARTY_BENEFICIARY: '#6366f1',
+  PAYMENT_TERMS: '#6366f1',
+  LIQUIDATED_DAMAGES: '#6366f1',
+  WARRANTY_DURATION: '#8b5cf6',
+  RENEWAL_TERM: '#06b6d4',
+  NOTICE_PERIOD_TO_TERMINATE_RENEWAL: '#06b6d4',
+  POST_TERMINATION_SERVICES: '#06b6d4',
+  AUDIT_RIGHTS: '#78716c',
+  INSURANCE: '#0ea5e9',
+  CONFIDENTIALITY: '#84cc16',
+  GOVERNING_LAW: '#3b82f6',
+  DISPUTE_RESOLUTION: '#3b82f6',
+  FORCE_MAJEURE: '#d946ef',
+  ASSIGNMENT: '#06b6d4',
+  INTELLECTUAL_PROPERTY: '#a855f7',
+  LIABILITY: '#f97316',
+  TERMINATION: '#ef4444',
+  WARRANTY: '#8b5cf6',
+  REPRESENTATIONS: '#ec4899',
+  OTHER: '#6b7280',
 };
 
 // Document clause/annotation model

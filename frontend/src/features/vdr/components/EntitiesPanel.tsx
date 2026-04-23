@@ -33,18 +33,34 @@ interface EntitiesPanelProps {
   onNavigateToPage?: (pageNumber: number) => void;
 }
 
-// Icons for each entity type
-const ENTITY_TYPE_ICONS: Record<EntityType, React.ElementType> = {
+// Icons for each entity type. Includes aliases from the extraction prompt
+// (COMPANY / AMOUNT / CLAUSE etc.) so any vocabulary variation still renders.
+const ENTITY_TYPE_ICONS: Record<string, React.ElementType> = {
   PERSON: User,
   ORGANIZATION: Building2,
+  COMPANY: Building2,
   DATE: Calendar,
   MONEY: DollarSign,
+  AMOUNT: DollarSign,
   PERCENTAGE: Percent,
   LOCATION: MapPin,
+  PLACE: MapPin,
   CONTRACT_TERM: FileText,
+  TERM: FileText,
   CLAUSE_TYPE: Scale,
+  CLAUSE: Scale,
   JURISDICTION: Globe,
 };
+
+const ENTITY_TYPE_LABEL_FALLBACK = (type: string): string =>
+  ENTITY_TYPE_LABELS[type as EntityType] ??
+  type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+const ENTITY_TYPE_COLOR_FALLBACK = (type: string): string =>
+  ENTITY_TYPE_COLORS[type as EntityType] ?? '#6b7280';
+
+const getEntityIcon = (type: string): React.ElementType =>
+  ENTITY_TYPE_ICONS[type] ?? FileText;
 
 /**
  * Format confidence score as percentage
@@ -183,7 +199,7 @@ export function EntitiesPanel({
       {/* Entity legend */}
       <div className="entities-legend">
         {Array.from(groupedEntities.keys()).map((type) => {
-          const Icon = ENTITY_TYPE_ICONS[type];
+          const Icon = getEntityIcon(type);
           const isHighlighted = highlightedTypes.has(type);
           const count = groupedEntities.get(type)?.length || 0;
 
@@ -192,9 +208,9 @@ export function EntitiesPanel({
               key={type}
               className={`entity-legend-item ${isHighlighted ? 'active' : ''}`}
               onClick={() => onToggleTypeHighlight(type)}
-              title={`${ENTITY_TYPE_LABELS[type]} (${count}) - Click to toggle`}
+              title={`${ENTITY_TYPE_LABEL_FALLBACK(type)} (${count}) - Click to toggle`}
               style={{
-                '--entity-color': ENTITY_TYPE_COLORS[type],
+                '--entity-color': ENTITY_TYPE_COLOR_FALLBACK(type),
               } as React.CSSProperties}
             >
               <Icon size={12} />
@@ -207,7 +223,7 @@ export function EntitiesPanel({
       {/* Entity groups */}
       <div className="entities-list">
         {Array.from(groupedEntities.entries()).map(([type, typeEntities]) => {
-          const Icon = ENTITY_TYPE_ICONS[type];
+          const Icon = getEntityIcon(type);
           const isExpanded = expandedTypes.has(type);
           const isHighlighted = highlightedTypes.has(type);
 
@@ -216,7 +232,7 @@ export function EntitiesPanel({
               key={type}
               className={`entity-group ${isHighlighted ? 'highlighted' : ''}`}
               style={{
-                '--entity-color': ENTITY_TYPE_COLORS[type],
+                '--entity-color': ENTITY_TYPE_COLOR_FALLBACK(type),
               } as React.CSSProperties}
             >
               {/* Group header */}
@@ -228,7 +244,7 @@ export function EntitiesPanel({
                   <Icon size={14} />
                 </div>
                 <span className="entity-group-label">
-                  {ENTITY_TYPE_LABELS[type]}
+                  {ENTITY_TYPE_LABEL_FALLBACK(type)}
                 </span>
                 <span className="entity-group-count">{typeEntities.length}</span>
                 <span className="entity-group-chevron">

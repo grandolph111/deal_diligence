@@ -1,8 +1,17 @@
 import { useDraggable } from '@dnd-kit/core';
-import { Calendar, MessageSquare, CheckSquare } from 'lucide-react';
+import { Calendar, MessageSquare, CheckSquare, Sparkles, AlertCircle } from 'lucide-react';
 import { PriorityBadge } from './PriorityBadge';
 import { AssigneeAvatars } from './AssigneeAvatars';
-import type { Task } from '../../../types/api';
+import { ConfidencePill } from '../../../components/ConfidencePill';
+import type { Task, TaskAiStatus } from '../../../types/api';
+
+const AI_PILL: Record<TaskAiStatus, { label: string; cls: string; icon: React.ElementType }> = {
+  IDLE: { label: 'AI task', cls: 'chip primary', icon: Sparkles },
+  QUEUED: { label: 'Queued', cls: 'chip primary', icon: Sparkles },
+  RUNNING: { label: 'Analyzing…', cls: 'chip primary', icon: Sparkles },
+  SUCCEEDED: { label: 'Ready for review', cls: 'chip accent', icon: Sparkles },
+  FAILED: { label: 'AI failed', cls: 'chip risk-high', icon: AlertCircle },
+};
 
 interface TaskCardProps {
   task: Task;
@@ -44,6 +53,22 @@ export function TaskCard({ task, onClick, isDragging, currentUserId }: TaskCardP
     >
       <div className="task-card-header">
         <PriorityBadge priority={task.priority} />
+        {task.aiStatus && (() => {
+          const meta = AI_PILL[task.aiStatus];
+          const Icon = meta.icon;
+          return (
+            <span className={meta.cls} style={{ display: 'inline-flex', gap: 4 }}>
+              <Icon size={12} />
+              {meta.label}
+            </span>
+          );
+        })()}
+        {task.aiStatus === 'SUCCEEDED' && task.aiConfidenceScore != null && (
+          <ConfidencePill
+            score={task.aiConfidenceScore}
+            reason={task.aiConfidenceReason}
+          />
+        )}
         {task.tags && task.tags.length > 0 && (
           <div className="task-tags">
             {task.tags.slice(0, 2).map((taskTag) => (

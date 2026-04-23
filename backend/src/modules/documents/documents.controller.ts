@@ -50,6 +50,17 @@ export const documentsController = {
   }),
 
   /**
+   * GET /projects/:id/documents/:documentId/fact-sheet
+   * Return the extracted fact-sheet markdown for this document.
+   */
+  getFactSheet: asyncHandler(async (req: Request, res: Response) => {
+    const projectId = req.params.id as string;
+    const documentId = req.params.documentId as string;
+    const markdown = await documentsService.getFactSheetMarkdown(documentId, projectId);
+    res.type('text/markdown').send(markdown);
+  }),
+
+  /**
    * POST /projects/:id/documents/initiate-upload
    * Initiate a single document upload
    */

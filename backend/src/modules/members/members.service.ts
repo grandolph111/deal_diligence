@@ -1,5 +1,5 @@
 import { prisma } from '../../config/database';
-import { ProjectMember, ProjectRole } from '@prisma/client';
+import { ProjectMember, ProjectRole, Prisma } from '@prisma/client';
 import { InviteMemberInput, UpdateMemberInput } from './members.validators';
 import { ApiError } from '../../utils/ApiError';
 
@@ -135,7 +135,9 @@ export const membersService = {
       where: { id: memberId },
       data: {
         role: data.role,
-        permissions: data.permissions ?? member.permissions,
+        permissions:
+          data.permissions ??
+          (member.permissions as Prisma.InputJsonValue | undefined),
       },
     });
   },

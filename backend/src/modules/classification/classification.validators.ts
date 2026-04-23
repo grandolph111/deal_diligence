@@ -2,9 +2,15 @@ import { z } from 'zod';
 
 /**
  * Document types that can be classified
- * Matches the documentType field in the Document model
+ * Matches the documentType field in the Document model.
+ *
+ * Superset of:
+ *  - manual-classification taxonomy (CONTRACT / FINANCIAL / LEGAL / ...)
+ *  - Claude extraction taxonomy (SPA / APA / LOI / NDA / EMPLOYMENT / LEASE / GENERIC)
+ * Any document the extractor produced must round-trip through this endpoint.
  */
 export const documentTypeEnum = z.enum([
+  // manual classification
   'CONTRACT',
   'FINANCIAL',
   'LEGAL',
@@ -16,6 +22,14 @@ export const documentTypeEnum = z.enum([
   'COMMERCIAL',
   'OPERATIONAL',
   'OTHER',
+  // extraction pipeline output
+  'SPA',
+  'APA',
+  'LOI',
+  'NDA',
+  'EMPLOYMENT',
+  'LEASE',
+  'GENERIC',
 ]);
 
 export type DocumentType = z.infer<typeof documentTypeEnum>;

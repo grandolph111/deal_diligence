@@ -1,14 +1,14 @@
 import { prisma } from '../../config/database';
 import { ChatConversation, ChatMessage, ChatMessageRole, ProjectMember, Prisma } from '@prisma/client';
 import { ApiError } from '../../utils/ApiError';
-import { config } from '../../config';
+import { runChat, isMock } from '../../integrations/claude';
+import { stuffRetriever } from '../../integrations/retrieval';
+import { dealBriefService } from '../../services/deal-brief.service';
 import {
   CreateConversationInput,
   UpdateConversationInput,
   SendMessageInput,
   Citation,
-  PythonChatResponse,
-  pythonChatResponseSchema,
 } from './chat.validators';
 
 // Include relations for conversation queries
@@ -34,19 +34,6 @@ const conversationWithMessagesInclude = {
     orderBy: { createdAt: 'asc' as const },
   },
 };
-
-/**
- * Transform Python service response citations to our format
- */
-function transformCitations(pythonCitations: PythonChatResponse['citations']): Citation[] {
-  return pythonCitations.map((c) => ({
-    documentId: c.document_id,
-    filename: c.filename,
-    pageNumber: c.page_number ?? null,
-    textExcerpt: c.text_excerpt,
-    relevanceScore: c.relevance_score,
-  }));
-}
 
 /**
  * Get accessible folder IDs for a user based on their membership permissions
@@ -249,79 +236,84 @@ export const chatService = {
       data.content
     );
 
-    // Get conversation history for context
+    // Pull recent history (excluding the one we just saved).
     const history = await this.getRecentMessages(conversationId, 5);
+    const priorTurns = history
+      .slice(0, -1)
+      .map((m) => ({
+        role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: m.content,
+      }));
 
-    // Get accessible folder IDs for this user
+    // Load the deal brief (primary context). If the user pinned specific
+    // documents, also load those per-doc fact sheets for detail.
     const accessibleFolderIds = getAccessibleFolderIds(membership);
+    const brief = await dealBriefService.loadBriefForMember(membership);
 
-    // Call Python service
-    const pythonUrl = `${config.pythonService.url}/chat`;
+    const pinnedDocs =
+      data.documentIds && data.documentIds.length > 0
+        ? await stuffRetriever.search(data.content, {
+            projectId,
+            documentIds: data.documentIds,
+            folderIds:
+              accessibleFolderIds.length > 0 ? accessibleFolderIds : undefined,
+          })
+        : [];
 
-    const requestBody: {
-      message: string;
-      project_id: string;
-      conversation_id: string;
-      accessible_folder_ids: string[];
-      document_ids?: string[];
-      history: Array<{ role: string; content: string }>;
-    } = {
-      message: data.content,
-      project_id: projectId,
-      conversation_id: conversationId,
-      accessible_folder_ids: accessibleFolderIds,
-      history: history.slice(0, -1), // Exclude the message we just sent
-    };
-
-    // Add document IDs if specified (for focused document context)
-    if (data.documentIds && data.documentIds.length > 0) {
-      requestBody.document_ids = data.documentIds;
-    }
-
-    let pythonResponse: PythonChatResponse;
-
-    try {
-      const response = await fetch(pythonUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Python service error: ${response.status} - ${errorText}`);
-      }
-
-      const responseData = await response.json();
-      pythonResponse = pythonChatResponseSchema.parse(responseData);
-    } catch (error) {
-      // If Python service fails, save error message
-      const errorMessage = await this.saveMessage(
+    // If Claude isn't configured, return a helpful fallback message.
+    if (isMock()) {
+      const fallback = brief
+        ? '(Mock mode — Claude not configured.) Deal brief is loaded. Configure ANTHROPIC_API_KEY to enable real responses.'
+        : '(Mock mode — Claude not configured.) No deal brief available yet (upload some documents first).';
+      const assistant = await this.saveMessage(
         conversationId,
         'ASSISTANT',
-        'I apologize, but I encountered an error processing your request. Please try again later.',
+        fallback,
         []
       );
+      return { userMessage, assistantMessage: assistant, citations: [] };
+    }
 
+    let content: string;
+    let citations: Citation[];
+    const startedAt = Date.now();
+    try {
+      const response = await runChat({
+        brief,
+        pinnedDocs,
+        history: priorTurns,
+        userMessage: data.content,
+      });
+      content = response.content;
+      citations = response.citations.map((c) => {
+        const pinned = pinnedDocs.find((f) => f.documentId === c.documentId);
+        return {
+          documentId: c.documentId,
+          filename: pinned?.documentName ?? c.documentId,
+          pageNumber: c.pageNumber ?? null,
+          textExcerpt: c.snippet,
+          relevanceScore: 1,
+        };
+      });
+    } catch (error) {
+      await this.saveMessage(
+        conversationId,
+        'ASSISTANT',
+        'I apologize, but I encountered an error processing your request. Please try again.',
+        []
+      );
       throw ApiError.internal(
         error instanceof Error ? error.message : 'Failed to get AI response'
       );
     }
 
-    // Transform citations to our format
-    const citations = transformCitations(pythonResponse.citations);
-
-    // Save assistant response
     const assistantMessage = await this.saveMessage(
       conversationId,
       'ASSISTANT',
-      pythonResponse.message,
+      content,
       citations
     );
 
-    // Log the chat interaction for audit
     await prisma.auditLog.create({
       data: {
         projectId,
@@ -331,9 +323,9 @@ export const chatService = {
         resourceId: conversationId,
         metadata: {
           messageLength: data.content.length,
-          responseLength: pythonResponse.message.length,
+          responseLength: content.length,
           citationCount: citations.length,
-          processingTimeMs: pythonResponse.processing_time_ms,
+          processingTimeMs: Date.now() - startedAt,
           focusedDocumentIds: data.documentIds || [],
         },
       },

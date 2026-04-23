@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { ApiError } from '../../utils/ApiError';
+import { boardsService } from '../../services/boards.service';
 
 /**
  * Document with basic info for task linking
@@ -102,6 +103,43 @@ export const taskDocumentsService = {
     documentId: string,
     userId: string
   ): Promise<LinkedDocument> {
+    // Enforce board-folder confinement: the document must be in one of
+    // this task's board's folders (or any descendant). The default
+    // "All Documents" board covers the whole project and bypasses this check.
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: { projectId: true, boardId: true },
+    });
+    if (task?.boardId) {
+      const board = await prisma.kanbanBoard.findUnique({
+        where: { id: task.boardId },
+        select: { isDefault: true, name: true },
+      });
+      if (!board?.isDefault) {
+        const scopeFolderIds = await boardsService.expandedBoardFolderIds(
+          task.boardId,
+          task.projectId
+        );
+        if (scopeFolderIds.length > 0) {
+          const doc = await prisma.document.findFirst({
+            where: { id: documentId, projectId: task.projectId },
+            select: { folderId: true, name: true },
+          });
+          if (!doc) throw ApiError.notFound('Document not found');
+          if (!doc.folderId || !scopeFolderIds.includes(doc.folderId)) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[kanban] linkDocument REJECTED task=${taskId.slice(0, 8)} doc=${documentId.slice(0, 8)} "${doc.name}" ` +
+                `— folder=${doc.folderId ?? 'ROOT'} not in board "${board?.name}" scope (${scopeFolderIds.length} folders)`
+            );
+            throw ApiError.badRequest(
+              `"${doc.name}" is outside this board's folder scope and cannot be linked.`
+            );
+          }
+        }
+      }
+    }
+
     // Check if already linked
     const existing = await prisma.taskDocument.findUnique({
       where: {
@@ -142,6 +180,11 @@ export const taskDocumentsService = {
         },
       },
     });
+
+    // eslint-disable-next-line no-console
+    console.log(
+      `[kanban] linkDocument OK task=${taskId.slice(0, 8)} doc=${documentId.slice(0, 8)} "${created.document.name}"`
+    );
 
     return {
       id: created.id,

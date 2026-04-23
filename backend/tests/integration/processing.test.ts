@@ -183,63 +183,10 @@ describe('Document Processing Pipeline', () => {
     });
   });
 
-  describe('POST /api/v1/processing/callback', () => {
-    it('should update document status on successful processing', async () => {
-      const res = await request(app)
-        .post('/api/v1/processing/callback')
-        .send({
-          document_id: document.id,
-          status: 'completed',
-          berrydb_id: 'berry-123',
-          document_type: 'contract',
-          risk_level: 'medium',
-          page_count: 10,
-        });
-
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-
-      // Verify document was updated
-      const updatedDoc = await prisma.document.findUnique({
-        where: { id: document.id },
-      });
-      expect(updatedDoc?.processingStatus).toBe('COMPLETE');
-      expect(updatedDoc?.berryDbId).toBe('berry-123');
-      expect(updatedDoc?.documentType).toBe('contract');
-      expect(updatedDoc?.riskLevel).toBe('medium');
-      expect(updatedDoc?.pageCount).toBe(10);
-    });
-
-    it('should mark document as failed on processing error', async () => {
-      const res = await request(app)
-        .post('/api/v1/processing/callback')
-        .send({
-          document_id: document.id,
-          status: 'failed',
-          error: 'OCR extraction failed',
-        });
-
-      expect(res.status).toBe(200);
-
-      // Verify document has error recorded (may have retryCount incremented)
-      const updatedDoc = await prisma.document.findUnique({
-        where: { id: document.id },
-      });
-      expect(updatedDoc?.lastError).toContain('OCR extraction failed');
-    });
-
-    it('should return 500 for non-existent document', async () => {
-      const fakeId = '00000000-0000-0000-0000-000000000000';
-      const res = await request(app)
-        .post('/api/v1/processing/callback')
-        .send({
-          document_id: fakeId,
-          status: 'completed',
-        });
-
-      expect(res.status).toBe(500);
-    });
-  });
+  // NOTE: The Python/BerryDB webhook callback (POST /api/v1/processing/callback)
+  // has been removed. Extraction now runs synchronously in-process via Claude,
+  // so there is no external service to call us back. Status transitions are
+  // covered by the extraction service unit paths and the admin endpoints above.
 
   describe('POST /api/v1/projects/:id/processing/process-all', () => {
     it('should trigger processing for all pending documents', async () => {

@@ -9,6 +9,7 @@ import {
   RenameFolderModal,
   DeleteFolderModal,
   DocumentViewer,
+  FactSheetModal,
   SearchPanel,
   UploadDropZone,
   UploadProgressModal,
@@ -133,6 +134,12 @@ export function VDRPage() {
   const [viewerDocument, setViewerDocument] = useState<Document | null>(null);
   const [viewerPdfUrl, setViewerPdfUrl] = useState<string | null>(null);
   const [showViewer, setShowViewer] = useState(false);
+
+  const [extractionDocument, setExtractionDocument] = useState<Document | null>(null);
+
+  const handleViewExtraction = useCallback((document: Document) => {
+    setExtractionDocument(document);
+  }, []);
 
   // Search panel state
   const [showSearchPanel, setShowSearchPanel] = useState(false);
@@ -604,6 +611,7 @@ export function VDRPage() {
               onBulkDelete={isAdmin ? handleBulkDelete : undefined}
               onBulkDownload={handleBulkDownload}
               onRequestAccess={handleRequestAccess}
+              onViewExtraction={handleViewExtraction}
               isAdmin={isAdmin}
               canUpload={canUpload}
               selectedFolderName={selectedFolderName}
@@ -670,6 +678,17 @@ export function VDRPage() {
           canEditClassification={isAdmin}
           onDocumentUpdate={handleDocumentUpdate}
           onAskAI={handleOpenChatWithDocument}
+        />
+      )}
+
+      {/* Fact-sheet (extraction) Viewer */}
+      {projectId && (
+        <FactSheetModal
+          isOpen={!!extractionDocument}
+          projectId={projectId}
+          documentId={extractionDocument?.id ?? null}
+          documentName={extractionDocument?.name ?? null}
+          onClose={() => setExtractionDocument(null)}
         />
       )}
 

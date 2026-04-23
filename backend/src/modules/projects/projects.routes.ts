@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import { projectsController } from './projects.controller';
+import { dashboardController } from './dashboard.controller';
+import playbookRoutes from './playbook.routes';
+import briefRoutes from './brief.routes';
 import { requireAuth } from '../../middleware/auth';
 import {
   loadProjectMembership,
@@ -25,6 +28,13 @@ router.use('/:id', loadProjectMembership);
 
 // GET /api/v1/projects/:id - Get project details
 router.get('/:id', projectsController.getProject);
+
+// GET /api/v1/projects/:id/dashboard - Risk-analysis dashboard (folder-scoped)
+router.get('/:id/dashboard', dashboardController.getDashboard);
+
+// Playbook + Brief sub-routers
+router.use('/:id/playbook', playbookRoutes);
+router.use('/:id/brief', briefRoutes);
 
 // PATCH /api/v1/projects/:id - Update project (OWNER, ADMIN only)
 router.patch(

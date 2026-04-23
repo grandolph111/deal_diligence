@@ -19,10 +19,13 @@ import {
   GitBranch,
   AlertOctagon,
   MoreHorizontal,
+  Calendar,
   Eye,
   EyeOff,
   Loader,
   Info,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import type { DocumentClause, ClauseType, RiskLevel } from '../../../types/api';
 import { CLAUSE_TYPE_COLORS, CLAUSE_TYPE_LABELS, RISK_LEVEL_COLORS, RISK_LEVEL_LABELS } from '../../../types/api';
@@ -40,41 +43,82 @@ interface ClausesPanelProps {
   onNavigateToPage?: (pageNumber: number) => void;
 }
 
-// Icons for each clause type
+// Icons for every clause type. Record<ClauseType, …> enforces exhaustiveness
+// at compile time — adding a type to CLAUSE_TYPES in types/api.ts without an
+// icon here is a TypeScript error.
 const CLAUSE_TYPE_ICONS: Record<ClauseType, React.ElementType> = {
-  TERMINATION: X,
-  LIABILITY: Shield,
+  AGREEMENT_DATE: Calendar,
+  EFFECTIVE_DATE: Calendar,
+  EXPIRATION_DATE: Calendar,
+  CAP_ON_LIABILITY: Shield,
+  UNCAPPED_LIABILITY: AlertOctagon,
   INDEMNIFICATION: ShieldCheck,
-  CONFIDENTIALITY: Lock,
-  NON_COMPETE: Ban,
+  REPRESENTATIONS_AND_WARRANTIES: FileText,
   CHANGE_OF_CONTROL: RefreshCw,
-  ASSIGNMENT: ArrowRight,
+  TERMINATION_FOR_CONVENIENCE: X,
+  MATERIAL_ADVERSE_CHANGE: AlertOctagon,
+  CONDITIONS_PRECEDENT: GitBranch,
+  COVENANTS: FileCheck,
+  COVENANT_NOT_TO_SUE: FileCheck,
+  EXCLUSIVITY: Lock,
+  NON_COMPETE: Ban,
+  NON_DISPARAGEMENT: Ban,
+  NO_SOLICIT_CUSTOMERS: Ban,
+  NO_SOLICIT_EMPLOYEES: Ban,
+  VOLUME_RESTRICTION: Ban,
+  PRICE_RESTRICTIONS: DollarSign,
+  COMPETITIVE_RESTRICTION_EXCEPTION: Ban,
+  ANTI_ASSIGNMENT: ArrowRight,
+  IP_OWNERSHIP_ASSIGNMENT: Lightbulb,
+  JOINT_IP_OWNERSHIP: Lightbulb,
+  LICENSE_GRANT: Lightbulb,
+  IRREVOCABLE_OR_PERPETUAL_LICENSE: Lightbulb,
+  NON_TRANSFERABLE_LICENSE: Lightbulb,
+  UNLIMITED_LICENSE: Lightbulb,
+  SOURCE_CODE_ESCROW: Lightbulb,
+  MINIMUM_COMMITMENT: DollarSign,
+  REVENUE_OR_PROFIT_SHARING: DollarSign,
+  MOST_FAVORED_NATION: Lock,
+  ROFR_ROFO_ROFN: ArrowRight,
+  THIRD_PARTY_BENEFICIARY: ArrowRight,
+  PAYMENT_TERMS: DollarSign,
+  LIQUIDATED_DAMAGES: DollarSign,
+  WARRANTY_DURATION: CheckCircle,
+  RENEWAL_TERM: RefreshCw,
+  NOTICE_PERIOD_TO_TERMINATE_RENEWAL: RefreshCw,
+  POST_TERMINATION_SERVICES: RefreshCw,
+  AUDIT_RIGHTS: CheckCircle,
+  INSURANCE: ShieldCheck,
+  CONFIDENTIALITY: Lock,
   GOVERNING_LAW: Scale,
   DISPUTE_RESOLUTION: Scale,
-  PAYMENT_TERMS: DollarSign,
-  WARRANTY: CheckCircle,
-  INTELLECTUAL_PROPERTY: Lightbulb,
   FORCE_MAJEURE: AlertTriangle,
+  ASSIGNMENT: ArrowRight,
+  INTELLECTUAL_PROPERTY: Lightbulb,
+  LIABILITY: Shield,
+  TERMINATION: X,
+  WARRANTY: CheckCircle,
   REPRESENTATIONS: FileText,
-  COVENANTS: FileCheck,
-  CONDITIONS_PRECEDENT: GitBranch,
-  MATERIAL_ADVERSE_CHANGE: AlertOctagon,
   OTHER: MoreHorizontal,
 };
+
+// Safety net for legacy DB rows with unknown clause types — renders the
+// neutral Other icon instead of crashing. Should rarely fire in practice.
+const getClauseIcon = (type: string): React.ElementType =>
+  CLAUSE_TYPE_ICONS[type as ClauseType] ?? MoreHorizontal;
+
+const getClauseLabel = (type: string): string =>
+  CLAUSE_TYPE_LABELS[type as ClauseType] ??
+  type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+const getClauseColor = (type: string): string =>
+  CLAUSE_TYPE_COLORS[type as ClauseType] ?? '#6b7280';
 
 /**
  * Format confidence score as percentage
  */
 function formatConfidence(confidence: number): string {
   return `${Math.round(confidence * 100)}%`;
-}
-
-/**
- * Truncate text to a maximum length
- */
-function truncateText(text: string, maxLength: number = 100): string {
-  if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength).trim() + '...';
 }
 
 /**
@@ -208,7 +252,7 @@ export function ClausesPanel({
       {/* Clause type legend */}
       <div className="clauses-legend">
         {Array.from(groupedClauses.keys()).map((type) => {
-          const Icon = CLAUSE_TYPE_ICONS[type];
+          const Icon = getClauseIcon(type);
           const isHighlighted = highlightedTypes.has(type);
           const count = groupedClauses.get(type)?.length || 0;
           const hasRisk = groupedClauses.get(type)?.some((c) => c.riskLevel);
@@ -218,9 +262,9 @@ export function ClausesPanel({
               key={type}
               className={`clause-legend-item ${isHighlighted ? 'active' : ''} ${hasRisk ? 'has-risk' : ''}`}
               onClick={() => onToggleTypeHighlight(type)}
-              title={`${CLAUSE_TYPE_LABELS[type]} (${count}) - Click to toggle`}
+              title={`${getClauseLabel(type)} (${count}) - Click to toggle`}
               style={{
-                '--clause-color': CLAUSE_TYPE_COLORS[type],
+                '--clause-color': getClauseColor(type),
               } as React.CSSProperties}
             >
               <Icon size={12} />
@@ -233,7 +277,7 @@ export function ClausesPanel({
       {/* Clause groups */}
       <div className="clauses-list">
         {Array.from(groupedClauses.entries()).map(([type, typeClauses]) => {
-          const Icon = CLAUSE_TYPE_ICONS[type];
+          const Icon = getClauseIcon(type);
           const isExpanded = expandedTypes.has(type);
           const isHighlighted = highlightedTypes.has(type);
           const hasRiskClauses = typeClauses.some((c) => c.riskLevel);
@@ -243,7 +287,7 @@ export function ClausesPanel({
               key={type}
               className={`clause-group ${isHighlighted ? 'highlighted' : ''} ${hasRiskClauses ? 'has-risk' : ''}`}
               style={{
-                '--clause-color': CLAUSE_TYPE_COLORS[type],
+                '--clause-color': getClauseColor(type),
               } as React.CSSProperties}
             >
               {/* Group header */}
@@ -255,7 +299,7 @@ export function ClausesPanel({
                   <Icon size={14} />
                 </div>
                 <span className="clause-group-label">
-                  {CLAUSE_TYPE_LABELS[type]}
+                  {getClauseLabel(type)}
                 </span>
                 <span className="clause-group-count">{typeClauses.length}</span>
                 {hasRiskClauses && (
@@ -270,57 +314,109 @@ export function ClausesPanel({
               {isExpanded && (
                 <div className="clause-group-items">
                   {typeClauses.map((clause) => (
-                    <button
+                    <ClauseItem
                       key={clause.id}
-                      className={`clause-item ${
-                        selectedClause?.id === clause.id ? 'selected' : ''
-                      } ${clause.riskLevel ? 'has-risk' : ''}`}
-                      onClick={() => handleClauseClick(clause)}
-                    >
-                      <div className="clause-item-content">
-                        {clause.title && (
-                          <span className="clause-item-title">{clause.title}</span>
-                        )}
-                        <span className="clause-item-text">
-                          {truncateText(clause.content, 120)}
-                        </span>
-                      </div>
-                      <div className="clause-item-meta">
-                        {clause.pageNumber && (
-                          <span className="clause-item-page">p.{clause.pageNumber}</span>
-                        )}
-                        {clause.riskLevel && (
-                          <span
-                            className="clause-item-risk"
-                            style={{
-                              backgroundColor: RISK_LEVEL_COLORS[clause.riskLevel as RiskLevel],
-                            }}
-                            title={`${RISK_LEVEL_LABELS[clause.riskLevel as RiskLevel]}`}
-                          >
-                            <AlertTriangle size={10} />
-                          </span>
-                        )}
-                        <span
-                          className={`clause-item-confidence ${
-                            clause.confidence < 0.8 ? 'low' : ''
-                          }`}
-                          title={`Confidence: ${formatConfidence(clause.confidence)}`}
-                        >
-                          {formatConfidence(clause.confidence)}
-                        </span>
-                        {clause.isVerified && (
-                          <span title="Verified">
-                            <CheckCircle size={12} className="verified-icon" />
-                          </span>
-                        )}
-                      </div>
-                    </button>
+                      clause={clause}
+                      isSelected={selectedClause?.id === clause.id}
+                      onOpen={() => handleClauseClick(clause)}
+                    />
                   ))}
                 </div>
               )}
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function ClauseItem({
+  clause,
+  isSelected,
+  onOpen,
+}: {
+  clause: DocumentClause;
+  isSelected: boolean;
+  onOpen: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(clause.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard unavailable; fall through
+    }
+  };
+
+  return (
+    <div
+      className={`clause-item ${isSelected ? 'selected' : ''} ${
+        clause.riskLevel ? 'has-risk' : ''
+      }`}
+    >
+      <div className="clause-item-content">
+        {clause.title && (
+          <span className="clause-item-title">{clause.title}</span>
+        )}
+        <span className="clause-item-text" style={{ userSelect: 'text' }}>
+          {clause.content}
+        </span>
+        <div className="clause-item-meta">
+          {clause.pageNumber && (
+            <span className="clause-item-page">p.{clause.pageNumber}</span>
+          )}
+          {clause.riskLevel && (
+            <span
+              className="clause-item-risk"
+              style={{
+                backgroundColor: RISK_LEVEL_COLORS[clause.riskLevel as RiskLevel],
+              }}
+              title={`${RISK_LEVEL_LABELS[clause.riskLevel as RiskLevel]}`}
+            >
+              <AlertTriangle size={10} />
+            </span>
+          )}
+          <span
+            className={`clause-item-confidence ${
+              clause.confidence < 0.8 ? 'low' : ''
+            }`}
+            title={`Confidence: ${formatConfidence(clause.confidence)}`}
+          >
+            {formatConfidence(clause.confidence)}
+          </span>
+          {clause.isVerified && (
+            <span title="Verified">
+              <CheckCircle size={12} className="verified-icon" />
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="clause-item-actions">
+        <button
+          type="button"
+          className="clause-item-action"
+          onClick={handleCopy}
+          title={copied ? 'Copied!' : 'Copy clause text'}
+        >
+          {copied ? (
+            <CheckCircle size={14} style={{ color: '#046c4e' }} />
+          ) : (
+            <Copy size={14} />
+          )}
+        </button>
+        <button
+          type="button"
+          className="clause-item-action"
+          onClick={onOpen}
+          title="Jump to page & open details"
+        >
+          <ExternalLink size={14} />
+        </button>
       </div>
     </div>
   );
