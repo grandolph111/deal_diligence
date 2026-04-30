@@ -12,6 +12,7 @@ export type {
   CompanyDetail,
   CreateCompanyDto,
   CreateCompanyResponse,
+  CreateCompanyMemberResponse,
 } from './services/companies.service';
 export { projectsService } from './services/projects.service';
 export { membersService } from './services/members.service';
