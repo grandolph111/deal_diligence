@@ -15,7 +15,7 @@ import {
   apiClient,
   companiesService,
   type CompanyDetail,
-  type CreateCompanyMemberResponse,
+  type CreateCompanyResponse,
 } from '../../api';
 import { useAuth } from '../../auth';
 import { EntityCard } from '../../components/EntityCard';
@@ -121,7 +121,7 @@ export function CompanyDetailPage({
         creating === 'admin'
           ? companiesService.addCustomerAdmin
           : companiesService.addMember;
-      const result: CreateCompanyMemberResponse = await api(companyId, {
+      const result: CreateCompanyResponse = await api(companyId, {
         email: newEmail.trim(),
         name: newName.trim() || undefined,
       });

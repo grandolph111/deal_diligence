@@ -169,7 +169,7 @@ export function useChat({ projectId }: UseChatOptions): UseChatResult {
       if (response.generatedTitle) {
         setConversations((prev) =>
           prev.map((c) =>
-            c.id === currentConversation.id ? { ...c, title: response.generatedTitle } : c
+            c.id === currentConversation.id ? { ...c, title: response.generatedTitle ?? null } : c
           )
         );
         setCurrentConversation((prev) =>
