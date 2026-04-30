@@ -35,29 +35,29 @@ export function FolderScopePicker({
     );
   }
 
-  const isRestricted = selectedFolderIds.length > 0;
+  const anyGranted = selectedFolderIds.length > 0;
 
   return (
     <div className="folder-scope-picker">
       <div className="folder-scope-header">
         <div>
           <span className="folder-scope-status">
-            {isRestricted ? (
+            {anyGranted ? (
               <>
-                Restricted to <strong>{selectedFolderIds.length}</strong>{' '}
-                {selectedFolderIds.length === 1 ? 'folder' : 'folders'}
+                Access granted to <strong>{selectedFolderIds.length}</strong>{' '}
+                {selectedFolderIds.length === 1 ? 'folder' : 'folders'} (plus subfolders)
               </>
             ) : (
-              <>Full Data Room access</>
+              <>No folders granted — user will see nothing</>
             )}
           </span>
           <span className="folder-scope-hint">
-            {isRestricted
-              ? 'Access includes selected folders and all subfolders.'
-              : 'Leave blank for full access, or check folders to restrict scope.'}
+            {anyGranted
+              ? 'Checked folders and all their subfolders become visible to this user.'
+              : 'Pick at least one folder to grant access. SMEs only see checked folders.'}
           </span>
         </div>
-        {isRestricted && (
+        {anyGranted && (
           <button
             type="button"
             className="folder-scope-clear"

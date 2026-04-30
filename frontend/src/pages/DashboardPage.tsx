@@ -5,13 +5,13 @@ import {
   Users,
   CheckSquare,
   FolderOpen,
-  ArrowUpRight,
   FileText,
   Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../auth';
 import { projectsService, apiClient } from '../api';
 import type { Project } from '../types/api';
+import { EntityCard } from '../components/EntityCard';
 
 const relativeTime = (iso?: string) => {
   if (!iso) return '';
@@ -34,7 +34,6 @@ export function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Wait for Auth0 to finish and API client to be ready
     if (authLoading || !apiClient.isReady()) {
       return;
     }
@@ -65,10 +64,12 @@ export function DashboardPage() {
       <div className="dashboard-content">
         <div className="projects-header">
           <h2>Projects</h2>
-          <Link to="/projects/new" className="button primary">
-            <Plus size={16} />
-            New Project
-          </Link>
+          {(user?.platformRole === 'SUPER_ADMIN' || user?.platformRole === 'CUSTOMER_ADMIN') && (
+            <Link to="/projects/new" className="button primary">
+              <Plus size={16} />
+              New Project
+            </Link>
+          )}
         </div>
 
         {(authLoading || loading) && (
@@ -100,53 +101,53 @@ export function DashboardPage() {
           <div className="projects-grid">
             {projects.map((project) => {
               const hasBrief = project.briefManifest != null;
-              const showDescription =
-                project.description && project.description.trim() && project.description !== 'x';
               const updated = relativeTime(project.updatedAt);
 
               return (
-                <Link
+                <EntityCard
                   key={project.id}
                   to={`/projects/${project.id}`}
-                  className="project-card"
-                >
-                  <div className="project-card-meta">
-                    {project.role === 'OWNER' || project.role === 'ADMIN' ? (
-                      <span className="chip primary">{project.role?.toLowerCase()}</span>
-                    ) : null}
-                    {hasBrief ? (
-                      <span className="chip accent">
-                        <Sparkles size={11} /> Brief ready
-                      </span>
-                    ) : (
-                      <span className="chip">Awaiting brief</span>
-                    )}
-                    <ArrowUpRight size={16} className="project-card-go" aria-hidden="true" />
-                  </div>
-                  <h3>{project.name}</h3>
-                  {showDescription ? (
-                    <p>{project.description}</p>
-                  ) : (
-                    <p className="project-card-placeholder">No description yet.</p>
-                  )}
-                  <div className="project-card-footer">
-                    <div className="project-stats">
-                      <span title="Documents">
-                        <FileText size={14} />
-                        {project.documentCount ?? 0}
-                      </span>
-                      <span title="Tasks">
-                        <CheckSquare size={14} />
-                        {project.taskCount ?? 0}
-                      </span>
-                      <span title="Members">
-                        <Users size={14} />
-                        {project.memberCount ?? 0}
-                      </span>
-                    </div>
-                    {updated && <span className="project-card-time">Updated {updated}</span>}
-                  </div>
-                </Link>
+                  title={project.name}
+                  description={project.description}
+                  chips={
+                    <>
+                      {project.role === 'OWNER' || project.role === 'ADMIN' ? (
+                        <span className="chip primary">
+                          {project.role?.toLowerCase()}
+                        </span>
+                      ) : null}
+                      {hasBrief ? (
+                        <span className="chip accent">
+                          <Sparkles size={11} /> Brief ready
+                        </span>
+                      ) : (
+                        <span className="chip">Awaiting brief</span>
+                      )}
+                    </>
+                  }
+                  stats={[
+                    {
+                      label: 'Documents',
+                      icon: <FileText size={14} />,
+                      value: project.documentCount ?? 0,
+                    },
+                    {
+                      label: 'Tasks',
+                      icon: <CheckSquare size={14} />,
+                      value: project.taskCount ?? 0,
+                    },
+                    {
+                      label: 'Members',
+                      icon: <Users size={14} />,
+                      value: project.memberCount ?? 0,
+                    },
+                  ]}
+                  footerRight={
+                    updated && (
+                      <span className="project-card-time">Updated {updated}</span>
+                    )
+                  }
+                />
               );
             })}
           </div>

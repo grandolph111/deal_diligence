@@ -19,6 +19,9 @@ const browser = await puppeteer.launch({ headless: true });
 const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 900 });
 await page.goto(url, { waitUntil: "networkidle0", timeout: 30000 });
+// Fast-forward CSS animations so fill-mode:both compositing layers flush before capture
+await page.addStyleTag({ content: '*, *::before, *::after { animation-duration: 0.001s !important; animation-delay: 0s !important; transition-duration: 0.001s !important; }' });
+await new Promise(r => setTimeout(r, 200));
 await page.screenshot({ path: resolve(dir, filename), fullPage: true });
 await browser.close();
 

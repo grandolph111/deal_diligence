@@ -51,6 +51,13 @@ router.get(
   tasksController.getAiReport
 );
 
+// GET /api/v1/projects/:id/tasks/:taskId/ai-report/download?format=md|xlsx
+router.get(
+  '/:taskId/ai-report/download',
+  requirePermission('canAccessKanban'),
+  tasksController.downloadAiReport
+);
+
 // POST /api/v1/projects/:id/tasks/:taskId/run-ai - Trigger AI run immediately
 router.post(
   '/:taskId/run-ai',

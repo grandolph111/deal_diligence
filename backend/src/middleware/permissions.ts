@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { ProjectRole } from '@prisma/client';
+import { ProjectRole, PlatformRole } from '@prisma/client';
 import { prisma } from '../config/database';
 import { ApiError } from '../utils/ApiError';
 
@@ -37,6 +37,31 @@ export const loadProjectMembership = async (
 
     if (!project) {
       throw ApiError.notFound('Project not found');
+    }
+
+    // Platform-level bypass: SUPER_ADMIN sees every project; CUSTOMER_ADMIN
+    // sees every project in their company. Both get a synthetic OWNER-level
+    // membership so downstream role checks succeed without a DB row.
+    const user = req.user;
+    if (user) {
+      const isSuperAdmin = user.platformRole === 'SUPER_ADMIN';
+      const isCustomerAdminForCompany =
+        user.platformRole === 'CUSTOMER_ADMIN' &&
+        user.companyId != null &&
+        user.companyId === project.companyId;
+      if (isSuperAdmin || isCustomerAdminForCompany) {
+        req.projectMember = {
+          id: `synthetic-${user.id}-${projectId}`,
+          projectId,
+          userId: user.id,
+          role: ProjectRole.OWNER,
+          permissions: null,
+          invitedBy: null,
+          invitedAt: new Date(),
+          acceptedAt: new Date(),
+        };
+        return next();
+      }
     }
 
     const membership = await prisma.projectMember.findUnique({
@@ -95,6 +120,25 @@ export const requireMinRole = (minRole: ProjectRole) => {
       );
     }
 
+    next();
+  };
+};
+
+// Gate a route on the user's platform-level role (SUPER_ADMIN, CUSTOMER_ADMIN, MEMBER).
+// Falls through to 403 if the attached user does not match any allowed role.
+export const requirePlatformRole = (...allowedRoles: PlatformRole[]) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user;
+    if (!user) {
+      return next(ApiError.unauthorized('Not authenticated'));
+    }
+    if (!allowedRoles.includes(user.platformRole)) {
+      return next(
+        ApiError.forbidden(
+          `This action requires one of: ${allowedRoles.join(', ')}`
+        )
+      );
+    }
     next();
   };
 };

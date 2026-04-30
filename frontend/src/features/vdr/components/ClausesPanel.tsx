@@ -22,7 +22,6 @@ import {
   Calendar,
   Eye,
   EyeOff,
-  Loader,
   Info,
   Copy,
   ExternalLink,
@@ -197,8 +196,12 @@ export function ClausesPanel({
     return (
       <div className="clauses-panel">
         <div className="clauses-panel-loading">
-          <Loader size={20} className="spinning" />
-          <span>Loading clauses...</span>
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="skeleton-row">
+              <span className="skeleton skeleton-text" style={{ width: '40%' }} />
+              <span className="skeleton skeleton-text" style={{ width: '20%', marginLeft: 'auto' }} />
+            </div>
+          ))}
         </div>
       </div>
     );

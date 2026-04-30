@@ -5,53 +5,58 @@
 
 import { prisma } from '../../config/database';
 import { ApiError } from '../../utils/ApiError';
-import { documentsService } from '../documents/documents.service';
+import { resolveProjectScope, type FolderScope } from '../../services/scope.service';
 
 const DEAL_TYPES = ['SPA', 'APA', 'LOI'];
-
-interface FolderScope {
-  isFullAccess: boolean;
-  allowedFolderIds: string[] | null; // null = full access
-}
-
-const resolveScope = async (
-  projectId: string,
-  userId: string
-): Promise<FolderScope> => {
-  const membership = await prisma.projectMember.findUnique({
-    where: { projectId_userId: { projectId, userId } },
-  });
-  if (!membership) throw ApiError.forbidden('Not a member of this project');
-
-  if (membership.role === 'OWNER' || membership.role === 'ADMIN') {
-    return { isFullAccess: true, allowedFolderIds: null };
-  }
-
-  const permissions = membership.permissions as Record<string, unknown> | null;
-  const restricted = permissions?.restrictedFolders as string[] | undefined;
-
-  if (!restricted || restricted.length === 0) {
-    return { isFullAccess: true, allowedFolderIds: null };
-  }
-
-  const allowed = await documentsService.getAccessibleFolderIds(
-    projectId,
-    restricted
-  );
-  return { isFullAccess: false, allowedFolderIds: allowed };
-};
 
 const scopeClause = (projectId: string, scope: FolderScope) =>
   scope.isFullAccess
     ? { projectId }
     : {
         projectId,
-        folderId: { in: scope.allowedFolderIds ?? [] },
+        folderId: { in: scope.allowedFolderIds },
       };
 
 export const dashboardService = {
   async getProjectDashboard(projectId: string, userId: string) {
-    const scope = await resolveScope(projectId, userId);
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, platformRole: true, companyId: true },
+    });
+    if (!user) throw ApiError.unauthorized('User not found');
+
+    const scope = await resolveProjectScope(user, projectId);
+
+    // Zero-scope SME: return an empty but well-formed dashboard so the
+    // frontend can render "awaiting folder access" instead of blowing up.
+    if (!scope.isFullAccess && scope.allowedFolderIds.length === 0) {
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { id: true, name: true, description: true, createdAt: true },
+      });
+      if (!project) throw ApiError.notFound('Project not found');
+      return {
+        project,
+        scope: { isFullAccess: false, allowedFolderCount: 0 },
+        header: {
+          portfolioRiskScore: null,
+          dealValue: null,
+          dealCurrency: null,
+          effectiveDate: null,
+          governingLaw: null,
+        },
+        riskStrip: {
+          highRiskDocuments: 0,
+          openAiTasks: 0,
+          pendingSpecialistReviews: 0,
+          flaggedClauses: 0,
+        },
+        documentsByRisk: [],
+        entitySummary: [],
+        masterEntities: [],
+        recentReports: [],
+      };
+    }
 
     const [project, documents, highRiskCount, openAiTasks, pendingReview, flaggedClauses, recentReports] =
       await Promise.all([
@@ -179,7 +184,7 @@ export const dashboardService = {
       project,
       scope: {
         isFullAccess: scope.isFullAccess,
-        allowedFolderCount: scope.allowedFolderIds?.length ?? null,
+        allowedFolderCount: scope.isFullAccess ? null : scope.allowedFolderIds.length,
       },
       header: {
         portfolioRiskScore,

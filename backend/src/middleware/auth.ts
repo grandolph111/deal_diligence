@@ -21,12 +21,15 @@ const validateMockJwt = (req: Request, res: Response, next: NextFunction) => {
 
   const token = authHeader.replace('Bearer ', '');
 
-  // Check if it's a mock token
+  // Check if it's a mock token. Prefix:`mock-dev-token-<userId>`
+  // emitted by POST /auth/dev-login. The old format (no suffix, just a
+  // timestamp) is treated as the legacy single-dev-user fallback.
   if (token.startsWith('mock-dev-token-')) {
-    // Create a mock auth payload
+    const suffix = token.substring('mock-dev-token-'.length);
+    const looksLikeUserId = /^[0-9a-f-]{8,}$/i.test(suffix);
     req.auth = {
       payload: {
-        sub: 'dev_user|mock',
+        sub: looksLikeUserId ? `dev|user-id:${suffix}` : 'dev_user|mock',
         aud: config.auth0.audience,
       },
     };
@@ -48,6 +51,17 @@ export const attachUser = async (
 
     if (!auth0Id) {
       throw ApiError.unauthorized('No user identifier in token');
+    }
+
+    // Dev-creds login: token carries a real user id from the seeded table.
+    if (auth0Id.startsWith('dev|user-id:')) {
+      const userId = auth0Id.substring('dev|user-id:'.length);
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        throw ApiError.unauthorized('Dev user not found');
+      }
+      req.user = user;
+      return next();
     }
 
     // Check if it's a mock user

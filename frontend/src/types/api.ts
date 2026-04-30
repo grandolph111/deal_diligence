@@ -5,6 +5,9 @@
 // Role enum matching backend
 export type Role = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
 
+// Platform-level role (tenancy tier)
+export type PlatformRoleName = 'SUPER_ADMIN' | 'CUSTOMER_ADMIN' | 'MEMBER';
+
 // Task status enum matching backend
 export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'COMPLETE';
 
@@ -27,6 +30,8 @@ export interface User extends Timestamps {
   email: string;
   name: string | null;
   avatarUrl: string | null;
+  platformRole?: PlatformRoleName;
+  companyId?: string | null;
 }
 
 // Project model
@@ -34,6 +39,7 @@ export interface Project extends Timestamps {
   id: string;
   name: string;
   description: string | null;
+  companyId?: string;
   isArchived?: boolean;
   archivedAt?: string | null;
   // Counts returned from backend (flat properties)
@@ -1192,4 +1198,5 @@ export interface SendMessageResponse {
   userMessage: ChatMessage;
   assistantMessage: ChatMessage;
   citations: Citation[];
+  generatedTitle?: string;
 }

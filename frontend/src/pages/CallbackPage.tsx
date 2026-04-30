@@ -38,7 +38,7 @@ export function CallbackPage() {
       <div className="callback-page">
         <div className="callback-container">
           <h2>Authentication Error</h2>
-          <p className="error-message">{error.message}</p>
+          <p className="error-message">{error}</p>
           <button onClick={() => navigate('/login')}>Try Again</button>
         </div>
       </div>

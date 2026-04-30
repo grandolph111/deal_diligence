@@ -11,9 +11,10 @@ import {
   ShieldAlert,
   Sparkles,
 } from 'lucide-react';
-import { apiClient, dashboardService } from '../api';
+import { apiClient, dashboardService, projectsService } from '../api';
 import { useAuth } from '../auth';
 import { ConfidencePill } from '../components/ConfidencePill';
+import { RenameableTitle } from '../components/RenameableTitle';
 import type { DashboardResponse } from '../api/services/dashboard.service';
 
 const formatCurrency = (value: number | null, currency: string | null) => {
@@ -52,6 +53,7 @@ export function ProjectOverviewPage() {
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [projectName, setProjectName] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading || !apiClient.isReady() || !projectId) return;
@@ -66,6 +68,7 @@ export function ProjectOverviewPage() {
         const res = await dashboardService.getProjectDashboard(projectId);
         if (cancelled) return;
         setData(res);
+        if (isInitial) setProjectName(res.project.name);
         if (isInitial) setError(null);
       } catch (err) {
         if (cancelled) return;
@@ -114,9 +117,40 @@ export function ProjectOverviewPage() {
 
   const { project, scope, header, riskStrip, documentsByRisk, entitySummary, recentReports } = data;
 
+  const displayName = projectName ?? project.name;
+
+  const handleRenameProject = async (newName: string) => {
+    setProjectName(newName);
+    try {
+      await projectsService.updateProject(project.id, { name: newName });
+    } catch {
+      setProjectName(displayName);
+    }
+  };
+
   const riskScore = header.portfolioRiskScore;
   const riskScoreLevel: 'LOW' | 'MEDIUM' | 'HIGH' | null =
     riskScore == null ? null : riskScore >= 7 ? 'HIGH' : riskScore >= 4 ? 'MEDIUM' : 'LOW';
+
+  // Zero-grant SME: friendly empty state instead of a dashboard full of zeros.
+  const isLockedOut = !scope.isFullAccess && scope.allowedFolderCount === 0;
+  if (isLockedOut) {
+    return (
+      <div style={{ padding: 'var(--space-6) var(--space-8)' }}>
+        <Link to="/dashboard" className="button ghost sm">
+          <ArrowLeft size={14} /> All deals
+        </Link>
+        <div className="empty-state" style={{ marginTop: 'var(--space-6)' }}>
+          <h2 style={{ marginBottom: 'var(--space-2)' }}>{project.name}</h2>
+          <p>
+            You're a member of this deal but haven't been granted access to any
+            Data Room folders yet. Ask your Customer Admin to share the folders
+            you need and then refresh.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: 'var(--space-6) var(--space-8)', display: 'flex', flexDirection: 'column', gap: 'var(--space-8)' }}>
@@ -155,7 +189,12 @@ export function ProjectOverviewPage() {
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 'var(--tracking-wide)', marginBottom: 'var(--space-2)' }}>
               Deal
             </div>
-            <h1 style={{ margin: 0 }}>{project.name}</h1>
+            <RenameableTitle
+              value={displayName}
+              onSave={handleRenameProject}
+              tag="h1"
+              style={{ margin: 0 }}
+            />
             {project.description && project.description !== 'x' && (
               <p style={{ marginTop: 'var(--space-2)', color: 'var(--text-secondary)' }}>{project.description}</p>
             )}

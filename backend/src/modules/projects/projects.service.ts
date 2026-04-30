@@ -17,9 +17,38 @@ import { seedDefaultFolders } from '../folders/folders.seed';
 
 export const projectsService = {
   /**
-   * Get all projects for a user
+   * Get all projects visible to a user. Scoping depends on platform role:
+   *  - SUPER_ADMIN: sees nothing here (their landing is /companies)
+   *  - CUSTOMER_ADMIN: every project in their company, synthetic OWNER role
+   *  - MEMBER: only projects they hold a ProjectMember row on
    */
   async getUserProjects(userId: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return [];
+
+    if (user.platformRole === 'SUPER_ADMIN') {
+      return [];
+    }
+
+    if (user.platformRole === 'CUSTOMER_ADMIN' && user.companyId) {
+      const projects = await prisma.project.findMany({
+        where: { companyId: user.companyId },
+        orderBy: { updatedAt: 'desc' },
+        include: {
+          _count: {
+            select: { members: true, tasks: true, documents: true },
+          },
+        },
+      });
+      return projects.map((p) => ({
+        ...p,
+        role: ProjectRole.OWNER,
+        memberCount: p._count.members,
+        taskCount: p._count.tasks,
+        documentCount: p._count.documents,
+      }));
+    }
+
     const memberships = await prisma.projectMember.findMany({
       where: { userId },
       include: {
@@ -77,10 +106,17 @@ export const projectsService = {
     data: CreateProjectInput,
     creatorId: string
   ): Promise<Project> {
+    const creator = await prisma.user.findUnique({ where: { id: creatorId } });
+    if (!creator?.companyId) {
+      throw ApiError.badRequest(
+        'Creator must belong to a company to create a project'
+      );
+    }
     const project = await prisma.project.create({
       data: {
         name: data.name,
         description: data.description,
+        companyId: creator.companyId,
         members: {
           create: {
             userId: creatorId,
@@ -177,10 +213,17 @@ export const projectsService = {
     };
   }> {
     // Step 1: Create project with creator as OWNER (transactional)
+    const creator = await prisma.user.findUnique({ where: { id: creatorId } });
+    if (!creator?.companyId) {
+      throw ApiError.badRequest(
+        'Creator must belong to a company to create a project'
+      );
+    }
     const project = await prisma.project.create({
       data: {
         name: data.project.name,
         description: data.project.description,
+        companyId: creator.companyId,
         members: {
           create: {
             userId: creatorId,

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { MessageCircle, Bot } from 'lucide-react';
 import { MessageItem } from './MessageItem';
+import { PreResponseWrapper } from './PreResponseWrapper';
 import type { ChatMessage } from '../../../types/api';
 
 interface MessageListProps {
@@ -69,16 +70,15 @@ export function MessageList({
       ))}
 
       {sendingMessage && (
-        <div className="message-item assistant thinking">
+        <div className="message-item assistant">
           <div className="message-avatar">
             <Bot size={20} />
           </div>
           <div className="message-content-wrapper">
-            <div className="thinking-indicator">
-              <span className="dot" />
-              <span className="dot" />
-              <span className="dot" />
+            <div className="message-header">
+              <span className="message-role">AI Assistant</span>
             </div>
+            <PreResponseWrapper isStreaming={true} />
           </div>
         </div>
       )}

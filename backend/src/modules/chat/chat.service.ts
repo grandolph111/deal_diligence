@@ -1,9 +1,37 @@
 import { prisma } from '../../config/database';
 import { ChatConversation, ChatMessage, ChatMessageRole, ProjectMember, Prisma } from '@prisma/client';
 import { ApiError } from '../../utils/ApiError';
-import { runChat, isMock } from '../../integrations/claude';
+import { runChat, isMock, getClaudeClient, getModelId } from '../../integrations/claude';
 import { stuffRetriever } from '../../integrations/retrieval';
 import { dealBriefService } from '../../services/deal-brief.service';
+import { resolveProjectScope } from '../../services/scope.service';
+
+/**
+ * Use Haiku to generate a short (3-6 word) title for a conversation from
+ * the first user message. Fires-and-forgets; never throws — a bad title is
+ * worse than no title, so failures are silently swallowed.
+ */
+async function generateConversationTitle(firstMessage: string): Promise<string | null> {
+  try {
+    const client = getClaudeClient();
+    const model = getModelId('chat'); // Haiku tier
+    const resp = await client.messages.create({
+      model,
+      max_tokens: 32,
+      messages: [
+        {
+          role: 'user',
+          content: `Generate a concise title (3–6 words) for a legal due diligence chat that starts with this message. Return only the title — no quotes, no punctuation at the end.\n\nMessage: ${firstMessage.slice(0, 400)}`,
+        },
+      ],
+    });
+    const block = resp.content.find((b) => b.type === 'text');
+    const text = block && 'text' in block ? (block.text as string).trim() : null;
+    return text || null;
+  } catch {
+    return null;
+  }
+}
 import {
   CreateConversationInput,
   UpdateConversationInput,
@@ -35,24 +63,6 @@ const conversationWithMessagesInclude = {
   },
 };
 
-/**
- * Get accessible folder IDs for a user based on their membership permissions
- */
-function getAccessibleFolderIds(membership: ProjectMember): string[] {
-  // OWNER and ADMIN have access to all folders
-  if (membership.role === 'OWNER' || membership.role === 'ADMIN') {
-    return []; // Empty array means all folders
-  }
-
-  // Check for restrictedFolders in permissions
-  const permissions = membership.permissions as Record<string, unknown> | null;
-  if (permissions?.restrictedFolders) {
-    return permissions.restrictedFolders as string[];
-  }
-
-  // Default: access to all folders
-  return [];
-}
 
 export const chatService = {
   /**
@@ -228,6 +238,7 @@ export const chatService = {
     userMessage: ChatMessage;
     assistantMessage: ChatMessage;
     citations: Citation[];
+    generatedTitle?: string;
   }> {
     // Save user message
     const userMessage = await this.saveMessage(
@@ -245,9 +256,30 @@ export const chatService = {
         content: m.content,
       }));
 
+    // Resolve folder scope via platform-aware helper (Super Admin &
+    // same-company Customer Admin get full access without a membership row).
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, platformRole: true, companyId: true },
+    });
+    if (!user) throw ApiError.unauthorized('User not found');
+    const scope = await resolveProjectScope(user, projectId);
+
+    // Zero-grant SMEs get a canned response and no retrieval.
+    if (!scope.isFullAccess && scope.allowedFolderIds.length === 0) {
+      const refusal =
+        "You haven't been granted access to any folders in this deal yet. Ask your Customer Admin to share the folders you need.";
+      const assistant = await this.saveMessage(
+        conversationId,
+        'ASSISTANT',
+        refusal,
+        []
+      );
+      return { userMessage, assistantMessage: assistant, citations: [] };
+    }
+
     // Load the deal brief (primary context). If the user pinned specific
     // documents, also load those per-doc fact sheets for detail.
-    const accessibleFolderIds = getAccessibleFolderIds(membership);
     const brief = await dealBriefService.loadBriefForMember(membership);
 
     const pinnedDocs =
@@ -255,8 +287,7 @@ export const chatService = {
         ? await stuffRetriever.search(data.content, {
             projectId,
             documentIds: data.documentIds,
-            folderIds:
-              accessibleFolderIds.length > 0 ? accessibleFolderIds : undefined,
+            folderIds: scope.isFullAccess ? undefined : scope.allowedFolderIds,
           })
         : [];
 
@@ -314,6 +345,25 @@ export const chatService = {
       citations
     );
 
+    // Auto-generate title on first exchange (fire-and-forget style, non-blocking)
+    let generatedTitle: string | undefined;
+    if (priorTurns.length === 0) {
+      const conv = await prisma.chatConversation.findUnique({
+        where: { id: conversationId },
+        select: { title: true },
+      });
+      if (!conv?.title) {
+        const title = await generateConversationTitle(data.content);
+        if (title) {
+          await prisma.chatConversation.update({
+            where: { id: conversationId },
+            data: { title },
+          });
+          generatedTitle = title;
+        }
+      }
+    }
+
     await prisma.auditLog.create({
       data: {
         projectId,
@@ -335,6 +385,7 @@ export const chatService = {
       userMessage,
       assistantMessage,
       citations,
+      generatedTitle,
     };
   },
 };

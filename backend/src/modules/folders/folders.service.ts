@@ -370,43 +370,23 @@ export const foldersService = {
   },
 
   /**
-   * Check if user has access to a folder based on their restrictedFolders permissions
-   * OWNER and ADMIN always have access. MEMBER and VIEWER may have folder restrictions.
+   * Check if user has access to a folder, delegating to scope.service.
+   * OWNER/ADMIN/SUPER_ADMIN/same-company CUSTOMER_ADMIN get full access.
+   * MEMBER/VIEWER scope is driven by permissions.restrictedFolders (cascades).
    */
   async userHasFolderAccess(
     folderId: string,
     userId: string,
     projectId: string
   ): Promise<boolean> {
-    const membership = await prisma.projectMember.findUnique({
-      where: {
-        projectId_userId: {
-          projectId,
-          userId,
-        },
-      },
+    const { resolveProjectScope } = await import('../../services/scope.service');
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, platformRole: true, companyId: true },
     });
-
-    if (!membership) {
-      return false;
-    }
-
-    // OWNER and ADMIN have access to all folders
-    if (membership.role === 'OWNER' || membership.role === 'ADMIN') {
-      return true;
-    }
-
-    const permissions = membership.permissions as Record<string, unknown> | null;
-
-    // If no restrictedFolders, user has access to all folders they can see
-    if (!permissions || !permissions.restrictedFolders) {
-      return true;
-    }
-
-    const restrictedFolders = permissions.restrictedFolders as string[];
-
-    // Check if this folder or any of its ancestors is in the restricted list
-    const folderPath = await this.getFolderPath(folderId);
-    return folderPath.some((folder) => restrictedFolders.includes(folder.id));
+    if (!user) return false;
+    const scope = await resolveProjectScope(user, projectId);
+    if (scope.isFullAccess) return true;
+    return scope.allowedFolderIds.includes(folderId);
   },
 };

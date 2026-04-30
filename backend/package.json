@@ -20,7 +20,11 @@
     "db:test:reset": "dotenv -e .env.test -- prisma migrate reset --force",
     "db:local:start": "docker run -d --name dealdiligence-db -p 5433:5432 -e POSTGRES_PASSWORD=password -e POSTGRES_DB=dealdiligence -v dealdiligence-pgdata:/var/lib/postgresql/data postgres:16-alpine || docker start dealdiligence-db",
     "db:local:stop": "docker stop dealdiligence-db",
-    "db:local:remove": "docker stop dealdiligence-db && docker rm dealdiligence-db && docker volume rm dealdiligence-pgdata"
+    "db:local:remove": "docker stop dealdiligence-db && docker rm dealdiligence-db && docker volume rm dealdiligence-pgdata",
+    "db:seed": "ts-node-dev --transpile-only prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "ts-node-dev --transpile-only prisma/seed.ts"
   },
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^0.28.1",
@@ -34,6 +38,7 @@
     "cors": "^2.8.5",
     "diff-match-patch": "^1.0.5",
     "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
     "express": "^4.21.1",
     "express-oauth2-jwt-bearer": "^1.6.0",
     "express-rate-limit": "^8.2.1",

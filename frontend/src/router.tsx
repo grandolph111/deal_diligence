@@ -1,6 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppLayout } from './components/layout';
-import { ProtectedRoute } from './auth';
+import { ProtectedRoute, RequirePlatformRole } from './auth';
 import {
   LoginPage,
   CallbackPage,
@@ -15,7 +15,13 @@ import {
   GraphExplorerPage,
   DealBriefPage,
   BoardsIndexPage,
+  AdminCompaniesPage,
+  CreateCompanyPage,
+  CompanyDetailPage,
+  CompanyTeamPage,
+  AccountPasswordPage,
 } from './pages';
+import { RoleAwareHome } from './components/RoleAwareHome';
 
 /**
  * Application router configuration
@@ -41,15 +47,50 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     ),
     children: [
-      // Redirect root to dashboard
+      // Role-aware root: SUPER_ADMIN → /admin/companies, others → /dashboard
       {
         index: true,
-        element: <Navigate to="/dashboard" replace />,
+        element: <RoleAwareHome />,
       },
-      // Dashboard
+      // Super Admin admin routes
+      {
+        path: 'admin/companies',
+        element: (
+          <RequirePlatformRole roles={['SUPER_ADMIN']}>
+            <AdminCompaniesPage />
+          </RequirePlatformRole>
+        ),
+      },
+      {
+        path: 'admin/companies/new',
+        element: (
+          <RequirePlatformRole roles={['SUPER_ADMIN']}>
+            <CreateCompanyPage />
+          </RequirePlatformRole>
+        ),
+      },
+      {
+        path: 'admin/companies/:companyId',
+        element: (
+          <RequirePlatformRole roles={['SUPER_ADMIN']}>
+            <CompanyDetailPage />
+          </RequirePlatformRole>
+        ),
+      },
+      // Dashboard (Customer Admin + Member)
       {
         path: 'dashboard',
         element: <DashboardPage />,
+      },
+      // Customer Admin team view (their own company)
+      {
+        path: 'company',
+        element: <CompanyTeamPage />,
+      },
+      // Self-service password change (any signed-in user)
+      {
+        path: 'account/password',
+        element: <AccountPasswordPage />,
       },
       // Create new project
       {

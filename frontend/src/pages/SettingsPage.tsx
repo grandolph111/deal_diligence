@@ -59,10 +59,20 @@ export function SettingsPage() {
   const [initialized, setInitialized] = useState(false);
   const [folderTree, setFolderTree] = useState<FolderTreeNode[]>([]);
 
-  // Get current user's role
+  // Get current user's role. Platform-level Super Admin and the company's
+  // Customer Admin get synthetic OWNER access even without a ProjectMember row.
+  const isPlatformOwner =
+    user?.platformRole === 'SUPER_ADMIN' ||
+    (user?.platformRole === 'CUSTOMER_ADMIN' &&
+      !!user.companyId &&
+      !!project?.companyId &&
+      user.companyId === project.companyId);
+
   const currentUserMember = members.find((m) => m.user?.email === user?.email);
-  const currentUserId = currentUserMember?.user?.id || '';
-  const currentUserRole: Role = currentUserMember?.role || 'VIEWER';
+  const currentUserId = currentUserMember?.user?.id || user?.id || '';
+  const currentUserRole: Role = isPlatformOwner
+    ? 'OWNER'
+    : currentUserMember?.role || 'VIEWER';
   const isAdmin = currentUserRole === 'OWNER' || currentUserRole === 'ADMIN';
 
   // Fetch all data
@@ -88,12 +98,12 @@ export function SettingsPage() {
     fetchAllData();
   }, [fetchAllData]);
 
-  // Redirect non-admin users
+  // Redirect non-admin users (skip when isPlatformOwner — they bypass membership)
   useEffect(() => {
-    if (initialized && !isAdmin && currentUserMember) {
+    if (initialized && !isAdmin && !isPlatformOwner && currentUserMember) {
       navigate(`/projects/${projectId}`, { replace: true });
     }
-  }, [initialized, isAdmin, currentUserMember, projectId, navigate]);
+  }, [initialized, isAdmin, isPlatformOwner, currentUserMember, projectId, navigate]);
 
   const handleTabChange = (tab: TabType) => {
     setSearchParams({ tab });

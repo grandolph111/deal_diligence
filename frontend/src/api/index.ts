@@ -6,6 +6,13 @@ export { useApiClientInit } from './hooks/useApiClient';
 
 // Export services
 export { authService } from './services/auth.service';
+export { companiesService } from './services/companies.service';
+export type {
+  Company,
+  CompanyDetail,
+  CreateCompanyDto,
+  CreateCompanyResponse,
+} from './services/companies.service';
 export { projectsService } from './services/projects.service';
 export { membersService } from './services/members.service';
 export { tasksService } from './services/tasks.service';

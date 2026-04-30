@@ -8,6 +8,27 @@ datasource db {
 }
 
 // ============================================
+// COMPANIES (platform tenancy)
+// ============================================
+
+model Company {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  users    User[]
+  projects Project[]
+}
+
+enum PlatformRole {
+  SUPER_ADMIN
+  CUSTOMER_ADMIN
+  MEMBER
+}
+
+// ============================================
 // USER & AUTH
 // ============================================
 
@@ -19,6 +40,12 @@ model User {
   avatarUrl String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Platform tenancy + dev-creds login
+  platformRole PlatformRole @default(MEMBER)
+  companyId    String?
+  company      Company?     @relation(fields: [companyId], references: [id])
+  devPassword  String?      // prototype only; plaintext demo creds
 
   // Relations
   memberships      ProjectMember[]
@@ -53,6 +80,10 @@ model Project {
   archivedAt  DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  // Tenancy
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
 
   // Playbook (standard positions + red flags) conditioning extraction risk.
   playbook Json?

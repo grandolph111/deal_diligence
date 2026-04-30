@@ -200,9 +200,9 @@ export function MemberEditModal({
                   className="permission-description"
                   style={{ marginBottom: 'var(--space-2)', display: 'block' }}
                 >
-                  Select the Data Room folders this member can access. Their Kanban boards
-                  are scoped to these folders too — they'll only see boards whose folders
-                  are fully contained in this set. Leave empty for full project access.
+                  Pick the Data Room folders this user can see. Selections cascade to
+                  subfolders. Kanban, Chat, and the Dashboard are all limited to these
+                  folders. Leave blank to lock them out until you grant access.
                 </span>
                 <FolderScopePicker
                   folderTree={folderTree}

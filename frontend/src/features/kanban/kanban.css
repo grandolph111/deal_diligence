@@ -1679,6 +1679,13 @@
   font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
 }
 
+.ai-report-downloads {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
 .ai-report-loading {
   display: flex;
   align-items: center;

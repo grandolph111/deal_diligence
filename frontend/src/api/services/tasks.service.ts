@@ -138,6 +138,22 @@ export const tasksService = {
     return apiClient.getText(`/projects/${projectId}/tasks/${taskId}/ai-report`);
   },
 
+  async downloadAiReport(
+    projectId: string,
+    taskId: string,
+    format: 'md' | 'xlsx'
+  ): Promise<void> {
+    const { blob, filename } = await apiClient.getBlob(
+      `/projects/${projectId}/tasks/${taskId}/ai-report/download?format=${format}`
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
   async runAi(projectId: string, taskId: string): Promise<{ success: true }> {
     return apiClient.post<{ success: true }>(
       `/projects/${projectId}/tasks/${taskId}/run-ai`

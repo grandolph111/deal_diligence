@@ -165,11 +165,16 @@ export function useChat({ projectId }: UseChatOptions): UseChatResult {
         )
       );
 
-      // Auto-generate title if this is the first message
-      if (messages.length === 0 && !currentConversation.title) {
-        // Use first ~50 chars of the message as title
-        const autoTitle = content.length > 50 ? content.substring(0, 50) + '...' : content;
-        await updateConversationTitle(currentConversation.id, autoTitle);
+      // Apply AI-generated title returned by the backend on first exchange
+      if (response.generatedTitle) {
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === currentConversation.id ? { ...c, title: response.generatedTitle } : c
+          )
+        );
+        setCurrentConversation((prev) =>
+          prev ? { ...prev, title: response.generatedTitle! } : prev
+        );
       }
 
       return { citations: response.citations };

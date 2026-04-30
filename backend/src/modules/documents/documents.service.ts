@@ -5,6 +5,7 @@ import { ApiError } from '../../utils/ApiError';
 import { InitiateUploadInput, ListDocumentsQuery } from './documents.validators';
 import { foldersService } from '../folders/folders.service';
 import { extractionService } from '../../services/extraction.service';
+import { resolveProjectScope } from '../../services/scope.service';
 
 export interface DocumentUploadResult {
   documentId: string;
@@ -327,19 +328,13 @@ export const documentsService = {
     const { folderId, documentType, status, page, limit } = query;
     const skip = (page - 1) * limit;
 
-    // Get user's membership to check restrictions
-    const membership = await prisma.projectMember.findUnique({
-      where: {
-        projectId_userId: {
-          projectId,
-          userId,
-        },
-      },
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, platformRole: true, companyId: true },
     });
+    if (!user) throw ApiError.unauthorized('User not found');
 
-    if (!membership) {
-      throw ApiError.forbidden('Not a member of this project');
-    }
+    const scope = await resolveProjectScope(user, projectId);
 
     // Build where clause
     const where: {
@@ -351,28 +346,26 @@ export const documentsService = {
       projectId,
     };
 
-    // OWNER and ADMIN have full access
-    const isFullAccess = membership.role === 'OWNER' || membership.role === 'ADMIN';
-    const permissions = membership.permissions as Record<string, unknown> | null;
-    const restrictedFolders = permissions?.restrictedFolders as string[] | undefined;
-
-    // If user has folder restrictions, only show documents in those folders
-    if (!isFullAccess && restrictedFolders && restrictedFolders.length > 0) {
-      // If requesting a specific folder, verify they have access
+    if (scope.isFullAccess) {
+      if (folderId !== undefined) {
+        where.folderId = folderId === 'null' ? null : folderId;
+      }
+    } else {
+      // Zero-grant SMEs and non-members see nothing.
+      if (scope.allowedFolderIds.length === 0) {
+        return {
+          documents: [],
+          pagination: { page, limit, total: 0, totalPages: 0 },
+        };
+      }
       if (folderId && folderId !== 'null') {
-        const hasAccess = await foldersService.userHasFolderAccess(folderId, userId, projectId);
-        if (!hasAccess) {
+        if (!scope.allowedFolderIds.includes(folderId)) {
           throw ApiError.forbidden('You do not have access to this folder');
         }
         where.folderId = folderId;
       } else {
-        // Get all accessible folder IDs (including descendants)
-        const accessibleFolderIds = await this.getAccessibleFolderIds(projectId, restrictedFolders);
-        where.folderId = { in: accessibleFolderIds };
+        where.folderId = { in: scope.allowedFolderIds };
       }
-    } else if (folderId !== undefined) {
-      // No restrictions, apply folder filter if provided
-      where.folderId = folderId === 'null' ? null : folderId;
     }
 
     if (documentType) {
@@ -412,42 +405,15 @@ export const documentsService = {
   },
 
   /**
-   * Get all accessible folder IDs including descendants
+   * Get all accessible folder IDs including descendants.
+   * Delegates to scope.service.ts (single source of truth).
    */
   async getAccessibleFolderIds(
     projectId: string,
     restrictedFolders: string[]
   ): Promise<string[]> {
-    const accessibleIds = new Set<string>(restrictedFolders);
-
-    // Get all folders in the project
-    const allFolders = await prisma.folder.findMany({
-      where: { projectId },
-      select: { id: true, parentId: true },
-    });
-
-    // Build parent-to-children map
-    const childrenMap = new Map<string | null, string[]>();
-    for (const folder of allFolders) {
-      const children = childrenMap.get(folder.parentId) || [];
-      children.push(folder.id);
-      childrenMap.set(folder.parentId, children);
-    }
-
-    // Add all descendants of restricted folders
-    const addDescendants = (folderId: string) => {
-      const children = childrenMap.get(folderId) || [];
-      for (const childId of children) {
-        accessibleIds.add(childId);
-        addDescendants(childId);
-      }
-    };
-
-    for (const folderId of restrictedFolders) {
-      addDescendants(folderId);
-    }
-
-    return Array.from(accessibleIds);
+    const { expandFoldersToDescendants } = await import('../../services/scope.service');
+    return expandFoldersToDescendants(projectId, restrictedFolders);
   },
 
   /**

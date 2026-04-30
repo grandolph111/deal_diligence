@@ -202,6 +202,28 @@ class ApiClient {
   }
 
   /**
+   * Make a GET request that returns a Blob (e.g. file downloads).
+   */
+  async getBlob(path: string): Promise<{ blob: Blob; filename: string }> {
+    const headers = await this.buildHeaders();
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: 'GET',
+      headers,
+    });
+    if (!response.ok) {
+      throw new ApiClientError(
+        `Request failed with status ${response.status}`,
+        response.status
+      );
+    }
+    const disposition = response.headers.get('Content-Disposition') ?? '';
+    const match = disposition.match(/filename="([^"]+)"/);
+    const filename = match?.[1] ?? 'download';
+    const blob = await response.blob();
+    return { blob, filename };
+  }
+
+  /**
    * Make a request without authentication (for public endpoints)
    */
   async getPublic<T>(path: string): Promise<T> {

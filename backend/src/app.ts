@@ -13,6 +13,7 @@ import {
 
 // Import routes
 import authRoutes from './modules/auth/auth.routes';
+import companiesRoutes from './modules/companies/companies.routes';
 import projectRoutes from './modules/projects/projects.routes';
 import memberRoutes from './modules/members/members.routes';
 import taskRoutes from './modules/tasks/tasks.routes';
@@ -151,6 +152,7 @@ app.get('/health/detailed', async (req, res) => {
 
 // API routes with appropriate rate limiting
 app.use('/api/v1/auth', authRateLimiter, authRoutes);
+app.use('/api/v1/companies', companiesRoutes);
 app.use('/api/v1/projects', projectRoutes);
 app.use('/api/v1/projects/:id/members', memberRoutes);
 app.use('/api/v1/projects/:id/boards', boardRoutes);

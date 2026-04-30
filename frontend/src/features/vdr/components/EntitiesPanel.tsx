@@ -14,7 +14,6 @@ import {
   Eye,
   EyeOff,
   AlertTriangle,
-  Loader,
   Info,
 } from 'lucide-react';
 import type { DocumentEntity, EntityType } from '../../../types/api';
@@ -144,8 +143,12 @@ export function EntitiesPanel({
     return (
       <div className="entities-panel">
         <div className="entities-panel-loading">
-          <Loader size={20} className="spinning" />
-          <span>Loading entities...</span>
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="skeleton-row">
+              <span className="skeleton skeleton-text" style={{ width: '30%' }} />
+              <span className="skeleton skeleton-text" style={{ width: '45%', marginLeft: 'var(--space-4)' }} />
+            </div>
+          ))}
         </div>
       </div>
     );

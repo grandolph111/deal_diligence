@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   FileText,
@@ -6,29 +6,74 @@ import {
   Settings,
   FolderOpen,
   BookOpen,
+  Building2,
 } from 'lucide-react';
+import { useAuth } from '../../auth';
 
 interface SidebarProps {
   projectId?: string;
 }
 
 /**
- * Application sidebar with project navigation
- * Uses Lucide icons for consistent, professional iconography
+ * Application sidebar. Three flavors:
+ *  - admin  (Super Admin, on /admin/*): Companies link
+ *  - default (Customer Admin / Member, on /dashboard): Dashboard link
+ *  - project-scoped: adds the per-project nav when projectId is set
  */
 export function Sidebar({ projectId }: SidebarProps) {
+  const location = useLocation();
+  const { user } = useAuth();
+  const isAdminRoute = location.pathname.startsWith('/admin');
+  const isSuperAdmin = user?.platformRole === 'SUPER_ADMIN';
+
+  if (isAdminRoute || (isSuperAdmin && !projectId)) {
+    return (
+      <aside className="app-sidebar">
+        <nav className="sidebar-nav">
+          <NavLink
+            to="/admin/companies"
+            className={({ isActive }) =>
+              `sidebar-link ${isActive ? 'active' : ''}`
+            }
+          >
+            <Building2 className="icon" size={20} />
+            <span>Companies</span>
+          </NavLink>
+        </nav>
+      </aside>
+    );
+  }
+
+  const homePath = isSuperAdmin ? '/admin/companies' : '/dashboard';
+  const homeLabel = isSuperAdmin ? 'Companies' : 'Dashboard';
+  const HomeIcon = isSuperAdmin ? Building2 : LayoutDashboard;
+
+  const isCustomerAdmin = user?.platformRole === 'CUSTOMER_ADMIN';
+
   return (
     <aside className="app-sidebar">
       <nav className="sidebar-nav">
         <NavLink
-          to="/dashboard"
+          to={homePath}
           className={({ isActive }) =>
             `sidebar-link ${isActive ? 'active' : ''}`
           }
         >
-          <LayoutDashboard className="icon" size={20} />
-          <span>Dashboard</span>
+          <HomeIcon className="icon" size={20} />
+          <span>{homeLabel}</span>
         </NavLink>
+
+        {isCustomerAdmin && (
+          <NavLink
+            to="/company"
+            className={({ isActive }) =>
+              `sidebar-link ${isActive ? 'active' : ''}`
+            }
+          >
+            <Building2 className="icon" size={20} />
+            <span>Company</span>
+          </NavLink>
+        )}
 
         {projectId && (
           <>

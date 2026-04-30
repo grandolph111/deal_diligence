@@ -104,4 +104,23 @@ export const authService = {
       data,
     });
   },
+
+  /**
+   * Dev-creds login: match email + devPassword against a seeded user and
+   * return the user profile + a mock token the frontend can send as a
+   * Bearer token. Prototype only.
+   */
+  async devLogin(email: string, password: string) {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { company: true },
+    });
+    if (!user || !user.devPassword || user.devPassword !== password) {
+      return null;
+    }
+    return {
+      token: `mock-dev-token-${user.id}`,
+      user,
+    };
+  },
 };

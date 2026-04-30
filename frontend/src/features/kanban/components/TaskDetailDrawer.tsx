@@ -13,6 +13,7 @@ import {
   RotateCcw,
   Loader,
   AlertCircle,
+  Download,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -542,6 +543,24 @@ export function TaskDetailDrawer({
                         reason={task.aiConfidenceReason}
                         size="lg"
                       />
+                    )}
+                    {aiStatus === 'SUCCEEDED' && projectId && (
+                      <div className="ai-report-downloads">
+                        <button
+                          className="button ghost sm"
+                          title="Download Markdown"
+                          onClick={() => tasksService.downloadAiReport(projectId, task.id, 'md')}
+                        >
+                          <Download size={13} /> .md
+                        </button>
+                        <button
+                          className="button ghost sm"
+                          title="Download Excel"
+                          onClick={() => tasksService.downloadAiReport(projectId, task.id, 'xlsx')}
+                        >
+                          <Download size={13} /> .xlsx
+                        </button>
+                      </div>
                     )}
                   </header>
                   {aiStatus === 'SUCCEEDED' && task.aiConfidenceReason && (

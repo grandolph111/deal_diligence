@@ -563,8 +563,14 @@ export function DocumentList({
       <div className="document-list-content">
         {loading ? (
           <div className="document-list-loading">
-            <div className="loading-spinner" />
-            <p>Loading documents...</p>
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="skeleton-row">
+                <span className="skeleton" style={{ width: 20, height: 20, borderRadius: 4, flexShrink: 0 }} />
+                <span className="skeleton skeleton-text" style={{ flex: 1 }} />
+                <span className="skeleton skeleton-text" style={{ width: '12%' }} />
+                <span className="skeleton skeleton-text" style={{ width: '8%' }} />
+              </div>
+            ))}
           </div>
         ) : documents.length === 0 ? (
           <div className="document-list-empty">

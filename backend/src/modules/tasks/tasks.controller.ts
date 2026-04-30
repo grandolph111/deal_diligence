@@ -12,6 +12,7 @@ import {
 } from './tasks.validators';
 import { ApiError } from '../../utils/ApiError';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { generateReportExcel } from '../../utils/reportToExcel';
 
 /**
  * If a status transition moves an AI-enabled task into IN_PROGRESS and it
@@ -189,6 +190,39 @@ export const tasksController = {
     if (!markdown) throw ApiError.notFound('No AI report for this task');
     res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
     res.send(markdown);
+  }),
+
+  /**
+   * GET /projects/:id/tasks/:taskId/ai-report/download?format=md|xlsx
+   * Download the AI risk report as markdown or Excel.
+   */
+  downloadAiReport: asyncHandler(async (req: Request, res: Response) => {
+    const { id: projectId, taskId } = req.params as Record<string, string>;
+    const format = (req.query.format as string) === 'xlsx' ? 'xlsx' : 'md';
+    const task = await tasksService.verifyTaskInProject(taskId, projectId);
+    const markdown = await taskAiService.getReportMarkdown(taskId);
+    if (!markdown) throw ApiError.notFound('No AI report for this task');
+
+    const slug = (task.title ?? 'report')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .slice(0, 40);
+
+    if (format === 'md') {
+      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${slug}.md"`);
+      res.send(markdown);
+      return;
+    }
+
+    const buffer = await generateReportExcel(markdown, task.title ?? 'Risk Report', {
+      confidenceScore: task.aiConfidenceScore,
+      confidenceReason: task.aiConfidenceReason,
+      completedAt: task.aiCompletedAt,
+    });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${slug}.xlsx"`);
+    res.send(buffer);
   }),
 
   /**
