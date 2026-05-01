@@ -1,4 +1,4 @@
-import { PlatformRole } from '@prisma/client';
+import { PlatformRole, Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { ApiError } from '../../utils/ApiError';
 import { generateDevPassword } from '../../utils/generateDevPassword';
@@ -77,7 +77,7 @@ export const companiesService = {
         ...(data.name !== undefined && { name: data.name }),
         ...(data.description !== undefined && { description: data.description }),
         ...(data.playbook !== undefined && {
-          playbook: data.playbook === null ? null : { content: data.playbook },
+          playbook: data.playbook === null ? Prisma.JsonNull : { content: data.playbook },
         }),
       },
     });
