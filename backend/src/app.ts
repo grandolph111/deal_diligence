@@ -52,6 +52,9 @@ import mockS3Routes from './routes/mock-s3.routes';
 
 const app = express();
 
+// Trust Railway/Vercel/nginx reverse proxy for rate limiting and IP detection
+app.set('trust proxy', 1);
+
 // Request ID middleware - add unique ID to each request for tracing
 app.use(requestIdMiddleware);
 
