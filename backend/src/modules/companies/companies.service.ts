@@ -86,7 +86,13 @@ export const companiesService = {
   async deleteCompany(companyId: string) {
     const company = await prisma.company.findUnique({ where: { id: companyId } });
     if (!company) throw ApiError.notFound('Company not found');
-    await prisma.company.delete({ where: { id: companyId } });
+    await prisma.$transaction(async (tx) => {
+      // Projects cascade-delete their children (tasks, docs, members, etc.)
+      await tx.project.deleteMany({ where: { companyId } });
+      // Unlink users rather than deleting them
+      await tx.user.updateMany({ where: { companyId }, data: { companyId: null } });
+      await tx.company.delete({ where: { id: companyId } });
+    });
   },
 
   /**
