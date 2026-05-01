@@ -1,12 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 /**
  * Request ID middleware - adds unique ID to each request for tracing
  */
 export const requestIdMiddleware = (req: Request, res: Response, next: NextFunction) => {
-  const requestId = (req.headers['x-request-id'] as string) || uuidv4();
+  const requestId = (req.headers['x-request-id'] as string) || randomUUID();
   (req as Request & { requestId?: string }).requestId = requestId;
   res.setHeader('x-request-id', requestId);
   next();
