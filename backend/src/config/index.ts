@@ -6,10 +6,13 @@ type ClaudeProvider = 'anthropic' | 'bedrock';
 
 const claudeProvider = (process.env.CLAUDE_PROVIDER || 'anthropic') as ClaudeProvider;
 
+const port = parseInt(process.env.PORT || '3001', 10);
+
 export const config = {
-  port: parseInt(process.env.PORT || '3001', 10),
+  port,
   nodeEnv: process.env.NODE_ENV || 'development',
   isDev: process.env.NODE_ENV !== 'production',
+  backendUrl: process.env.BACKEND_URL || `http://localhost:${port}`,
 
   auth0: {
     audience: process.env.AUTH0_AUDIENCE || '',

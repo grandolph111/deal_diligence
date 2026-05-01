@@ -8,7 +8,6 @@
  */
 
 import diffMatchPatch from 'diff-match-patch';
-import { PDFParse } from 'pdf-parse';
 import type { ExtractionResponse } from '../integrations/claude/schema';
 
 // diff-match-patch is a default-exported class in its new ESM build but a
@@ -41,6 +40,7 @@ export interface CitationIssue {
 export const extractPdfPages = async (
   bytes: Buffer
 ): Promise<{ pages: string[]; fullText: string }> => {
+  const { PDFParse } = await import('pdf-parse');
   const parser = new PDFParse({ data: new Uint8Array(bytes) });
   try {
     const result = await parser.getText();

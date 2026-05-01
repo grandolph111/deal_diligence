@@ -81,7 +81,7 @@ export const s3Service = {
     // Mock mode for development without S3
     if (useMockS3 || !s3Client) {
       return {
-        uploadUrl: `http://localhost:${config.port}/api/v1/mock-s3/upload?key=${encodeURIComponent(s3Key)}`,
+        uploadUrl: `${config.backendUrl}/api/v1/mock-s3/upload?key=${encodeURIComponent(s3Key)}`,
         s3Key,
         expiresAt,
       };
@@ -118,7 +118,7 @@ export const s3Service = {
     // Mock mode for development without S3
     if (useMockS3 || !s3Client) {
       return {
-        downloadUrl: `http://localhost:${config.port}/api/v1/mock-s3/download?key=${encodeURIComponent(s3Key)}`,
+        downloadUrl: `${config.backendUrl}/api/v1/mock-s3/download?key=${encodeURIComponent(s3Key)}`,
         expiresAt,
       };
     }
