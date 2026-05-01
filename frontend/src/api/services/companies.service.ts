@@ -11,7 +11,14 @@ export interface Company {
   memberCount?: number;
 }
 
+export interface UpdateCompanyDto {
+  name?: string;
+  description?: string | null;
+  playbook?: string | null;
+}
+
 export interface CompanyDetail extends Company {
+  playbook?: { content: string } | null;
   projects: Array<
     Project & {
       memberCount: number;
@@ -92,6 +99,14 @@ export const companiesService = {
       `/companies/${companyId}/members`,
       data
     );
+  },
+
+  async updateCompany(companyId: string, data: UpdateCompanyDto): Promise<Company> {
+    return apiClient.patch<Company>(`/companies/${companyId}`, data);
+  },
+
+  async deleteCompany(companyId: string): Promise<void> {
+    return apiClient.delete(`/companies/${companyId}`);
   },
 
   async removeMember(companyId: string, userId: string): Promise<void> {

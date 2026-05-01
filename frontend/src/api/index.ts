@@ -11,6 +11,7 @@ export type {
   Company,
   CompanyDetail,
   CreateCompanyDto,
+  UpdateCompanyDto,
   CreateCompanyResponse,
   CreateCompanyMemberResponse,
 } from './services/companies.service';

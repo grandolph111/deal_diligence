@@ -9,6 +9,14 @@ export const createCompanySchema = z.object({
 
 export type CreateCompanyInput = z.infer<typeof createCompanySchema>;
 
+export const updateCompanySchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  description: z.string().max(2000).nullable().optional(),
+  playbook: z.string().max(50000).nullable().optional(),
+});
+
+export type UpdateCompanyInput = z.infer<typeof updateCompanySchema>;
+
 export const createCompanyMemberSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(255).optional(),

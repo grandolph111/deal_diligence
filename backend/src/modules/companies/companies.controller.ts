@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { companiesService } from './companies.service';
-import { createCompanySchema } from './companies.validators';
+import { createCompanySchema, updateCompanySchema } from './companies.validators';
 
 export const companiesController = {
   listCompanies: asyncHandler(async (_req: Request, res: Response) => {
@@ -19,5 +19,18 @@ export const companiesController = {
     const companyId = req.params.companyId as string;
     const company = await companiesService.getCompanyById(companyId);
     res.json(company);
+  }),
+
+  updateCompany: asyncHandler(async (req: Request, res: Response) => {
+    const companyId = req.params.companyId as string;
+    const data = updateCompanySchema.parse(req.body);
+    const company = await companiesService.updateCompany(companyId, data);
+    res.json(company);
+  }),
+
+  deleteCompany: asyncHandler(async (req: Request, res: Response) => {
+    const companyId = req.params.companyId as string;
+    await companiesService.deleteCompany(companyId);
+    res.status(204).end();
   }),
 };

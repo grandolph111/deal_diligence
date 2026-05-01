@@ -15,6 +15,7 @@ model Company {
   id          String    @id @default(uuid())
   name        String
   description String?
+  playbook    Json?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 

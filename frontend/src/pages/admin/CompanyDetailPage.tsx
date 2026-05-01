@@ -16,6 +16,7 @@ import {
   companiesService,
   type CompanyDetail,
   type CreateCompanyMemberResponse,
+  type UpdateCompanyDto,
 } from '../../api';
 import { useAuth } from '../../auth';
 import { EntityCard } from '../../components/EntityCard';
@@ -57,6 +58,14 @@ export function CompanyDetailPage({
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>(hideDealsTab ? 'members' : 'deals');
 
+  const [settingsName, setSettingsName] = useState('');
+  const [settingsDesc, setSettingsDesc] = useState('');
+  const [settingsPlaybook, setSettingsPlaybook] = useState('');
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   const [creating, setCreating] = useState<null | 'admin' | 'member'>(null);
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
@@ -74,6 +83,9 @@ export function CompanyDetailPage({
     try {
       const data = await companiesService.getCompany(companyId);
       setCompany(data);
+      setSettingsName(data.name);
+      setSettingsDesc(data.description ?? '');
+      setSettingsPlaybook(data.playbook?.content ?? '');
       setError(null);
     } catch (err) {
       console.error('Failed to fetch company', err);
@@ -92,6 +104,9 @@ export function CompanyDetailPage({
       .then((data) => {
         if (!cancelled) {
           setCompany(data);
+          setSettingsName(data.name);
+          setSettingsDesc(data.description ?? '');
+          setSettingsPlaybook(data.playbook?.content ?? '');
           setError(null);
         }
       })
@@ -110,6 +125,41 @@ export function CompanyDetailPage({
   const canManage =
     user?.platformRole === 'SUPER_ADMIN' ||
     (user?.platformRole === 'CUSTOMER_ADMIN' && user.companyId === companyId);
+
+  const handleSettingsSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!companyId) return;
+    setSettingsSaving(true);
+    setSettingsError(null);
+    setSettingsSaved(false);
+    try {
+      const patch: UpdateCompanyDto = {};
+      if (settingsName.trim()) patch.name = settingsName.trim();
+      patch.description = settingsDesc.trim() || null;
+      patch.playbook = settingsPlaybook.trim() || null;
+      await companiesService.updateCompany(companyId, patch);
+      await refetch();
+      setSettingsSaved(true);
+      setTimeout(() => setSettingsSaved(false), 2500);
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!companyId) return;
+    if (!confirm(`Permanently delete "${company?.name}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await companiesService.deleteCompany(companyId);
+      window.history.back();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete');
+      setDeleting(false);
+    }
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -383,9 +433,61 @@ export function CompanyDetailPage({
 
         {tab === 'settings' && (
           <div className="company-settings">
-            <p className="form-hint">
-              Settings for editing company details will live here.
-            </p>
+            <form onSubmit={handleSettingsSave}>
+              <div className="form-group">
+                <label>Company Name</label>
+                <input
+                  type="text"
+                  value={settingsName}
+                  onChange={(e) => setSettingsName(e.target.value)}
+                  required
+                  maxLength={255}
+                />
+              </div>
+              <div className="form-group">
+                <label>Description</label>
+                <textarea
+                  value={settingsDesc}
+                  onChange={(e) => setSettingsDesc(e.target.value)}
+                  rows={3}
+                  maxLength={2000}
+                  placeholder="Optional description"
+                />
+              </div>
+              <div className="form-group">
+                <label>Playbook</label>
+                <p className="form-hint">Deal checklist or instructions for this company's deals. Markdown supported.</p>
+                <textarea
+                  value={settingsPlaybook}
+                  onChange={(e) => setSettingsPlaybook(e.target.value)}
+                  rows={10}
+                  maxLength={50000}
+                  placeholder="## Due Diligence Checklist&#10;&#10;- [ ] Review financials&#10;- [ ] Legal review"
+                />
+              </div>
+              {settingsError && <p className="error-message">{settingsError}</p>}
+              {settingsSaved && <p className="success-message">Saved.</p>}
+              <div className="settings-actions">
+                <button type="submit" className="button primary" disabled={settingsSaving}>
+                  {settingsSaving ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+
+            {canManage && user?.platformRole === 'SUPER_ADMIN' && (
+              <div className="danger-zone">
+                <h3>Danger Zone</h3>
+                <p>Permanently delete this company and all its data.</p>
+                <button
+                  type="button"
+                  className="button danger"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                >
+                  <Trash2 size={14} /> {deleting ? 'Deleting…' : 'Delete Company'}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

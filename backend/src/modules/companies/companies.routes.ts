@@ -26,6 +26,10 @@ router.get('/:companyId', (req, res, next) => {
   return next(ApiError.forbidden('Not authorized for this company'));
 }, companiesController.getCompany);
 
+// Update or delete a company — SUPER_ADMIN only
+router.patch('/:companyId', requirePlatformRole('SUPER_ADMIN'), companiesController.updateCompany);
+router.delete('/:companyId', requirePlatformRole('SUPER_ADMIN'), companiesController.deleteCompany);
+
 // Members management — authorization is enforced inside company-members.service
 router.post('/:companyId/admins', companyMembersController.addCustomerAdmin);
 router.post('/:companyId/members', companyMembersController.addMember);

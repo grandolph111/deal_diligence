@@ -1484,6 +1484,46 @@
   background-color: #b91c1c;
 }
 
+/* Company Settings Tab */
+.company-settings {
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.company-settings form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.settings-actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.success-message {
+  color: #16a34a;
+  font-size: var(--text-sm);
+}
+
+.company-settings .danger-zone {
+  margin-top: var(--space-4);
+}
+
+.company-settings .danger-zone h3 {
+  color: var(--color-error);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-base);
+}
+
+.company-settings .danger-zone p {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+}
+
 /* Modal */
 .modal-overlay {
   position: fixed;

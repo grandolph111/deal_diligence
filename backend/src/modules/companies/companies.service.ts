@@ -2,7 +2,7 @@ import { PlatformRole } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { ApiError } from '../../utils/ApiError';
 import { generateDevPassword } from '../../utils/generateDevPassword';
-import type { CreateCompanyInput } from './companies.validators';
+import type { CreateCompanyInput, UpdateCompanyInput } from './companies.validators';
 
 export const companiesService = {
   async listCompanies() {
@@ -66,6 +66,27 @@ export const companiesService = {
       })),
       members: company.users,
     };
+  },
+
+  async updateCompany(companyId: string, data: UpdateCompanyInput) {
+    const company = await prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) throw ApiError.notFound('Company not found');
+    return prisma.company.update({
+      where: { id: companyId },
+      data: {
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.description !== undefined && { description: data.description }),
+        ...(data.playbook !== undefined && {
+          playbook: data.playbook === null ? null : { content: data.playbook },
+        }),
+      },
+    });
+  },
+
+  async deleteCompany(companyId: string) {
+    const company = await prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) throw ApiError.notFound('Company not found');
+    await prisma.company.delete({ where: { id: companyId } });
   },
 
   /**
