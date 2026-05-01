@@ -250,6 +250,7 @@ export interface ApiError {
 export interface CreateProjectDto {
   name: string;
   description?: string;
+  companyId?: string;
 }
 
 export interface UpdateProjectDto {

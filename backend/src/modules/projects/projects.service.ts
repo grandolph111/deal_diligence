@@ -107,16 +107,17 @@ export const projectsService = {
     creatorId: string
   ): Promise<Project> {
     const creator = await prisma.user.findUnique({ where: { id: creatorId } });
-    if (!creator?.companyId) {
+    const companyId = data.companyId ?? creator?.companyId;
+    if (!companyId) {
       throw ApiError.badRequest(
-        'Creator must belong to a company to create a project'
+        'A companyId is required to create a project'
       );
     }
     const project = await prisma.project.create({
       data: {
         name: data.name,
         description: data.description,
-        companyId: creator.companyId,
+        companyId,
         members: {
           create: {
             userId: creatorId,

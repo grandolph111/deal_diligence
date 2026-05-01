@@ -14,6 +14,7 @@ import {
 import {
   apiClient,
   companiesService,
+  projectsService,
   type CompanyDetail,
   type CreateCompanyMemberResponse,
   type UpdateCompanyDto,
@@ -65,6 +66,12 @@ export function CompanyDetailPage({
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const [creatingDeal, setCreatingDeal] = useState(false);
+  const [newDealName, setNewDealName] = useState('');
+  const [newDealDesc, setNewDealDesc] = useState('');
+  const [dealSubmitting, setDealSubmitting] = useState(false);
+  const [dealError, setDealError] = useState<string | null>(null);
 
   const [creating, setCreating] = useState<null | 'admin' | 'member'>(null);
   const [newEmail, setNewEmail] = useState('');
@@ -125,6 +132,29 @@ export function CompanyDetailPage({
   const canManage =
     user?.platformRole === 'SUPER_ADMIN' ||
     (user?.platformRole === 'CUSTOMER_ADMIN' && user.companyId === companyId);
+
+  const handleDealCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!companyId) return;
+    setDealError(null);
+    setDealSubmitting(true);
+    try {
+      const project = await projectsService.createProject({
+        name: newDealName.trim(),
+        description: newDealDesc.trim() || undefined,
+        companyId,
+      });
+      setCreatingDeal(false);
+      setNewDealName('');
+      setNewDealDesc('');
+      await refetch();
+      window.location.href = `/projects/${project.id}`;
+    } catch (err) {
+      setDealError(err instanceof Error ? err.message : 'Failed to create deal');
+    } finally {
+      setDealSubmitting(false);
+    }
+  };
 
   const handleSettingsSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -286,13 +316,22 @@ export function CompanyDetailPage({
       <div className="dashboard-content">
         {tab === 'deals' && !hideDealsTab && (
           <>
+            {canManage && (
+              <div className="members-actions">
+                <button
+                  type="button"
+                  className="button primary"
+                  onClick={() => { setDealError(null); setCreatingDeal(true); }}
+                >
+                  <Plus size={14} /> New Deal
+                </button>
+              </div>
+            )}
             {company.projects.length === 0 ? (
               <div className="empty-state">
                 <Briefcase size={48} strokeWidth={1} />
                 <h3>No deals yet</h3>
-                <p>
-                  The Customer Admin can create deals from their own dashboard.
-                </p>
+                <p>Create a deal to get started.</p>
               </div>
             ) : (
               <div className="projects-grid">
@@ -491,6 +530,43 @@ export function CompanyDetailPage({
           </div>
         )}
       </div>
+
+      {creatingDeal && (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <form className="modal-card" onSubmit={handleDealCreate}>
+            <h2>New Deal</h2>
+            <div className="form-group">
+              <label>Deal Name <span className="required">*</span></label>
+              <input
+                type="text"
+                value={newDealName}
+                onChange={(e) => setNewDealName(e.target.value)}
+                required
+                placeholder="e.g. Acme Corp Acquisition"
+                maxLength={255}
+                autoFocus
+              />
+            </div>
+            <div className="form-group">
+              <label>Description</label>
+              <textarea
+                value={newDealDesc}
+                onChange={(e) => setNewDealDesc(e.target.value)}
+                rows={3}
+                maxLength={2000}
+                placeholder="Optional"
+              />
+            </div>
+            {dealError && <p className="error-message">{dealError}</p>}
+            <div className="modal-actions">
+              <button type="button" className="button secondary" onClick={() => setCreatingDeal(false)}>Cancel</button>
+              <button type="submit" className="button primary" disabled={dealSubmitting || !newDealName.trim()}>
+                {dealSubmitting ? 'Creating…' : 'Create Deal'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {creating && (
         <div className="modal-overlay" role="dialog" aria-modal="true">
