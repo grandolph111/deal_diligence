@@ -39,14 +39,23 @@ export const renderPlaybookBlock = (playbook: Playbook | null | undefined): stri
   return `\n<playbook>\n# Playbook (customer's preferred positions for this deal)\n${dealContext}${redFlags}${positions}\n</playbook>\n`;
 };
 
+/** Firm-wide house playbook (freeform markdown). Stable across a company's */
+/** documents, so it caches with the rest of the system prompt. */
+export const renderCompanyPlaybookBlock = (markdown: string | null | undefined): string => {
+  if (!markdown || markdown.trim().length === 0) return '';
+  return `\n<company_playbook>\n# House diligence playbook (firm-wide standing guidance)\nApply this posture to every document unless the deal-specific playbook below overrides it.\n\n${markdown.trim()}\n</company_playbook>\n`;
+};
+
 export const buildExtractionPrompt = (args: {
   documentType: DocumentType;
   playbook?: Playbook | null;
+  companyPlaybookMarkdown?: string | null;
 }): string => {
   return [
     EXTRACTION_SHARED_PREAMBLE,
     FEW_SHOT_EXAMPLES,
     buildTypeBlock(args.documentType),
+    renderCompanyPlaybookBlock(args.companyPlaybookMarkdown),
     renderPlaybookBlock(args.playbook ?? null),
   ].join('\n');
 };

@@ -10,6 +10,7 @@
 
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
+import { usageMeter } from './usage-meter';
 import type Anthropic from '@anthropic-ai/sdk';
 import type AnthropicBedrock from '@anthropic-ai/bedrock-sdk';
 
@@ -206,6 +207,8 @@ export const runToolUse = async <T>(
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const stopReason: string | undefined = (response as any).stop_reason;
+
+  usageMeter.record(model, usage);
 
   // eslint-disable-next-line no-console
   console.log(

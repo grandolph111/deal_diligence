@@ -21,6 +21,29 @@ import { computeScopeKey, SCOPE_FULL } from '../utils/scope-key';
 import { isClaudeConfigured } from '../config';
 import { generateDealBrief, type AttachedDoc, type Playbook } from '../integrations/claude';
 import { documentsService } from '../modules/documents/documents.service';
+import { libraryWriterService } from './library-writer.service';
+
+/**
+ * Resolve a scope key to its in-scope document ids (null = full access / all).
+ * Cheap — no S3 reads — so the library-digest brief path never loads fact sheets.
+ */
+const resolveScopeDocIds = async (
+  projectId: string,
+  scopeKey: string
+): Promise<Set<string> | null> => {
+  if (scopeKey === SCOPE_FULL) return null;
+  const members = await prisma.projectMember.findMany({ where: { projectId } });
+  const matching = members.find((m) => computeScopeKey(m) === scopeKey);
+  const permissions = matching?.permissions as Record<string, unknown> | null;
+  const restricted = permissions?.restrictedFolders as string[] | undefined;
+  if (!restricted || restricted.length === 0) return new Set();
+  const allowed = await documentsService.getAccessibleFolderIds(projectId, restricted);
+  const docs = await prisma.document.findMany({
+    where: { projectId, processingStatus: 'COMPLETE', folderId: { in: allowed } },
+    select: { id: true },
+  });
+  return new Set(docs.map((d) => d.id));
+};
 
 const briefKey = (projectId: string, scopeKey: string): string =>
   `projects/${projectId}/briefs/${scopeKey}.md`;
@@ -150,11 +173,22 @@ export const dealBriefService = {
   }): Promise<string | null> {
     if (!isClaudeConfigured()) return null;
 
-    const factSheets = await loadFactSheetsForScope(
-      args.projectId,
-      args.scopeKey
-    );
-    if (factSheets.length === 0) return null;
+    // Scalable brief (Phase C): when the library is enabled, "reduce" over a
+    // bounded library DIGEST (coverage + top evidence per workstream + entities +
+    // anomalies) instead of stuffing every in-scope fact sheet — so brief input is
+    // independent of document count. Otherwise fall back to the legacy fact-sheet path.
+    let factSheets: AttachedDoc[];
+    if (libraryWriterService.isEnabled() && (await libraryWriterService.isSeeded(args.projectId))) {
+      const allowedDocIds = await resolveScopeDocIds(args.projectId, args.scopeKey);
+      if (allowedDocIds !== null && allowedDocIds.size === 0) return null; // restricted, no docs in scope
+      const digest = await libraryWriterService.buildDigest(args.projectId, allowedDocIds);
+      factSheets = [
+        { documentId: 'library-digest', documentName: 'Deal library digest', factSheetMarkdown: digest },
+      ];
+    } else {
+      factSheets = await loadFactSheetsForScope(args.projectId, args.scopeKey);
+      if (factSheets.length === 0) return null;
+    }
 
     const prev = await this.loadBrief(args.projectId, args.scopeKey);
     const humanSections = extractHumanSections(prev);

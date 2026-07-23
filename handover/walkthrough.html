@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DealDiligence.ai — Codebase Walkthrough</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#152238;          /* deep navy */
+    --ink-2:#1f3253;        /* lighter navy */
+    --ink-soft:#46556e;     /* muted slate text */
+    --brass:#b8893f;        /* primary accent */
+    --brass-deep:#8f6a2c;
+    --brass-tint:#f3 ;
+    --paper:#faf7f1;        /* warm paper */
+    --paper-2:#f3eee3;      /* elevated paper */
+    --line:#e4dccd;         /* hairline */
+    --teal:#2c6e6a;         /* AI / system accent */
+    --green:#3f7d54;
+    --amber:#c08a2d;
+    --red:#b1493e;
+    --shadow-1:0 1px 2px rgba(21,34,56,.06), 0 8px 24px -12px rgba(21,34,56,.18);
+    --shadow-2:0 2px 4px rgba(21,34,56,.05), 0 24px 48px -24px rgba(21,34,56,.30);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    color:#1c2740;
+    background:var(--paper);
+    font-size:10.5pt;
+    line-height:1.7;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+
+  /* ---------- print page setup ---------- */
+  @page{ size:Letter; margin:0; }
+  .page{
+    width:8.5in;
+    height:11in;
+    padding:0.85in 0.9in 0.8in 0.9in;
+    margin:0 auto;
+    background:var(--paper);
+    position:relative;
+    page-break-after:always;
+    overflow:hidden;
+  }
+  .page:last-child{ page-break-after:auto; }
+
+  /* subtle paper grain via layered radial gradients */
+  .page::before{
+    content:"";
+    position:absolute; inset:0;
+    background:
+      radial-gradient(120% 80% at 0% 0%, rgba(184,137,63,.05), transparent 50%),
+      radial-gradient(100% 70% at 100% 100%, rgba(44,110,106,.045), transparent 55%);
+    pointer-events:none;
+    z-index:0;
+  }
+  .page > *{ position:relative; z-index:1; }
+
+  /* running footer */
+  .folio{
+    position:absolute;
+    bottom:0.5in; left:0.9in; right:0.9in;
+    display:flex; justify-content:space-between; align-items:center;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:7.5pt;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:#9a8f7a;
+    border-top:1px solid var(--line);
+    padding-top:7px;
+  }
+  .folio .mark{ color:var(--brass-deep); font-weight:600; }
+
+  /* ---------- typography ---------- */
+  h1,h2,h3,h4{ font-family:'Fraunces',Georgia,serif; color:var(--ink); margin:0; font-weight:600; }
+  h2{ font-size:23pt; line-height:1.1; letter-spacing:-0.02em; }
+  h3{ font-size:14.5pt; line-height:1.2; letter-spacing:-0.01em; margin-bottom:4px; }
+  h4{ font-size:11.5pt; letter-spacing:-0.005em; }
+  p{ margin:0 0 10px; }
+  strong{ color:var(--ink); font-weight:600; }
+  em{ color:var(--ink-soft); font-style:italic; }
+
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:8pt; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--brass-deep); font-weight:600;
+    display:flex; align-items:center; gap:9px;
+    margin-bottom:14px;
+  }
+  .eyebrow::after{ content:""; flex:1; height:1px; background:linear-gradient(90deg,var(--brass) , transparent); }
+
+  .lead{ font-size:12pt; line-height:1.65; color:var(--ink-soft); }
+  .mono{ font-family:'IBM Plex Mono',monospace; }
+
+  /* file path chip */
+  .path{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:8.3pt;
+    background:var(--ink);
+    color:#e9e2d2;
+    padding:1.5px 7px;
+    border-radius:5px;
+    white-space:nowrap;
+    letter-spacing:.01em;
+  }
+  .path .fn{ color:var(--brass); }
+
+  /* ---------- COVER ---------- */
+  .cover{
+    background:
+      radial-gradient(130% 90% at 12% -5%, #21385e 0%, transparent 55%),
+      radial-gradient(120% 80% at 100% 105%, #0e1828 0%, transparent 50%),
+      linear-gradient(160deg, #182a47 0%, #101b2e 100%);
+    color:#f1ece0;
+    display:flex; flex-direction:column; justify-content:space-between;
+  }
+  .cover::before{
+    content:"";
+    position:absolute; inset:0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px);
+    background-size:34px 34px;
+    mask-image:radial-gradient(120% 90% at 70% 20%, black, transparent 75%);
+    z-index:0;
+  }
+  .cover > *{ z-index:1; }
+  .cover-top{ display:flex; justify-content:space-between; align-items:center; }
+  .logo{ display:flex; align-items:center; gap:11px; }
+  .logo-mark{
+    width:34px; height:34px; border-radius:8px;
+    background:linear-gradient(150deg,var(--brass),var(--brass-deep));
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Fraunces',serif; font-weight:700; font-size:16pt; color:#101b2e;
+    box-shadow:0 6px 18px -6px rgba(184,137,63,.6);
+  }
+  .logo-word{ font-family:'Fraunces',serif; font-size:13pt; font-weight:600; letter-spacing:.01em; }
+  .logo-word b{ color:var(--brass); font-weight:600; }
+  .cover-tag{
+    font-family:'IBM Plex Mono',monospace; font-size:8pt; letter-spacing:.2em;
+    text-transform:uppercase; color:#9fb0c9;
+    border:1px solid rgba(159,176,201,.35); border-radius:20px; padding:5px 13px;
+  }
+  .cover-center h1{
+    font-family:'Fraunces',serif; color:#fff;
+    font-size:54pt; line-height:0.98; letter-spacing:-0.03em; font-weight:600;
+    margin:0 0 18px;
+  }
+  .cover-center h1 .accent{ color:var(--brass); font-style:italic; }
+  .cover-sub{ font-size:14pt; line-height:1.5; color:#c9d3e0; max-width:6.0in; font-weight:400; }
+  .cover-rule{ width:64px; height:3px; background:var(--brass); margin:26px 0; border-radius:2px; }
+  .cover-meta{ display:flex; gap:42px; }
+  .cover-meta .k{ font-family:'IBM Plex Mono',monospace; font-size:7.5pt; letter-spacing:.18em; text-transform:uppercase; color:#7e90ab; margin-bottom:4px; }
+  .cover-meta .v{ font-size:11pt; color:#eee7d8; font-weight:500; }
+  .cover-foot{ display:flex; justify-content:space-between; align-items:flex-end; color:#7e90ab; font-family:'IBM Plex Mono',monospace; font-size:8pt; letter-spacing:.04em; }
+
+  /* ---------- generic blocks ---------- */
+  .section-head{ margin-bottom:22px; }
+  .section-head .num{
+    font-family:'IBM Plex Mono',monospace; font-size:9pt; color:var(--brass-deep);
+    font-weight:600; letter-spacing:.1em;
+  }
+
+  .card{
+    background:#fffdf8;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:18px 20px;
+    box-shadow:var(--shadow-1);
+    margin-bottom:14px;
+  }
+  .card.flush{ margin-bottom:0; }
+
+  .callout{
+    border-left:3px solid var(--brass);
+    background:linear-gradient(90deg, rgba(184,137,63,.07), rgba(184,137,63,.01));
+    padding:12px 16px 12px 17px;
+    border-radius:0 8px 8px 0;
+    margin:12px 0;
+    font-size:9.8pt;
+    line-height:1.6;
+  }
+  .callout .lab{
+    font-family:'IBM Plex Mono',monospace; font-size:7.5pt; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--brass-deep); font-weight:600; display:block; margin-bottom:3px;
+  }
+
+  .callout.teal{ border-left-color:var(--teal); background:linear-gradient(90deg, rgba(44,110,106,.08), rgba(44,110,106,.01)); }
+  .callout.teal .lab{ color:var(--teal); }
+
+  /* model badges */
+  .tag{ display:inline-block; font-family:'IBM Plex Mono',monospace; font-size:7.4pt; font-weight:600;
+        letter-spacing:.04em; padding:2px 8px; border-radius:20px; vertical-align:middle; white-space:nowrap; }
+  .tag.haiku{ background:#e6f0ef; color:#235c58; border:1px solid #bcd8d5; }
+  .tag.sonnet{ background:#efe7f3; color:#6b3f7c; border:1px solid #d9c4e1; }
+  .tag.opus{ background:#f7ead7; color:#8a5e1f; border:1px solid #e8d2ad; }
+  .tag.code{ background:#eef0f4; color:#3a4a66; border:1px solid #d4dae3; }
+
+  .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .grid-3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+
+  ul.clean{ margin:6px 0 10px; padding-left:0; list-style:none; }
+  ul.clean li{ position:relative; padding-left:18px; margin-bottom:6px; line-height:1.55; }
+  ul.clean li::before{ content:""; position:absolute; left:2px; top:9px; width:6px; height:6px; border-radius:50%;
+        background:var(--brass); }
+
+  /* ---------- stage cards ---------- */
+  .stage{ display:flex; gap:16px; margin-bottom:16px; break-inside:avoid; }
+  .stage-rail{ flex:0 0 auto; display:flex; flex-direction:column; align-items:center; }
+  .stage-badge{
+    width:38px; height:38px; border-radius:11px;
+    background:linear-gradient(150deg,var(--ink-2),var(--ink));
+    color:#fff; font-family:'Fraunces',serif; font-weight:600; font-size:15pt;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 8px 18px -8px rgba(21,34,56,.55);
+  }
+  .stage-line{ width:2px; flex:1; background:linear-gradient(var(--line),transparent); margin-top:6px; }
+  .stage-body{ flex:1; padding-top:1px; }
+  .stage-body h3{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+
+  /* ---------- pipeline diagram ---------- */
+  .flow{ background:#fffdf8; border:1px solid var(--line); border-radius:14px; padding:22px 20px; box-shadow:var(--shadow-1); }
+  .flow-row{ display:flex; align-items:stretch; gap:9px; margin-bottom:9px; }
+  .flow-box{
+    flex:1; border-radius:9px; padding:9px 11px; font-size:8.6pt; line-height:1.35;
+    border:1px solid var(--line); background:var(--paper-2);
+  }
+  .flow-box .t{ font-weight:600; color:var(--ink); display:block; font-size:9pt; }
+  .flow-box .d{ color:var(--ink-soft); font-size:8pt; }
+  .flow-box.accent{ background:linear-gradient(150deg,#fbf3e3,#f7ead2); border-color:#e8d2ad; }
+  .flow-box.ai{ background:linear-gradient(150deg,#eaf3f2,#e1efed); border-color:#c4dedb; }
+  .flow-arrow{ display:flex; align-items:center; color:var(--brass); font-size:13pt; font-weight:700; }
+  .flow-stack{ display:flex; flex-direction:column; align-items:center; color:var(--brass); font-size:13pt; line-height:.6; margin:1px 0; }
+
+  table.specs{ width:100%; border-collapse:collapse; font-size:9pt; margin:8px 0 4px; }
+  table.specs th{ text-align:left; font-family:'IBM Plex Mono',monospace; font-size:7.6pt; letter-spacing:.1em;
+        text-transform:uppercase; color:var(--ink-soft); border-bottom:2px solid var(--line); padding:7px 9px; font-weight:600; }
+  table.specs td{ padding:8px 9px; border-bottom:1px solid var(--line); vertical-align:top; }
+  table.specs tr:last-child td{ border-bottom:none; }
+  table.specs td.r{ text-align:right; font-family:'IBM Plex Mono',monospace; }
+
+  .toc-item{ display:flex; align-items:baseline; gap:12px; padding:11px 0; border-bottom:1px solid var(--line); }
+  .toc-num{ font-family:'IBM Plex Mono',monospace; color:var(--brass-deep); font-weight:600; font-size:10pt; width:26px; }
+  .toc-title{ font-family:'Fraunces',serif; font-size:13pt; color:var(--ink); font-weight:500; }
+  .toc-desc{ color:var(--ink-soft); font-size:9pt; flex:1; }
+  .toc-pg{ font-family:'IBM Plex Mono',monospace; color:var(--ink-soft); font-size:9pt; }
+
+  .kpi{ text-align:center; padding:14px 10px; }
+  .kpi .big{ font-family:'Fraunces',serif; font-size:26pt; color:var(--ink); font-weight:600; line-height:1; letter-spacing:-0.02em; }
+  .kpi .big .u{ font-size:13pt; color:var(--brass-deep); }
+  .kpi .cap{ font-size:8.3pt; color:var(--ink-soft); margin-top:6px; line-height:1.4; }
+
+  .glo{ margin-bottom:11px; break-inside:avoid; }
+  .glo dt{ font-family:'Fraunces',serif; font-weight:600; color:var(--ink); font-size:10.5pt; margin-bottom:1px; }
+  .glo dd{ margin:0; color:var(--ink-soft); font-size:9.3pt; line-height:1.5; }
+
+  .divider{ height:1px; background:var(--line); margin:18px 0; }
+  .mt0{ margin-top:0; } .mb0{ margin-bottom:0; }
+</style>
+</head>
+<body>
+
+<!-- ============== COVER ============== -->
+<section class="page cover">
+  <div class="cover-top">
+    <div class="logo">
+      <div class="logo-mark">D</div>
+      <div class="logo-word">Deal<b>Diligence</b>.ai</div>
+    </div>
+    <div class="cover-tag">Confidential · Internal</div>
+  </div>
+
+  <div class="cover-center">
+    <div class="eyebrow" style="color:var(--brass);">Codebase Handover</div>
+    <h1>How the<br>Platform <span class="accent">Works</span></h1>
+    <div class="cover-sub">A plain-English walkthrough of the document ingestion and analysis pipeline — what happens to a deal document from the moment it is uploaded, and where each step lives in the code.</div>
+    <div class="cover-rule"></div>
+    <div class="cover-meta">
+      <div><div class="k">Product</div><div class="v">Claude-native M&amp;A platform</div></div>
+      <div><div class="k">Audience</div><div class="v">Engineering handover</div></div>
+      <div><div class="k">Scope</div><div class="v">Backend pipeline</div></div>
+    </div>
+  </div>
+
+  <div class="cover-foot">
+    <div>Prepared for leadership review</div>
+    <div>v1 · Verified against source</div>
+  </div>
+</section>
+
+<!-- ============== CONTENTS ============== -->
+<section class="page">
+  <div class="section-head">
+    <div class="eyebrow">Contents</div>
+    <h2>What's inside</h2>
+  </div>
+  <p class="lead" style="margin-bottom:20px;">This document follows a single deal file on its journey through the system. You can read it start-to-finish, or jump to any part. No coding knowledge required — technical file references are included in the side so an engineer can trace anything back to the source.</p>
+
+  <div class="toc-item"><div class="toc-num">01</div><div><div class="toc-title">What DealDiligence.ai is</div><div class="toc-desc">The product in one paragraph, and the problem it solves</div></div><div class="toc-pg">p.3</div></div>
+  <div class="toc-item"><div class="toc-num">02</div><div><div class="toc-title">The two big ideas</div><div class="toc-desc">The design choices that make everything else simple</div></div><div class="toc-pg">p.4</div></div>
+  <div class="toc-item"><div class="toc-num">03</div><div><div class="toc-title">The journey of a document</div><div class="toc-desc">The whole pipeline on one page</div></div><div class="toc-pg">p.5</div></div>
+  <div class="toc-item"><div class="toc-num">04</div><div><div class="toc-title">Stage by stage</div><div class="toc-desc">Upload · Reading · Verifying · Saving, explained simply</div></div><div class="toc-pg">p.6</div></div>
+  <div class="toc-item"><div class="toc-num">05</div><div><div class="toc-title">Connecting the dots</div><div class="toc-desc">How many documents become one living "deal brief"</div></div><div class="toc-pg">p.9</div></div>
+  <div class="toc-item"><div class="toc-num">06</div><div><div class="toc-title">Putting it to work</div><div class="toc-desc">The AI task board and the ask-anything chat</div></div><div class="toc-pg">p.10</div></div>
+  <div class="toc-item"><div class="toc-num">07</div><div><div class="toc-title">Who sees what</div><div class="toc-desc">How access control protects sensitive folders</div></div><div class="toc-pg">p.11</div></div>
+  <div class="toc-item"><div class="toc-num">08</div><div><div class="toc-title">What it costs to run</div><div class="toc-desc">Real numbers per deal, and the margin story</div></div><div class="toc-pg">p.12</div></div>
+  <div class="toc-item"><div class="toc-num">09</div><div><div class="toc-title">Where everything lives &amp; glossary</div><div class="toc-desc">A map of the code, and a jargon decoder</div></div><div class="toc-pg">p.13</div></div>
+
+  <div class="folio"><span><span class="mark">DealDiligence.ai</span> — Codebase Walkthrough</span><span>02</span></div>
+</section>
+
+<!-- ============== 01 WHAT IT IS ============== -->
+<section class="page">
+  <div class="section-head">
+    <div class="num">01</div>
+    <h2>What DealDiligence.ai is</h2>
+  </div>
+
+  <p class="lead">When companies buy, sell, or merge, lawyers and bankers must read <strong>hundreds of dense contracts</strong> to find the risks hidden inside them. That review — called <em>due diligence</em> — is slow, expensive, and easy to get wrong.</p>
+
+  <div class="card">
+    <p class="mb0">DealDiligence.ai is a secure workspace where a deal team uploads those contracts and an AI assistant — <strong>Claude</strong> — reads every page end-to-end. For each document it produces a clean one-page summary: who the parties are, what the key clauses say, a <strong>risk score out of 10</strong>, and the biggest red flags. It then stitches every document together into a single living summary of the whole deal, answers questions in plain English, and drafts risk memos on request — all while making sure a junior reviewer can only ever see the folders they've been granted.</p>
+  </div>
+
+  <div class="grid-3" style="margin:16px 0;">
+    <div class="card kpi flush"><div class="big">/10</div><div class="cap">Every document gets a risk score, measured against the client's own playbook</div></div>
+    <div class="card kpi flush"><div class="big">2<span class="u">×</span></div><div class="cap">Independent checks catch the AI's mistakes before a human trusts the output</div></div>
+    <div class="card kpi flush"><div class="big">1</div><div class="cap">Living "deal brief" feeds the chat, the task board, and the dashboard</div></div>
+  </div>
+
+  <h3 style="margin-top:18px;">Who uses it</h3>
+  <p>Investment bankers, M&amp;A lawyers, corporate-development teams, private-equity and venture investors, and auditors — anyone who sits on one side of a deal and needs to understand a mountain of paperwork quickly and safely.</p>
+
+  <div class="callout">
+    <span class="lab">The one-line pitch</span>
+    Think of it as a tireless junior analyst that reads every contract overnight, never misses a clause, shows its work with citations, and hands the senior team a ranked list of what to worry about.
+  </div>
+
+  <div class="folio"><span><span class="mark">DealDiligence.ai</span> — Codebase Walkthrough</span><span>03</span></div>
+</section>
+
+<!-- ============== 02 TWO BIG IDEAS ============== -->
+<section class="page">
+  <div class="section-head">
+    <div class="num">02</div>
+    <h2>The two big ideas</h2>
+  </div>
+  <p class="lead">Almost every clever thing in this codebase comes from two simple decisions. Understanding them makes the rest obvious.</p>
+
+  <div class="card" style="border-top:3px solid var(--brass);">
+    <h3>① Everything downstream reads a summary, never the raw PDF</h3>
+    <p class="mb0">A PDF is heavy and expensive for an AI to read. So the system reads each PDF <strong>once</strong>, very carefully, and turns it into a lightweight text summary called a <strong>fact sheet</strong>. After that, every other feature — the chat, the dashboard, the risk memos — reads those tidy fact sheets instead of re-reading the original files. That one choice makes the whole platform fast, cheap, and easy to control.</p>
+  </div>
+
+  <div class="card" style="border-top:3px solid var(--teal);">
+    <h3>② Access control is just "which summaries can you load?"</h3>
+    <p class="mb0">Because everything reads summaries, restricting what a person can see becomes simple: you decide <strong>which fact sheets get handed to the AI</strong> for that person. A junior reviewer limited to the "Financials" folder literally never has the other documents placed in front of the AI on their behalf — so the chat, their dashboard, and their reports can only ever draw on what they're allowed to see.</p>
+  </div>
+
+  <div class="callout teal">
+    <span class="lab">Why this matters for the business</span>
+    These two ideas are why the product is both <strong>cheap to run</strong> (a full deal costs single-digit to low-hundreds of dollars in AI fees) and <strong>safe to sell</strong> to regulated clients (information barriers are enforced by design, not by trust).
+  </div>
+
+  <div class="divider"></div>
+
+  <h3>A note on the AI itself</h3>
+  <p>The platform uses three "sizes" of Claude, matched to the job — the same way you'd assign work to staff of different seniority. This keeps quality high where it counts and costs low everywhere else.</p>
+  <table class="specs">
+    <tr><th>Model</th><th>Think of it as</th><th>Used for</th></tr>
+    <tr><td><span class="tag haiku">Haiku 4.5</span></td><td>Fast junior</td><td>Quick sorting of documents, and the high-volume Q&amp;A chat</td></tr>
+    <tr><td><span class="tag sonnet">Sonnet 4.6</span></td><td>Capable associate</td><td>Double-checking the AI's work, and merging documents together</td></tr>
+    <tr><td><span class="tag opus">Opus 4.7</span></td><td>Senior expert</td><td>The careful first read of each contract, and drafting risk memos</td></tr>
+  </table>
+
+  <div class="folio"><span><span class="mark">DealDiligence.ai</span> — Codebase Walkthrough</span><span>04</span></div>
+</section>
+
+<!-- ============== 03 PIPELINE OVERVIEW ============== -->
+<section class="page">
+  <div class="section-head">
+    <div class="num">03</div>
+    <h2>The journey of a document</h2>
+  </div>
+  <p class="lead" style="margin-bottom:18px;">Here is the entire pipeline on one page. The following sections walk each block in plain English. Gold blocks are the careful reads; teal blocks are AI working in the background.</p>
+
+  <div class="flow">
+    <div class="flow-row">
+      <div class="flow-box"><span class="t">1 · Upload</span><span class="d">File goes straight to secure storage. The app is never tied up waiting.</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box ai"><span class="t">2 · Sort it <span class="tag haiku">Haiku</span></span><span class="d">Reads the first 2 pages to guess the contract type.</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box"><span class="t">3 · Pick the reader</span><span class="d">Short doc → junior AI. Long, dense doc → senior AI.</span></div>
+    </div>
+    <div class="flow-stack">↓</div>
+    <div class="flow-row">
+      <div class="flow-box accent"><span class="t">4 · Read it carefully <span class="tag opus">Opus</span></span><span class="d">Reads the full PDF and produces the fact sheet: parties, clauses, risk score, red flags.</span></div>
+    </div>
+    <div class="flow-stack">↓</div>
+    <div class="flow-row">
+      <div class="flow-box"><span class="t">5a · Quote check <span class="tag code">no&nbsp;AI</span></span><span class="d">Plain code confirms every quote really appears on the page it cites.</span></div>
+      <div class="flow-arrow">+</div>
+      <div class="flow-box ai"><span class="t">5b · Second opinion <span class="tag sonnet">Sonnet</span></span><span class="d">A different AI re-reads and fixes mistakes.</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box accent"><span class="t">6 · Save</span><span class="d">Fact sheet stored; risk score lands on the dashboard.</span></div>
+    </div>
+    <div class="flow-stack">↓</div>
+    <div class="flow-row">
+      <div class="flow-box ai"><span class="t">7 · Connect the dots <span class="tag sonnet">Sonnet</span></span><span class="d">~30s after uploads stop, merges all documents into one "deal brief," matches the same company across files, and flags outliers.</span></div>
+    </div>
+    <div class="flow-stack">↓</div>
+    <div class="flow-row">
+      <div class="flow-box ai"><span class="t">8 · AI risk memos <span class="tag opus">Opus</span></span><span class="d">A task-board card with a prompt → a drafted memo, routed to a specialist to review.</span></div>
+      <div class="flow-arrow">&amp;</div>
+      <div class="flow-box ai"><span class="t">9 · Ask the deal <span class="tag haiku">Haiku</span></span><span class="d">Plain-English chat, answered from the brief, with citations.</span></div>
+    </div>
+  </div>
+
+  <div class="callout" style="margin-top:18px;">
+    <span class="lab">The shape to remember</span>
+    One careful read per document produces a <strong>fact sheet</strong> (artifact #1). All the fact sheets get merged into a <strong>deal brief</strong> (artifact #2). Every feature you can click on is just reading one of those two artifacts.
+  </div>
+
+  <div class="folio"><span><span class="mark">DealDiligence.ai</span> — Codebase Walkthrough</span><span>05</span></div>
+</section>
+
+<!-- ============== 04 STAGE BY STAGE ============== -->
+<section class="page">
+  <div class="section-head">
+    <div class="num">04</div>
+    <h2>Stage by stage</h2>
+  </div>
+
+  <!-- Stage 1 -->
+  <div class="stage">
+    <div class="stage-rail"><div class="stage-badge">1</div><div class="stage-line"></div></div>
+    <div class="stage-body">
+      <h3>Upload — the handshake before any AI</h3>
+      <p>When a user adds a file, the browser uploads it <strong>directly to secure cloud storage</strong> (Amazon S3) using a temporary one-time link. The bytes never pass through our own servers, and the app responds instantly — it doesn't sit and wait for the AI. A background job is kicked off, and the screen simply shows <em>Uploading → Processing → Complete</em> as it progresses.</p>
+      <div class="callout"><span class="lab">Why it's built this way</span>The expensive AI work never blocks the website. A user can upload 50 files and keep working while they process in the background.</div>
+      <p class="mono" style="font-size:8.4pt;color:var(--ink-soft);margin-bottom:2px;">In the code:</p>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;"><span class="path">modules/documents/<span class="fn">documents.service.ts</span></span><span style="font-size:9pt;color:var(--ink-soft);align-self:center;">— <span class="mono">initiateUpload()</span> hands out the upload link; <span class="mono">confirmUpload()</span> starts the background read.</span></div>
+    </div>
+  </div>
+
+  <!-- Stage 2 -->
+  <div class="stage">
+    <div class="stage-rail"><div class="stage-badge">2</div><div class="stage-line"></div></div>
+    <div class="stage-body">
+      <h3>Sort it <span class="tag haiku">Haiku</span></h3>
+      <p>Before the careful read, the fast junior AI skims just the <strong>first two pages</strong> to decide what kind of document this is — a purchase agreement, an NDA, a lease, a financial statement, and so on (nine types in all). The document type is almost always obvious from the cover page, so there's no need to pay to read all 80 pages here.</p>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;"><span class="path">integrations/claude/<span class="fn">classify.ts</span></span></div>
+    </div>
+  </div>
+
+  <!-- Stage 3 -->
+  <div class="stage">
+    <div class="stage-rail"><div class="stage-badge">3</div><div class="stage-line"></div></div>
+    <div class="stage-body">
+      <h3>Pick the right reader — the cost lever</h3>
+      <p>Now the system chooses which "size" of AI does the heavy read, based on length and type. A 3-page NDA goes to the cheap junior; a 200-page credit agreement goes to the senior expert. There's one smart override: term-dense documents like purchase agreements are always bumped up a level, even when short — they're too important to trust to the junior.</p>
+      <div class="callout teal"><span class="lab">This is the dial that controls cost</span>Reading every document with the most expensive AI would work — it would just cost several times more. Matching the model to the job is what keeps a full deal in the tens of dollars.</div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;"><span class="path">integrations/claude/<span class="fn">model-router.ts</span></span><span style="font-size:9pt;color:var(--ink-soft);align-self:center;">— <span class="mono">pickExtractionModel()</span></span></div>
+    </div>
+  </div>
+
+  <div class="folio"><span><span class="mark">DealDiligence.ai</span> — Codebase Walkthrough</span><span>06</span></div>
+</section>
+
+<!-- ============== 04 cont — the careful read ============== -->
+<section class="page">
+  <!-- Stage 4 -->
+  <div class="stage">
+    <div class="stage-rail"><div class="stage-badge">4</div><div class="stage-line"></div></div>
+    <div class="stage-body">
+      <h3>The careful read <span class="tag opus">Opus</span></h3>
+      <p>This is the heart of the product. The chosen AI reads the <strong>entire PDF</strong> and returns a structured <strong>fact sheet</strong>: an executive summary, the parties involved, the important clauses (organised by a legal-industry standard called CUAD), a <strong>risk score out of 10</strong>, the top risks, key dates and dollar amounts, and the relationships between them.</p>
+      <p>Two refinements make the result better and cheaper:</p>
+      <ul class="clean">
+        <li><strong>The client's playbook is included.</strong> If a client has told us their preferred positions and red flags, the risk score measures how far this contract <em>deviates from what they consider acceptable</em> — not just generic risk.</li>
+        <li><strong>The instructions are "cached."</strong> The lengthy rulebook the AI follows is the same every time, so the system stores it and reuses it at a 90% discount on repeat reads.</li>
+      </ul>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;"><span class="path">integrations/claude/<span class="fn">extract.ts</span></span><span class="path">.../prompts/extraction/</span></div>
+    </div>
+  </div>
+
+  <!-- Stage 5 -->
+  <div class="stage">
+    <div class="stage-rail"><div class="stage-badge">5</div><div class="stage-line"></div></div>
+    <div class="stage-body">
+      <h3>The two safety nets — the defining feature</h3>
+      <p>An AI that reads contracts is only useful if you can <strong>trust</strong> what it says. So before any result is shown, it passes two independent checks:</p>
+
+      <div class="grid-2" style="margin:10px 0;">
+        <div class="card flush" style="border-left:3px solid var(--ink);">
+          <h4 style="margin-bottom:5px;">Net 1 · The quote checker <span class="tag code">no AI</span></h4>
+          <p class="mb0" style="font-size:9.4pt;">Plain, deterministic code pulls the real text out of the PDF and confirms every quote the AI used <strong>actually appears on the page it claims</strong>. If a quote is on a different page, it's flagged. If a quote doesn't appear anywhere, it's marked a likely fabrication. No AI can talk its way past this — it's pure math.</p>
+        </div>
+        <div class="card flush" style="border-left:3px solid var(--teal);">
+          <h4 style="margin-bottom:5px;">Net 2 · The second opinion <span class="tag sonnet">Sonnet</span></h4>
+          <p class="mb0" style="font-size:9.4pt;">A <strong>different</strong> AI re-reads the original PDF alongside the fact sheet, hunting for made-up quotes, wrong pages, missing clauses, or a risk score that doesn't match the text. Crucially, it can hand back a <strong>corrected version</strong>, which the system saves in place.</p>
+        </div>
+      </div>
+      <div class="callout"><span class="lab">What the client sees</span>Each document ends up marked <strong>Verified</strong>, <strong>Needs review</strong>, or <strong>Failed</strong> — so a human always knows how much to trust it. This "show your work" guarantee is the product's biggest differentiator.</div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;"><span class="path">utils/<span class="fn">citation-validator.ts</span></span><span class="path">integrations/claude/<span class="fn">verify.ts</span></span></div>
+    </div>
+  </div>
+
+  <div class="folio"><span><span class="mark">DealDiligence.ai</span> — Codebase Walkthrough</span><span>07</span></div>
+</section>
+
+<!-- ============== 04 cont — save + the orchestrator ============== -->
+<section class="page">
+  <!-- Stage 6 -->
+  <div class="stage">
+    <div class="stage-rail"><div class="stage-badge">6</div><div class="stage-line"></div></div>
+    <div class="stage-body">
+      <h3>Save the result</h3>
+      <p>The finished fact sheet is written to cloud storage, and the key facts are copied into the database so the rest of the app can sort and filter instantly — the risk score lands on the dashboard, the document type becomes a filter, the parties and dates become searchable. The full write-up stays as the durable, human-readable record.</p>
+      <div class="callout teal"><span class="lab">A quiet money-saver</span>Each file is fingerprinted. If the exact same file is uploaded again unchanged, the system recognises it and <strong>skips the expensive re-read entirely</strong> — re-uploading a file is free.</div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;"><span class="path">services/<span class="fn">extraction.service.ts</span></span><span style="font-size:9pt;color:var(--ink-soft);align-self:center;">— the conductor that runs steps 2–6 in order, with automatic retries if anything fails.</span></div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <h3>A note on reliability</h3>
+  <p>Steps 2 through 6 are wrapped in a single coordinator that handles the messy realities of working with an outside AI service: if a request is rate-limited, it waits and retries; if something fails, it backs off and tries again up to three times before marking the document as failed (which a user can manually retry). And if no AI is configured at all — for a demo or offline development — the whole flow still runs on canned sample data, so the product is always clickable.</p>
+
+  <div class="card" style="background:linear-gradient(150deg,#fbf6ec,#f6efe1);border-color:#e8d2ad;">
+    <h4 style="margin-bottom:6px;">In one sentence</h4>
+    <p class="mb0">A document comes in, gets sorted, gets read by the right-sized AI, gets checked twice, and comes out the other side as a trustworthy one-page summary with a risk score — all in the background, without anyone waiting at a screen.</p>
+  </div>
+
+  <div class="folio"><span><span class="mark">DealDiligence.ai</span> — Codebase Walkthrough</span><span>08</span></div>
+</section>
+
+<!-- ============== 05 RECONCILIATION ============== -->
+<section class="page">
+  <div class="section-head">
+    <div class="num">05</div>
+    <h2>Connecting the dots</h2>
+  </div>
+  <p class="lead">One document is useful. The real value is understanding the <strong>whole deal</strong> — and that means tying every document together.</p>
+
+  <div class="stage">
+    <div class="stage-rail"><div class="stage-badge">7</div><div class="stage-line"></div></div>
+    <div class="stage-body">
+      <h3>The deal brief <span class="tag sonnet">Sonnet</span></h3>
+      <p>About <strong>30 seconds after the last upload finishes</strong>, a background pass reads every fact sheet in the deal and produces a single, living <strong>deal brief</strong>: the parties, the key clauses across all documents, the top five risks for the whole deal, the important dates, and how the documents relate. This brief is the one summary the chat, the task board, and the dashboard all read from.</p>
+      <div class="callout"><span class="lab">Why the 30-second wait</span>If someone bulk-uploads 20 files, the system doesn't rebuild the brief 20 times. It waits until the dust settles and rebuilds <strong>once</strong> — a simple trick that keeps costs down during busy uploads.</div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card flush">
+      <h4 style="margin-bottom:5px;">It also matches duplicates</h4>
+      <p class="mb0" style="font-size:9.4pt;">"Acme Corp" in one file and "Acme Corporation" in another are recognised as the <strong>same company</strong> and merged into one master record — so the deal isn't cluttered with phantom duplicate parties. This also powers a visual relationship map for the team.</p>
+    </div>
+    <div class="card flush">
+      <h4 style="margin-bottom:5px;">And it flags outliers</h4>
+      <p class="mb0" style="font-size:9.4pt;">Once there are at least three comparable documents, the AI can spot when one contract's terms <strong>deviate from its peers</strong> — an unusually long liability cap, an off-market interest rate — and flag it for attention.</p>
+    </div>
+  </div>
+
+  <div class="callout teal" style="margin-top:14px;">
+    <span class="lab">The subtle part: many briefs, not one</span>
+    A junior reviewer restricted to certain folders must not see a brief that summarises documents they're not allowed to view. So the system quietly builds a <strong>separate brief for each distinct access level</strong> in use. Two people with the same folder access share one brief; a restricted reviewer gets their own, built only from their documents. Their chat, dashboard, and reports all draw from that limited brief automatically.
+  </div>
+
+  <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;">
+    <span class="path">services/<span class="fn">reconciliation.service.ts</span></span>
+    <span class="path">services/<span class="fn">deal-brief.service.ts</span></span>
+    <span class="path">utils/<span class="fn">scope-key.ts</span></span>
+  </div>
+  <p style="font-size:8.8pt;color:var(--ink-soft);margin-top:8px;">One more thoughtful touch: the deal team's hand-written notes inside a brief are preserved <em>word-for-word</em> every time the AI regenerates it — human edits are never overwritten.</p>
+
+  <div class="folio"><span><span class="mark">DealDiligence.ai</span> — Codebase Walkthrough</span><span>09</span></div>
+</section>
+
+<!-- ============== 06 PUT TO WORK ============== -->
+<section class="page">
+  <div class="section-head">
+    <div class="num">06</div>
+    <h2>Putting it to work</h2>
+  </div>
+  <p class="lead">With trustworthy summaries in place, two features turn them into real work product.</p>
+
+  <div class="stage">
+    <div class="stage-rail"><div class="stage-badge">8</div><div class="stage-line"></div></div>
+    <div class="stage-body">
+      <h3>The AI task board <span class="tag opus">Opus</span></h3>
+      <p>The platform has a Kanban board — the familiar columns of cards you drag from <em>To-do</em> to <em>Done</em>. Here, a card can carry an <strong>instruction</strong> ("Assess the change-of-control provisions") and a few <strong>attached documents</strong>. When a team member drags it into progress, the senior AI reads the deal brief plus those documents and <strong>drafts a risk memo</strong>. The card then moves itself into the <em>In Review</em> column, where a specialist checks the AI's work.</p>
+      <div class="callout"><span class="lab">The workflow intent</span>The AI drafts; the human approves. The card literally walks itself from "to-do" to "ready for a specialist" — the AI becomes a member of the team, not a black box.</div>
+      <p style="font-size:8.8pt;color:var(--ink-soft);margin-bottom:3px;">A safety check runs first: if the person isn't allowed to see an attached document's folder, the report is refused — they can't use the AI to peek at restricted files.</p>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;"><span class="path">modules/tasks/<span class="fn">task-ai.service.ts</span></span></div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-rail"><div class="stage-badge">9</div><div class="stage-line"></div></div>
+    <div class="stage-body">
+      <h3>Ask the deal anything <span class="tag haiku">Haiku</span></h3>
+      <p>Inside the data room, anyone on the team can ask questions in plain English — <em>"What's the longest non-compete in these contracts?"</em> The fast junior AI answers from the user's scoped deal brief and returns <strong>citations</strong> (which document, which page) so the answer is checkable. If a person has been granted no folders yet, the chat politely declines rather than guessing — access is enforced even here.</p>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;"><span class="path">modules/chat/<span class="fn">chat.service.ts</span></span></div>
+    </div>
+  </div>
+
+  <div class="card" style="background:linear-gradient(150deg,#eef5f4,#e4efed);border-color:#c4dedb;">
+    <p class="mb0"><strong>The common thread:</strong> notice that both features read the <em>same</em> deal brief and fact sheets — never the raw PDFs. That's the first big idea paying off. Adding a new AI feature means writing a new prompt over the same summaries, not building new plumbing.</p>
+  </div>
+
+  <div class="folio"><span><span class="mark">DealDiligence.ai</span> — Codebase Walkthrough</span><span>10</span></div>
+</section>
+
+<!-- ============== 07 ACCESS ============== -->
+<section class="page">
+  <div class="section-head">
+    <div class="num">07</div>
+    <h2>Who sees what</h2>
+  </div>
+  <p class="lead">M&amp;A deals are full of information barriers — a junior analyst or an outside party may only be cleared for part of the data room. The platform enforces this everywhere, from one central rulebook.</p>
+
+  <div class="card">
+    <h3 style="margin-bottom:8px;">The seniority ladder</h3>
+    <p>Every member of a deal has a role. Owners and admins see everything. More junior members get an explicit list of folders they're allowed into — and granting a folder automatically grants everything inside it.</p>
+    <table class="specs">
+      <tr><th>Role</th><th>What they can see</th></tr>
+      <tr><td><strong>Owner / Admin</strong></td><td>The entire deal — full access by default</td></tr>
+      <tr><td><strong>Member / Viewer</strong></td><td>Only their granted folders (and any sub-folders inside them)</td></tr>
+      <tr><td><strong>Super Admin / Company Admin</strong></td><td>Oversight across their organisation's deals</td></tr>
+    </table>
+  </div>
+
+  <div class="callout"><span class="lab">The single chokepoint</span>One function answers the question "what is this person allowed to see?" and <strong>every feature</strong> — documents, dashboard, chat, AI reports — asks it before doing anything. Access rules live in one place, not scattered across the app, which is exactly what an auditor wants to hear.</div>
+
+  <div class="grid-2" style="margin-top:6px;">
+    <div class="card flush">
+      <h4 style="margin-bottom:5px;">Enforced at every door</h4>
+      <ul class="clean mb0" style="font-size:9.3pt;">
+        <li>Document lists hide what you can't open</li>
+        <li>The dashboard only totals your folders</li>
+        <li>Chat retrieval is filtered to your scope</li>
+        <li>AI reports refuse out-of-scope attachments</li>
+      </ul>
+    </div>
+    <div class="card flush">
+      <h4 style="margin-bottom:5px;">Where it lives</h4>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <span class="path">services/<span class="fn">scope.service.ts</span></span>
+        <span class="path">middleware/<span class="fn">permissions.ts</span></span>
+        <span class="path">utils/<span class="fn">scope-key.ts</span></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout teal" style="margin-top:8px;"><span class="lab">Tying it back</span>Remember big idea #2: because access is "which summaries get loaded," these rules are a simple filter on a list — not a fragile maze of special cases. That's why the security story is strong enough to take to a regulated buyer.</div>
+
+  <div class="folio"><span><span class="mark">DealDiligence.ai</span> — Codebase Walkthrough</span><span>11</span></div>
+</section>
+
+<!-- ============== 08 COST ============== -->
+<section class="page">
+  <div class="section-head">
+    <div class="num">08</div>
+    <h2>What it costs to run</h2>
+  </div>
+  <p class="lead">Because the design reads each PDF only once and reuses cheap summaries everywhere else, the AI cost of a deal is remarkably low.</p>
+
+  <table class="specs" style="margin-bottom:6px;">
+    <tr><th>Deal size</th><th>Documents</th><th class="r">AI cost / deal</th></tr>
+    <tr><td><strong>Small</strong></td><td>10 documents</td><td class="r">≈ $8</td></tr>
+    <tr><td><strong>Mid-size</strong></td><td>25 documents</td><td class="r">≈ $32</td></tr>
+    <tr><td><strong>Large</strong></td><td>80 documents</td><td class="r">≈ $150</td></tr>
+    <tr><td><strong>Jumbo</strong></td><td>200 documents</td><td class="r">≈ $433</td></tr>
+  </table>
+  <p style="font-size:8.6pt;color:var(--ink-soft);">AI usage fees only. The careful first read is the main cost; chat is effectively free at about half a cent per message.</p>
+
+  <div class="divider"></div>
+
+  <h3>The margin story</h3>
+  <p>At a representative price of <strong>$500 per user per month</strong>, a five-person team running three mid-size deals a month produces healthy economics:</p>
+
+  <div class="grid-3" style="margin:14px 0;">
+    <div class="card kpi flush"><div class="big">$2,500</div><div class="cap">Monthly revenue (5 seats)</div></div>
+    <div class="card kpi flush"><div class="big">~$500</div><div class="cap">AI + infrastructure cost</div></div>
+    <div class="card kpi flush" style="border:1px solid var(--brass);background:linear-gradient(150deg,#fbf6ec,#f7ead2);"><div class="big">~80<span class="u">%</span></div><div class="cap">Gross margin</div></div>
+  </div>
+
+  <div class="callout"><span class="lab">Cost is a dial, not a worry</span>Several levers can cut costs further if ever needed — downgrading the heaviest read to the mid-tier AI saves roughly 5× on the biggest line item, batch processing offers ~50% off, and skipping the merge step for tiny deals. None are needed today; they're headroom.</div>
+
+  <p style="font-size:8.8pt;color:var(--ink-soft);">Full breakdown, token math, and infrastructure figures live in <span class="path" style="font-size:7.8pt;">COST_ANALYSIS.md</span> at the project root.</p>
+
+  <div class="folio"><span><span class="mark">DealDiligence.ai</span> — Codebase Walkthrough</span><span>12</span></div>
+</section>
+
+<!-- ============== 09 MAP + GLOSSARY ============== -->
+<section class="page">
+  <div class="section-head">
+    <div class="num">09</div>
+    <h2>Where everything lives</h2>
+  </div>
+  <p class="lead" style="margin-bottom:16px;">A quick map for the engineer taking this over. Everything is one Node/TypeScript backend — no separate AI service, no extra databases.</p>
+
+  <table class="specs" style="margin-bottom:18px;">
+    <tr><th>What it does</th><th>File</th></tr>
+    <tr><td>Upload handshake</td><td><span class="path">modules/documents/<span class="fn">documents.service.ts</span></span></td></tr>
+    <tr><td>The read pipeline (conductor)</td><td><span class="path">services/<span class="fn">extraction.service.ts</span></span></td></tr>
+    <tr><td>Sort · route · read · verify</td><td><span class="path">integrations/claude/</span> <span class="mono" style="font-size:8pt;color:var(--ink-soft);">classify · model-router · extract · verify</span></td></tr>
+    <tr><td>The quote checker (no AI)</td><td><span class="path">utils/<span class="fn">citation-validator.ts</span></span></td></tr>
+    <tr><td>Merge documents + flag outliers</td><td><span class="path">services/<span class="fn">reconciliation.service.ts</span></span></td></tr>
+    <tr><td>The living deal brief</td><td><span class="path">services/<span class="fn">deal-brief.service.ts</span></span></td></tr>
+    <tr><td>AI task-board memos</td><td><span class="path">modules/tasks/<span class="fn">task-ai.service.ts</span></span></td></tr>
+    <tr><td>Ask-the-deal chat</td><td><span class="path">modules/chat/<span class="fn">chat.service.ts</span></span></td></tr>
+    <tr><td>Who-sees-what rules</td><td><span class="path">services/<span class="fn">scope.service.ts</span></span></td></tr>
+    <tr><td>The database shape</td><td><span class="path">prisma/<span class="fn">schema.prisma</span></span></td></tr>
+  </table>
+
+  <h3 style="margin-bottom:10px;">Jargon decoder</h3>
+  <div class="grid-2" style="gap:6px 26px;">
+    <dl class="glo"><dt>Fact sheet</dt><dd>The one-page AI summary of a single document. Artifact #1.</dd></dl>
+    <dl class="glo"><dt>Deal brief</dt><dd>One living summary of the whole deal, built from all fact sheets. Artifact #2.</dd></dl>
+    <dl class="glo"><dt>Claude</dt><dd>The AI model the platform runs on, in three sizes (Haiku, Sonnet, Opus).</dd></dl>
+    <dl class="glo"><dt>S3</dt><dd>Amazon's secure cloud file storage, where PDFs and summaries are kept.</dd></dl>
+    <dl class="glo"><dt>CUAD</dt><dd>A legal-industry standard list of contract clause types, used so extraction is consistent.</dd></dl>
+    <dl class="glo"><dt>Playbook</dt><dd>A client's own preferred positions and red flags; risk is scored against it.</dd></dl>
+    <dl class="glo"><dt>Prompt caching</dt><dd>Reusing the AI's unchanging instructions at a 90% discount.</dd></dl>
+    <dl class="glo"><dt>Scope</dt><dd>The set of folders a person is allowed to see; everything filters by it.</dd></dl>
+  </div>
+
+  <div class="card" style="margin-top:14px;background:linear-gradient(150deg,#182a47,#101b2e);border:none;color:#e9e2d2;">
+    <p class="mb0" style="color:#cdd6e3;font-size:9.6pt;">Every claim in this document was checked directly against the source code. Two further docs at the project root go deeper for engineers: <span class="path" style="font-size:7.8pt;background:#0c1626;">ARCHITECTURE.md</span> and <span class="path" style="font-size:7.8pt;background:#0c1626;">COST_ANALYSIS.md</span>.</p>
+  </div>
+
+  <div class="folio"><span><span class="mark">DealDiligence.ai</span> — Codebase Walkthrough</span><span>13</span></div>
+</section>
+
+</body>
+</html>

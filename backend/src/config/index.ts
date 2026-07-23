@@ -35,6 +35,25 @@ export const config = {
     expiryDays: parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10),
   },
 
+  // Knowledge library (hierarchical diligence ToC built on ingest). Ships dark:
+  // set LIBRARY_ENABLED=true to seed the checklist tree on project create and
+  // file evidence nodes during extraction (Stage 7).
+  library: {
+    enabled: process.env.LIBRARY_ENABLED === 'true',
+  },
+
+  // Provision embeddings for semantic ranking within the ToC slice (Phase B).
+  // With no provider configured, a deterministic mock embedder runs so the
+  // ranking path works in dev. Set a provider + key for real (Voyage / OpenAI /
+  // Isaacus-compatible) embeddings.
+  embeddings: {
+    provider: process.env.EMBEDDINGS_PROVIDER || '', // '' = mock; 'voyage' | 'openai' | 'isaacus'
+    apiKey: process.env.EMBEDDINGS_API_KEY || '',
+    model: process.env.EMBEDDINGS_MODEL || 'voyage-law-2',
+    baseUrl: process.env.EMBEDDINGS_BASE_URL || 'https://api.voyageai.com/v1/embeddings',
+    mockDim: parseInt(process.env.EMBEDDINGS_MOCK_DIM || '256', 10),
+  },
+
   claude: {
     provider: claudeProvider,
     anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',

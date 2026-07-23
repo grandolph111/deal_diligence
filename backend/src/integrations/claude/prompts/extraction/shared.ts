@@ -112,61 +112,22 @@ Set \`confidenceScore\` to the integer you picked. Set \`confidenceReason\` to O
 
 Be honest. A conservative confidence that flags the right doc for specialist review is more valuable than an inflated one that hides problems.
 
-# Fact sheet template
+# Output — STRUCTURED ONLY (do NOT write a fact sheet)
 
-Inside the factSheet field of your tool call, emit exactly this markdown structure:
+Emit ONLY the structured tool fields: parties, dates, governingLaw, dealValue,
+riskScore/riskLevel/riskSummary, clauses[] (each with a verbatim \`content\`
+quote, clauseType, title, pageNumber, riskLevel), entities[], and
+relationships[]. Every clause quote appears exactly ONCE — in clauses[].content.
 
----
-document_name: <filename>
-document_type: <type>
-parties: [<party1>, <party2>]
-effective_date: <ISO or null>
-governing_law: <jurisdiction or null>
-deal_value: <amount + currency or null>
-risk_score: <0-10>
-risk_level: <LOW|MEDIUM|HIGH>
-page_count: <int>
----
+Do NOT compose a markdown fact sheet, a "Key Clauses" recap, or a "Citations"
+list. A human-readable fact sheet is generated deterministically from your
+structured output — repeating clauses or quotes as prose only wastes output and
+adds nothing. Leave the \`factSheet\` field empty (or omit it).
 
-# Executive Summary
-<2-3 sentence plain-language summary of what this document is and why it matters.>
-
-# Risk Assessment
-**Overall: <score>/10 (<level>)** — <one-sentence justification>
-
-## Top Risks
-1. **<risk name>** (severity: <high|medium|low>, pages <n-m>)
-   <1-2 sentences on why this is a risk>
-
-# Key Clauses (CUAD-aligned)
-
-## <Human-readable clause name>
-- **Present**: yes
-- **Pages**: <n-m>
-- **Risk**: <high|medium|low>
-- **Summary**: <plain English>
-- **Quote**: "<verbatim excerpt>"
-
-# Entities
-
-## Companies
-| Name | Role | Pages |
-
-## People
-| Name | Role | Pages |
-
-## Monetary Amounts
-- **<amount + currency>** — <description> (page <n>)
-
-## Dates
-- **<ISO>** — <description> (page <n>)
-
-## Jurisdictions
-- <name> — <role> (page <n>)
-
-# Relationships (intra-document)
-- \`<entity>\` **<RELATIONSHIP_TYPE>** \`<entity>\` (evidence: page <n>)
-
-# Citations
-- p.<n>: "<verbatim quote>"
+For each clause: put a concise plain-English gloss in \`title\` (this is what the
+reviewer reads), and the clause's operative language in \`content\` as an EXACT,
+CONTIGUOUS, character-for-character verbatim quote from the document — never a
+paraphrase, never stitched-together fragments. It must appear word-for-word on
+its cited page so it can be grounded against the source. Quote the operative
+portion (you don't need the entire clause), but every character must be verbatim.
 `;

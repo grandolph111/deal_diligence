@@ -1,0 +1,539 @@
+/* Deal Map — knowledge-library graph. Custom palette; layered soft shadows. */
+
+.lib-page {
+  display: flex;
+  flex-direction: column;
+  /* .app-content only sets min-height, so a percentage height collapses and the
+     graph canvas would be 0px at init (cose piles nodes). Pin a real height. */
+  height: calc(100vh - var(--header-height) - 2 * var(--space-6));
+  min-height: 560px;
+}
+
+.lib-page-content {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* ---- coverage summary bar ---- */
+
+.lib-coverage-bar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.85rem 1.25rem;
+  margin: 0 0 0.25rem;
+  background: #ffffff;
+  border: 1px solid #e8ecf1;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 20px -12px rgba(15, 23, 42, 0.12);
+}
+
+.lib-coverage-stat {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.lib-coverage-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.lib-coverage-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.lib-coverage-stat.open .lib-coverage-value {
+  color: #475569;
+}
+.lib-coverage-stat.covered .lib-coverage-value {
+  color: #059669;
+}
+.lib-coverage-stat.flagged .lib-coverage-value {
+  color: #e11d48;
+}
+.lib-coverage-stat.thin .lib-coverage-value {
+  color: #d97706;
+}
+
+.lib-coverage-track {
+  flex: 1;
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #eef2f6;
+  min-width: 120px;
+}
+
+.lib-coverage-track .seg {
+  height: 100%;
+}
+.lib-coverage-track .seg.covered {
+  background: #059669;
+}
+.lib-coverage-track .seg.flagged {
+  background: #e11d48;
+}
+.lib-coverage-track .seg.thin {
+  background: #d97706;
+}
+.lib-coverage-track .seg.open {
+  background: #cbd5e1;
+}
+
+/* ---- graph surface ---- */
+
+.lib-graph {
+  position: relative;
+  flex: 1;
+  min-height: 420px;
+  background:
+    radial-gradient(1200px 600px at 20% -10%, rgba(15, 118, 110, 0.05), transparent 60%),
+    radial-gradient(900px 500px at 100% 110%, rgba(124, 58, 237, 0.05), transparent 55%),
+    #f8fafc;
+  border: 1px solid #e8ecf1;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.03);
+}
+
+.lib-graph-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.lib-graph-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: #64748b;
+  text-align: center;
+  padding: 2rem;
+}
+
+.lib-graph-hint {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  max-width: 320px;
+}
+
+/* ---- toolbar ---- */
+
+.lib-graph-toolbar {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 4;
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.3rem;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(6px);
+  border: 1px solid #e8ecf1;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px -6px rgba(15, 23, 42, 0.18);
+}
+
+.lib-graph-toolbar .button.icon-only {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+/* ---- legend ---- */
+
+.lib-graph-legend {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.7rem 0.85rem;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+  border: 1px solid #e8ecf1;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px -6px rgba(15, 23, 42, 0.18);
+  font-size: 0.72rem;
+  color: #475569;
+}
+
+.lib-legend-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.lib-legend-title {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.62rem;
+  color: #94a3b8;
+  width: 100%;
+}
+
+.lib-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.lib-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.lib-legend-dot.square {
+  border-radius: 3px;
+}
+.lib-legend-dot.diamond {
+  border-radius: 2px;
+  transform: rotate(45deg);
+  width: 9px;
+  height: 9px;
+}
+
+/* ---- detail panel ---- */
+
+.lib-detail {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 5;
+  width: 300px;
+  max-width: calc(100% - 1.5rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 1rem 1.1rem 1.15rem;
+  background: #ffffff;
+  border: 1px solid #e8ecf1;
+  border-radius: 14px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05), 0 24px 48px -20px rgba(15, 23, 42, 0.28);
+  animation: lib-detail-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes lib-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lib-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lib-detail-type {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #0f766e;
+}
+
+.lib-detail-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.lib-detail-close:hover {
+  background: #f1f5f9;
+  color: #334155;
+}
+.lib-detail-close:focus-visible {
+  outline: 2px solid #0f766e;
+  outline-offset: 2px;
+}
+
+.lib-detail-title {
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  margin: 0;
+  color: #0f172a;
+}
+
+.lib-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.lib-detail-key {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.lib-detail-val {
+  font-size: 0.82rem;
+  font-weight: 550;
+  color: #1e293b;
+}
+
+.lib-status-pill {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #ffffff;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+
+.lib-detail-hint {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: #94a3b8;
+  margin: 0.15rem 0 0;
+}
+
+.lib-detail-error {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #e11d48;
+  margin: 0.4rem 0 0;
+}
+
+.lib-expand-btn {
+  margin-top: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  justify-content: center;
+}
+
+.lib-truncated-note {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.72rem;
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+  border: 1px solid #e8ecf1;
+  border-radius: 999px;
+  box-shadow: 0 4px 14px -6px rgba(15, 23, 42, 0.18);
+  white-space: nowrap;
+}
+
+/* ---- findings (lint) panel ---- */
+
+.lib-findings {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 6;
+  width: 340px;
+  max-width: calc(100% - 1.5rem);
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid #e8ecf1;
+  border-radius: 14px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05), 0 24px 48px -20px rgba(15, 23, 42, 0.28);
+  animation: lib-detail-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+}
+
+.lib-findings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem 0.6rem;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.lib-findings-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #0f172a;
+}
+
+.lib-findings-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.lib-findings-header-actions .button.icon-only {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.lib-findings-sub {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  padding: 0.5rem 1rem 0;
+  margin: 0;
+}
+
+.lib-findings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.6rem 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lib-findings-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  height: 100%;
+  text-align: center;
+  color: #64748b;
+  padding: 1.5rem;
+  font-size: 0.85rem;
+}
+
+.lib-finding {
+  border: 1px solid #eef2f6;
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  background: #fbfdff;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.lib-finding.clickable {
+  cursor: pointer;
+}
+.lib-finding.clickable:hover {
+  border-color: #0f766e;
+  box-shadow: 0 6px 16px -10px rgba(15, 118, 110, 0.4);
+  transform: translateY(-1px);
+}
+.lib-finding.clickable:focus-visible {
+  outline: 2px solid #0f766e;
+  outline-offset: 2px;
+}
+
+.lib-finding-top {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+
+.lib-finding-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #ffffff;
+  padding: 0.1rem 0.4rem;
+  border-radius: 5px;
+}
+
+.lib-finding-sev {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.lib-finding-sev.sev-high {
+  color: #e11d48;
+}
+.lib-finding-sev.sev-medium {
+  color: #d97706;
+}
+.lib-finding-sev.sev-low {
+  color: #64748b;
+}
+
+.lib-finding-arrow {
+  margin-left: auto;
+  color: #94a3b8;
+}
+
+.lib-finding-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #0f172a;
+  margin: 0 0 0.2rem;
+}
+
+.lib-finding-detail {
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: #475569;
+  margin: 0;
+}
+
+.lib-finding-action {
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: #0f766e;
+  margin: 0.35rem 0 0;
+}
+
+.spin {
+  animation: lib-spin 0.8s linear infinite;
+}
+@keyframes lib-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .lib-coverage-bar {
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .lib-detail {
+    width: calc(100% - 1.5rem);
+  }
+  .lib-findings {
+    width: calc(100% - 1.5rem);
+  }
+}

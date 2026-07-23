@@ -64,3 +64,5 @@ export const stuffRetriever: Retriever = {
     return results.filter((r): r is DocRef => r !== null);
   },
 };
+
+export { libraryTocRetriever } from './libraryTocRetriever';

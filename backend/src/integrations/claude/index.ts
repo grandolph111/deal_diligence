@@ -6,6 +6,11 @@ export { generateDealBrief } from './deal-brief';
 export { detectAnomalies } from './anomaly';
 export { generateRiskReport, type AttachedDoc } from './riskReport';
 export { runChat, type ChatTurn } from './chat';
+export { routeLibraryItems, type RouteItem } from './route';
+export { rerankProvisions, type RerankCandidate } from './rerank';
+export { adjudicateFlags, type AdjudicationInput } from './adjudicate';
+export { usageMeter } from './usage-meter';
+export { analyzeLibraryGaps } from './lint';
 export { reconcileGraph } from './reconcile';
 export {
   pickExtractionModel,
@@ -21,6 +26,10 @@ export {
   reconciliationResponseSchema,
   anomalyResponseSchema,
   briefResponseSchema,
+  lintResponseSchema,
+  LINT_FINDING_TYPES,
+  type LintResponse,
+  type LintFindingType,
   playbookSchema,
   emptyPlaybook,
   DOCUMENT_TYPES,

@@ -3,6 +3,7 @@ import { config, isClaudeConfigured } from './config';
 import { prisma } from './config/database';
 import { s3Service } from './services/s3.service';
 import { boardsService } from './services/boards.service';
+import { extractionQueue } from './services/extraction-queue.service';
 
 const startServer = async () => {
   try {
@@ -44,6 +45,9 @@ const startServer = async () => {
       console.log('⚠ Claude not configured — extraction will run in MOCK mode.');
       console.log('  Set ANTHROPIC_API_KEY for dev, or CLAUDE_PROVIDER=bedrock for prod.');
     }
+
+    // Start the durable, priority-ordered extraction queue worker.
+    extractionQueue.startWorker();
 
     app.listen(config.port, () => {
       console.log('');

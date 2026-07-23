@@ -11,6 +11,8 @@ import { prisma } from '../../config/database';
 import { config, isClaudeConfigured } from '../../config';
 import { s3Service } from '../../services/s3.service';
 import { dealBriefService } from '../../services/deal-brief.service';
+import { resolveProjectScope } from '../../services/scope.service';
+import { libraryTocRetriever } from '../../integrations/retrieval';
 import {
   generateRiskReport,
   type AttachedDoc,
@@ -193,6 +195,27 @@ export const taskAiService = {
         taskId,
         `fact sheets loaded=${factSheets.length} skipped=${skipped} total=${totalFactSheetChars}ch`
       );
+
+      // No docs attached + library enabled → navigate the diligence ToC for the
+      // evidence relevant to this task's prompt (scoped), instead of relying on
+      // the brief alone. AttachedDoc and the retriever's DocRef share a shape.
+      if (task.attachments.length === 0 && config.library.enabled && task.aiPrompt) {
+        const user = await prisma.user.findUnique({
+          where: { id: membership.userId },
+          select: { id: true, platformRole: true, companyId: true },
+        });
+        if (user) {
+          const scope = await resolveProjectScope(user, task.projectId);
+          if (scope.isFullAccess || scope.allowedFolderIds.length > 0) {
+            const retrieved = await libraryTocRetriever.search(task.aiPrompt, {
+              projectId: task.projectId,
+              folderIds: scope.isFullAccess ? undefined : scope.allowedFolderIds,
+            });
+            factSheets.push(...retrieved);
+            log(taskId, `ToC retrieval added ${retrieved.length} evidence block(s)`);
+          }
+        }
+      }
 
       // Load the scope-filtered deal brief — primary context.
       const brief = await dealBriefService.loadBriefForMember(membership);

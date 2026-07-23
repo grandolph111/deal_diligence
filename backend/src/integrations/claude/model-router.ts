@@ -21,7 +21,18 @@ export type ModelTier = 'small' | 'medium' | 'large';
 export interface RouterInput {
   pageCount?: number | null;
   documentType?: DocumentType;
+  /** Triage tier — sets a floor on model fidelity (P0 → large, P1 → medium). */
+  priority?: 'P0' | 'P1' | 'P2' | 'P3';
 }
+
+const TIER_RANK: Record<ModelTier, number> = { small: 0, medium: 1, large: 2 };
+const RANK_TIER: ModelTier[] = ['small', 'medium', 'large'];
+const maxTier = (a: ModelTier, b: ModelTier): ModelTier =>
+  RANK_TIER[Math.max(TIER_RANK[a], TIER_RANK[b])];
+
+/** Minimum tier a priority tier is willing to be read at. */
+const priorityFloor = (priority?: string): ModelTier =>
+  priority === 'P0' ? 'large' : priority === 'P1' ? 'medium' : 'small';
 
 export interface RouterDecision {
   model: string;
@@ -78,26 +89,28 @@ export const pickExtractionModel = (input: RouterInput): RouterDecision => {
 
   // 2. No page count (e.g. .docx, text) → default to medium.
   const pageCount = input.pageCount;
+  const floor = priorityFloor(input.priority);
+
   if (pageCount == null || pageCount <= 0) {
-    const tier: ModelTier = 'medium';
+    const tier = maxTier('medium', floor);
     return {
       model: resolveModelId(tier),
       tier,
-      reason: 'no page count; default medium',
+      reason: `no page count; default medium${input.priority ? `, priority ${input.priority} floor ${floor}` : ''} → ${tier}`,
     };
   }
 
-  // 3. Route by page count + document-type adjustment.
+  // 3. Route by page count + document-type adjustment, then lift to the priority floor.
   const { small, medium } = config.claude.extractionThresholds;
   const baseTier = pickBase(pageCount, small, medium);
   const adjusted = applyTypeAdjustment(baseTier, input.documentType);
-  const tier = adjusted.tier;
-  const reason = adjusted.bumped
-    ? `pages=${pageCount}, type=${input.documentType} → bumped ${baseTier}→${tier}`
-    : `pages=${pageCount} → ${tier}`;
+  const tier = maxTier(adjusted.tier, floor);
+  const pieces = [`pages=${pageCount}→${adjusted.tier}`];
+  if (adjusted.bumped) pieces.push(`type=${input.documentType} bumped`);
+  if (TIER_RANK[floor] > TIER_RANK[adjusted.tier]) pieces.push(`priority ${input.priority} floor ${floor}`);
   return {
     model: resolveModelId(tier),
     tier,
-    reason,
+    reason: `${pieces.join(', ')} → ${tier}`,
   };
 };

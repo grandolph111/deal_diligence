@@ -13,6 +13,7 @@ import {
   VDRPage,
   EntitiesPage,
   GraphExplorerPage,
+  LibraryGraphPage,
   DealBriefPage,
   BoardsIndexPage,
   AdminCompaniesPage,
@@ -134,6 +135,10 @@ export const router = createBrowserRouter([
           {
             path: 'graph',
             element: <GraphExplorerPage />,
+          },
+          {
+            path: 'map',
+            element: <LibraryGraphPage />,
           },
           {
             path: 'members',

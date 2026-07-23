@@ -117,6 +117,11 @@ export function DocumentViewer({
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // pdf.js only renders PDFs. Word docs (.docx) are rendered to HTML client-side
+  // via mammoth; other types (.xlsx/…) fall back to a "download to view" card
+  // instead of a misleading PDF error. Extraction/analysis is unaffected.
+  const [previewUnsupported, setPreviewUnsupported] = useState(false);
+  const [docxHtml, setDocxHtml] = useState<string | null>(null);
 
   // Zoom state
   const [zoom, setZoom] = useState<ZoomLevel>(1);
@@ -187,12 +192,57 @@ export function DocumentViewer({
       return;
     }
 
+    // Route by file type: PDF → pdf.js, Word → mammoth (docx→HTML), else → download card.
+    const mime = (currentDocument.mimeType ?? '').toLowerCase();
+    const isPdf = mime.includes('pdf') || /\.pdf(\?|$)/i.test(pdfUrl);
+    const isWord =
+      mime.includes('wordprocessingml') || mime.includes('msword') || /\.docx?(\?|$)/i.test(pdfUrl);
+
+    // Word documents: fetch bytes and render to HTML in the browser.
+    if (!isPdf && isWord) {
+      let cancelledDocx = false;
+      (async () => {
+        try {
+          setLoading(true);
+          setError(null);
+          setPreviewUnsupported(false);
+          setDocxHtml(null);
+          const resp = await fetch(pdfUrl as string);
+          if (!resp.ok) throw new Error(`fetch ${resp.status}`);
+          const buf = await resp.arrayBuffer();
+          const mammoth = await import('mammoth');
+          const result = await mammoth.convertToHtml({ arrayBuffer: buf });
+          if (cancelledDocx) return;
+          setDocxHtml(result.value || '<p>(empty document)</p>');
+        } catch {
+          if (cancelledDocx) return;
+          // Rendering failed — offer the download card rather than a hard error.
+          setPreviewUnsupported(true);
+        } finally {
+          if (!cancelledDocx) setLoading(false);
+        }
+      })();
+      return () => {
+        cancelledDocx = true;
+      };
+    }
+
+    // Any other non-PDF type: graceful download fallback.
+    if (!isPdf) {
+      setLoading(false);
+      setError(null);
+      setPreviewUnsupported(true);
+      return;
+    }
+
     let cancelled = false;
 
     async function loadPdf() {
       try {
         setLoading(true);
         setError(null);
+        setPreviewUnsupported(false);
+        setDocxHtml(null);
 
         const loadingTask = pdfjsLib.getDocument(pdfUrl as string);
         const pdf = await loadingTask.promise;
@@ -836,10 +886,33 @@ export function DocumentViewer({
               </div>
             )}
 
+            {previewUnsupported && !loading && (
+              <div className="document-viewer-error">
+                <FileText size={48} />
+                <h3>Inline preview not available</h3>
+                <p>
+                  {(currentDocument.mimeType || 'This file type')} can&rsquo;t be previewed here.
+                  The extracted analysis — clauses, entities, and risk — is in the panel on the right.
+                </p>
+                {pdfUrl && (
+                  <a className="btn-secondary" href={pdfUrl} target="_blank" rel="noreferrer" download={currentDocument.name}>
+                    Download to view
+                  </a>
+                )}
+              </div>
+            )}
+
             {!loading && !error && pdfDoc && (
               <div className="pdf-page-wrapper">
                 <canvas ref={canvasRef} className="pdf-canvas" />
                 <div ref={textLayerRef} className="pdf-text-layer" />
+              </div>
+            )}
+
+            {docxHtml && !loading && (
+              <div className="docx-preview-page">
+                {/* mammoth output is docx-derived HTML (no scripts) */}
+                <div className="docx-preview-body" dangerouslySetInnerHTML={{ __html: docxHtml }} />
               </div>
             )}
           </div>

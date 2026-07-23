@@ -12,12 +12,12 @@ datasource db {
 // ============================================
 
 model Company {
-  id          String    @id @default(uuid())
+  id          String   @id @default(uuid())
   name        String
   description String?
   playbook    Json?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   users    User[]
   projects Project[]
@@ -46,7 +46,7 @@ model User {
   platformRole PlatformRole @default(MEMBER)
   companyId    String?
   company      Company?     @relation(fields: [companyId], references: [id])
-  devPassword  String?      // prototype only; plaintext demo creds
+  devPassword  String? // prototype only; plaintext demo creds
 
   // Relations
   memberships      ProjectMember[]
@@ -92,6 +92,9 @@ model Project {
   // Deal brief scope manifest: { [scopeKey]: { s3Key, updatedAt } }
   briefManifest Json?
 
+  // Knowledge library index manifest: { index: { s3Key, updatedAt }, ... }
+  libraryManifest Json?
+
   // Relations
   members            ProjectMember[]
   pendingInvitations PendingInvitation[]
@@ -109,6 +112,10 @@ model Project {
 
   // Phase 3 Relations (AI Chat)
   chatConversations ChatConversation[]
+
+  // Knowledge library (checklist ToC + evidence nodes)
+  libraryNodes LibraryNode[]
+  libraryEdges LibraryEdge[]
 }
 
 model ProjectMember {
@@ -144,11 +151,11 @@ model PendingInvitation {
   role        ProjectRole @default(VIEWER)
   permissions Json?
 
-  token       String   @unique @default(uuid())
-  invitedBy   String
-  invitedAt   DateTime @default(now())
-  expiresAt   DateTime
-  acceptedAt  DateTime?
+  token      String    @unique @default(uuid())
+  invitedBy  String
+  invitedAt  DateTime  @default(now())
+  expiresAt  DateTime
+  acceptedAt DateTime?
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
@@ -386,7 +393,7 @@ model Folder {
 }
 
 model Document {
-  id        String @id @default(uuid())
+  id        String  @id @default(uuid())
   projectId String
   folderId  String?
 
@@ -400,6 +407,13 @@ model Document {
   processingStatus DocumentStatus @default(PENDING)
   retryCount       Int?           @default(0)
   lastError        String?
+
+  // Ingestion triage (scale): priority tier decides extraction fidelity + queue order.
+  priority        DocumentPriority @default(P2)
+  priorityReason  String?
+  extractionDepth ExtractionDepth  @default(FULL) // FULL = deep CUAD extraction; STUB = classify + metadata only
+  contentHash     String? // S3 ETag / content hash for de-duplication
+  duplicateOfId   String? // canonical document this is an exact duplicate of (extraction reused)
 
   // Claude extraction output
   extractionS3Key       String? // S3 pointer to fact-sheet markdown
@@ -416,7 +430,7 @@ model Document {
   documentType           String?
   documentTypeConfidence Float?
   pageCount              Int?
-  extractedText          String? @db.Text
+  extractedText          String?   @db.Text
   language               String?
   currency               String?
   region                 String?
@@ -459,6 +473,8 @@ model Document {
   @@index([projectId, documentType])
   @@index([projectId, processingStatus])
   @@index([projectId, riskScore])
+  @@index([processingStatus, priority]) // queue: next job by status + priority
+  @@index([projectId, contentHash]) // de-duplication lookup
 }
 
 enum DocumentStatus {
@@ -466,6 +482,19 @@ enum DocumentStatus {
   PROCESSING
   COMPLETE
   FAILED
+}
+
+// Ingestion priority tier — decides model fidelity, extraction depth, and queue order.
+enum DocumentPriority {
+  P0 // Critical: deal instruments, material agreements w/ CoC, financials, cap table → Opus, full + verify, front of queue
+  P1 // High: other material contracts, exec employment, IP assignments, litigation → Sonnet, full + verify
+  P2 // Standard: routine contracts, standard HR, permits, leases → full extraction
+  P3 // Bulk: invoices, boilerplate, correspondence, duplicates → classify + stub only, deferred
+}
+
+enum ExtractionDepth {
+  FULL
+  STUB
 }
 
 // ============================================
@@ -501,8 +530,8 @@ model DocumentEntity {
   documentId String
 
   // Entity details
-  entityType     String  // COMPANY, PERSON, AMOUNT, DATE, CLAUSE, JURISDICTION, etc.
-  text           String  // Original text as it appears in the document
+  entityType     String // COMPANY, PERSON, AMOUNT, DATE, CLAUSE, JURISDICTION, etc.
+  text           String // Original text as it appears in the document
   normalizedText String? // Cleaned/normalized version of the text
 
   // Position in document
@@ -540,9 +569,9 @@ model MasterEntity {
   projectId String
 
   // Entity details
-  entityType     String // COMPANY, PERSON, etc.
-  canonicalName  String // The primary/canonical name
-  aliases        Json?  // Array of alternative names/spellings
+  entityType    String // COMPANY, PERSON, etc.
+  canonicalName String // The primary/canonical name
+  aliases       Json? // Array of alternative names/spellings
 
   // Additional metadata
   metadata Json? // Type-specific data (e.g., company registration, person role)
@@ -565,15 +594,15 @@ model MasterEntity {
 
 // Relationships between entities for knowledge graph
 model EntityRelationship {
-  id             String @id @default(uuid())
-  sourceEntityId String
-  targetEntityId String
+  id               String @id @default(uuid())
+  sourceEntityId   String
+  targetEntityId   String
   relationshipType String // PARTY_TO, REFERENCES, EMPLOYS, OWNS, etc.
 
   // Evidence
   documentId String? // Document where relationship was found
   confidence Float   @default(1.0)
-  metadata   Json?   // Additional context about the relationship
+  metadata   Json? // Additional context about the relationship
 
   createdAt DateTime @default(now())
 
@@ -596,10 +625,10 @@ model DocumentAnnotation {
   annotationType String // CLAUSE, RISK_FLAG, NOTE, VERIFICATION, etc.
 
   // Content
-  title       String?
-  content     String  @db.Text // The annotated text or note content
-  clauseType  String? // For CLAUSE type: INDEMNIFICATION, TERMINATION, LIABILITY, etc.
-  riskLevel   String? // For RISK_FLAG type: LOW, MEDIUM, HIGH
+  title      String?
+  content    String  @db.Text // The annotated text or note content
+  clauseType String? // For CLAUSE type: INDEMNIFICATION, TERMINATION, LIABILITY, etc.
+  riskLevel  String? // For RISK_FLAG type: LOW, MEDIUM, HIGH
 
   // Position in document
   pageNumber  Int?
@@ -617,10 +646,10 @@ model DocumentAnnotation {
   verificationNote String?
 
   // Rejection (for incorrect AI annotations)
-  isRejected     Boolean @default(false)
-  rejectedById   String?
-  rejectedAt     DateTime?
-  rejectionNote  String?
+  isRejected    Boolean   @default(false)
+  rejectedById  String?
+  rejectedAt    DateTime?
+  rejectionNote String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -648,7 +677,7 @@ model ChatConversation {
   projectId String
 
   // Conversation details
-  title     String?  // Auto-generated or user-set title
+  title       String? // Auto-generated or user-set title
   createdById String
 
   // Timestamps
@@ -697,15 +726,15 @@ enum ChatMessageRole {
 // ============================================
 
 model AuditLog {
-  id         String @id @default(uuid())
-  projectId  String
-  userId     String
+  id        String @id @default(uuid())
+  projectId String
+  userId    String
 
   action       String // upload, download, view, search, chat, delete, etc.
   resourceType String // document, folder, chat, project, etc.
   resourceId   String?
 
-  metadata  Json?   // Additional context (search query, etc.)
+  metadata  Json? // Additional context (search query, etc.)
   ipAddress String?
   userAgent String?
 
@@ -719,4 +748,131 @@ model AuditLog {
   @@index([projectId, createdAt])
   @@index([projectId, action])
   @@index([userId])
+}
+
+// ============================================
+// KNOWLEDGE LIBRARY (hierarchical diligence ToC)
+// ============================================
+
+// A node in the per-project knowledge library. Markdown files in S3 are the
+// durable, LLM-readable artifact; this table mirrors them for fast UI queries,
+// RBAC folder-scoping, and dashboard rollups (same pattern as Document scalars
+// mirroring the fact-sheet markdown).
+//
+// CHECKLIST_ITEM nodes are pre-seeded (one per canonical checklist item) and
+// carry a coverage `status`. Evidence nodes (PROVISION / RISK / OBLIGATION) are
+// created on ingest and file under a checklist item via `itemId`. ENTITY and
+// SOURCE nodes are cross-cutting.
+//
+// sourceDocumentId / masterEntityId are intentionally plain indexed columns (not
+// Prisma relations) so the library ships decoupled from the existing models;
+// reconciliation reconciles orphans on rebuild.
+model LibraryNode {
+  id        String @id @default(uuid())
+  projectId String
+
+  type         LibraryNodeType
+  workstreamId String // Tier-1 slug, e.g. "01-corporate-org"
+  itemId       String // Tier-2 checklist item slug this node lives under / is
+  slug         String // node file basename, unique within a project
+
+  title   String
+  content String? @db.Text // clause quote/summary (PROVISION) — read at query time for Haiku reranking
+  s3Key   String? // pointer to this node's markdown (null for lightweight rows)
+
+  // CHECKLIST_ITEM only
+  status CoverageStatus?
+
+  // Evidence-node detail
+  clauseType String? // CUAD type, for PROVISION nodes
+  riskLevel  String? // LOW | MEDIUM | HIGH
+  confidence Int? // 0-100
+  pageNumber Int?
+
+  // Provenance / mirror pointers (plain columns, see note above)
+  sourceDocumentId String?
+  masterEntityId   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project       Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  outgoingEdges LibraryEdge[]       @relation("EdgeFrom")
+  incomingEdges LibraryEdge[]       @relation("EdgeTo")
+  embedding     ProvisionEmbedding?
+
+  @@unique([projectId, slug])
+  @@index([projectId])
+  @@index([projectId, type])
+  @@index([projectId, workstreamId])
+  @@index([projectId, itemId])
+  @@index([projectId, status])
+  @@index([sourceDocumentId])
+  @@index([masterEntityId])
+}
+
+// A directed edge between two library nodes (evidence→item, →source, →entity,
+// peer links). Mirrors the markdown `links:` front-matter.
+model LibraryEdge {
+  id        String @id @default(uuid())
+  projectId String
+
+  fromNodeId String
+  toNodeId   String
+  edgeType   LibraryEdgeType
+
+  evidenceDocIds Json? // optional supporting document ids
+
+  createdAt DateTime @default(now())
+
+  project  Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fromNode LibraryNode @relation("EdgeFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode   LibraryNode @relation("EdgeTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([fromNodeId, toNodeId, edgeType])
+  @@index([projectId])
+  @@index([fromNodeId])
+  @@index([toNodeId])
+}
+
+enum LibraryNodeType {
+  CHECKLIST_ITEM
+  PROVISION
+  RISK
+  OBLIGATION
+  ENTITY
+  SOURCE
+}
+
+enum CoverageStatus {
+  OPEN
+  COVERED
+  FLAGGED
+  THIN
+  NA
+}
+
+enum LibraryEdgeType {
+  EVIDENCES
+  SOURCED_FROM
+  MENTIONS
+  PEER_OF
+  RELATES_TO
+}
+
+// Semantic embedding of a PROVISION node (Phase B) — enables ranking evidence by
+// query relevance within the ToC-narrowed slice. Vector stored as a JSON float
+// array (in-code cosine over the bounded slice; swap to pgvector for whole-corpus
+// ANN). Cascades with its node.
+model ProvisionEmbedding {
+  id        String   @id @default(uuid())
+  projectId String
+  nodeId    String   @unique
+  model     String
+  vector    Json // number[]
+  createdAt DateTime @default(now())
+
+  node LibraryNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
 }

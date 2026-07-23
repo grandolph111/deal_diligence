@@ -16,6 +16,8 @@ type ExtractInput =
 export interface ExtractOptions {
   documentType: DocumentType;
   playbook?: Playbook | null;
+  /** Firm-wide house playbook markdown, injected (cached) above the deal playbook. */
+  companyPlaybookMarkdown?: string | null;
   /**
    * Override the model chosen by the router. Used for idempotency-hash parity
    * and explicit re-extractions. If omitted, extract.ts uses the provider's
@@ -36,6 +38,7 @@ export const extractDocument = async (
   const systemPrompt = buildExtractionPrompt({
     documentType: options.documentType,
     playbook: options.playbook,
+    companyPlaybookMarkdown: options.companyPlaybookMarkdown,
   });
 
   const preamble = options.correctionHint

@@ -2,9 +2,10 @@ import { prisma } from '../../config/database';
 import { ChatConversation, ChatMessage, ChatMessageRole, ProjectMember, Prisma } from '@prisma/client';
 import { ApiError } from '../../utils/ApiError';
 import { runChat, isMock, getClaudeClient, getModelId } from '../../integrations/claude';
-import { stuffRetriever } from '../../integrations/retrieval';
+import { stuffRetriever, libraryTocRetriever } from '../../integrations/retrieval';
 import { dealBriefService } from '../../services/deal-brief.service';
 import { resolveProjectScope } from '../../services/scope.service';
+import { config } from '../../config';
 
 /**
  * Use Haiku to generate a short (3-6 word) title for a conversation from
@@ -278,18 +279,26 @@ export const chatService = {
       return { userMessage, assistantMessage: assistant, citations: [] };
     }
 
-    // Load the deal brief (primary context). If the user pinned specific
-    // documents, also load those per-doc fact sheets for detail.
+    // Load the deal brief (primary context). For the query-relevant detail:
+    //  - if the user pinned specific docs → those fact sheets (explicit intent);
+    //  - else if the library is enabled → navigate the diligence ToC to pull only
+    //    the evidence relevant to the question (+ a coverage summary of gaps);
+    //  - otherwise → the brief alone.
     const brief = await dealBriefService.loadBriefForMember(membership);
 
-    const pinnedDocs =
-      data.documentIds && data.documentIds.length > 0
-        ? await stuffRetriever.search(data.content, {
-            projectId,
-            documentIds: data.documentIds,
-            folderIds: scope.isFullAccess ? undefined : scope.allowedFolderIds,
-          })
-        : [];
+    const retrievalScope = {
+      projectId,
+      folderIds: scope.isFullAccess ? undefined : scope.allowedFolderIds,
+    };
+    let pinnedDocs = [] as Awaited<ReturnType<typeof stuffRetriever.search>>;
+    if (data.documentIds && data.documentIds.length > 0) {
+      pinnedDocs = await stuffRetriever.search(data.content, {
+        ...retrievalScope,
+        documentIds: data.documentIds,
+      });
+    } else if (config.library.enabled) {
+      pinnedDocs = await libraryTocRetriever.search(data.content, retrievalScope);
+    }
 
     // If Claude isn't configured, return a helpful fallback message.
     if (isMock()) {

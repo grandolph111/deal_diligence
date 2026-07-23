@@ -48,6 +48,7 @@ import {
   documentRelationshipsRouter,
 } from './modules/relationships/relationships.routes';
 import chatRoutes from './modules/chat/chat.routes';
+import { libraryRoutes } from './modules/library/library.routes';
 import mockS3Routes from './routes/mock-s3.routes';
 
 const app = express();
@@ -194,6 +195,7 @@ app.use(
 );
 app.use('/api/v1/projects/:id/clauses', projectClausesRouter);
 app.use('/api/v1/projects/:id/master-entities', masterEntitiesRouter);
+app.use('/api/v1/projects/:id/library', libraryRoutes);
 app.use('/api/v1/projects/:id/relationships', relationshipsRoutes);
 app.use(
   '/api/v1/projects/:id/entities/:entityId/relationships',

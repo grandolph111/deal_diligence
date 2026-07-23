@@ -34,6 +34,26 @@ export const playbookService = {
     return playbook;
   },
 
+  /**
+   * The company-level house playbook (freeform markdown), applied to every deal.
+   * Stored on Company.playbook as `{ content }` and set in company settings.
+   * Layered UNDER the structured project playbook and injected (cached) into the
+   * ingestion prompt so every extraction reflects firm-wide diligence posture.
+   */
+  async getCompanyMarkdown(projectId: string): Promise<string | null> {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { company: { select: { playbook: true } } },
+    });
+    const pb = project?.company?.playbook;
+    if (pb && typeof pb === 'object' && !Array.isArray(pb) && 'content' in pb) {
+      const content = (pb as { content?: unknown }).content;
+      const text = typeof content === 'string' ? content.trim() : '';
+      return text.length > 0 ? text : null;
+    }
+    return null;
+  },
+
   async save(projectId: string, playbook: Playbook): Promise<Playbook> {
     const parsed = playbookSchema.parse(playbook);
     await prisma.project.update({

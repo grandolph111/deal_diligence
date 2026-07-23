@@ -14,6 +14,20 @@ import { documentsService, DocumentUploadResult } from '../documents/documents.s
 import { s3Service } from '../../services/s3.service';
 import { ApiError } from '../../utils/ApiError';
 import { seedDefaultFolders } from '../folders/folders.seed';
+import { libraryWriterService } from '../../services/library-writer.service';
+
+/**
+ * Pre-seed the knowledge-library checklist ToC for a new project (best-effort,
+ * non-blocking). No-op unless LIBRARY_ENABLED is set.
+ */
+async function seedLibraryIfEnabled(projectId: string, projectName: string): Promise<void> {
+  if (!libraryWriterService.isEnabled()) return;
+  try {
+    await libraryWriterService.seedProjectLibrary(projectId, projectName);
+  } catch (error) {
+    console.error('Failed to seed library for project:', projectId, error);
+  }
+}
 
 export const projectsService = {
   /**
@@ -136,6 +150,9 @@ export const projectsService = {
       console.error('Failed to seed default folders for project:', project.id, error);
     }
 
+    // Seed knowledge-library checklist ToC (best-effort; no-op unless enabled)
+    await seedLibraryIfEnabled(project.id, project.name);
+
     return project;
   },
 
@@ -242,6 +259,9 @@ export const projectsService = {
       // Log but don't fail project creation if folder seeding fails
       console.error('Failed to seed default folders for project:', project.id, error);
     }
+
+    // Step 1.6: Seed knowledge-library checklist ToC (no-op unless enabled)
+    await seedLibraryIfEnabled(project.id, project.name);
 
     // Step 2: Process invites (best-effort)
     const membersResult = {

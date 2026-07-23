@@ -7,6 +7,7 @@ import {
   FolderOpen,
   BookOpen,
   Building2,
+  Waypoints,
 } from 'lucide-react';
 import { useAuth } from '../../auth';
 
@@ -120,6 +121,16 @@ export function Sidebar({ projectId }: SidebarProps) {
             >
               <FolderOpen className="icon" size={20} />
               <span>Data Room</span>
+            </NavLink>
+
+            <NavLink
+              to={`/projects/${projectId}/map`}
+              className={({ isActive }) =>
+                `sidebar-link ${isActive ? 'active' : ''}`
+              }
+            >
+              <Waypoints className="icon" size={20} />
+              <span>Deal Map</span>
             </NavLink>
 
             <NavLink

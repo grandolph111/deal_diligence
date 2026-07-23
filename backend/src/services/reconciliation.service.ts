@@ -21,6 +21,9 @@ import {
 import { RateLimitExceededAfterRetryError } from '../integrations/claude/tool-use';
 import { dealBriefService } from './deal-brief.service';
 import { playbookService } from './playbook.service';
+import { libraryWriterService } from './library-writer.service';
+import { statisticalAnomalyService } from './statistical-anomaly.service';
+import { entityBlockingService } from './entity-blocking.service';
 
 const DEBOUNCE_MS = 30_000;
 const pending = new Map<string, NodeJS.Timeout>();
@@ -96,6 +99,28 @@ export const reconciliationService = {
       return { ok: false, reason: 'Project not found', scopesGenerated: 0, scopeErrors: [] };
     }
 
+    // Library reconciliation (Phase 2/C) — deterministic, no LLM. Runs first and
+    // independently of Claude config / fact-sheet availability. When the library
+    // is enabled these scalable passes REPLACE the "stuff every fact sheet into
+    // Claude" entity-merge + anomaly passes below.
+    const libraryEnabled = libraryWriterService.isEnabled();
+    if (libraryEnabled) {
+      try {
+        // Incremental: reconcileLibrary returns false when nothing changed since the
+        // last run, so the anomaly + blocking scans are skipped too (no wasted work).
+        const didWork = await libraryWriterService.reconcileLibrary(projectId, project.name);
+        if (didWork) {
+          // C1: statistical anomaly (SQL over structured fields, not an LLM read).
+          const a = await statisticalAnomalyService.detect(projectId);
+          // C2: deterministic entity blocking (no all-fact-sheet LLM merge).
+          const e = await entityBlockingService.blockEntities(projectId);
+          console.log(`[recon] library scalable pass: ${a.documentsFlagged} anomaly doc(s), ${e.masterEntities} master entities`);
+        }
+      } catch (err) {
+        console.warn('[library] reconcile/analytics failed:', err instanceof Error ? err.message : err);
+      }
+    }
+
     const factSheets = await loadAllFactSheets(projectId);
     console.log(`[brief] rebuild for ${project.name}: ${factSheets.length} fact sheet(s) loaded`);
 
@@ -119,24 +144,28 @@ export const reconciliationService = {
 
     const tooLargeStages: string[] = [];
 
-    if (factSheets.length >= 2) {
+    // Legacy LLM entity-merge + anomaly — only when the library is OFF (they don't
+    // scale). With the library enabled these are handled deterministically above.
+    if (!libraryEnabled) {
+      if (factSheets.length >= 2) {
+        try {
+          await this.mergeEntities(projectId, factSheets);
+        } catch (err) {
+          if (err instanceof RateLimitExceededAfterRetryError) {
+            tooLargeStages.push('mergeEntities');
+          }
+          console.warn('[brief] mergeEntities failed:', err instanceof Error ? err.message : err);
+        }
+      }
+
       try {
-        await this.mergeEntities(projectId, factSheets);
+        await this.detectAndStoreAnomalies(projectId, factSheets);
       } catch (err) {
         if (err instanceof RateLimitExceededAfterRetryError) {
-          tooLargeStages.push('mergeEntities');
+          tooLargeStages.push('detectAndStoreAnomalies');
         }
-        console.warn('[brief] mergeEntities failed:', err instanceof Error ? err.message : err);
+        console.warn('[brief] detectAndStoreAnomalies failed:', err instanceof Error ? err.message : err);
       }
-    }
-
-    try {
-      await this.detectAndStoreAnomalies(projectId, factSheets);
-    } catch (err) {
-      if (err instanceof RateLimitExceededAfterRetryError) {
-        tooLargeStages.push('detectAndStoreAnomalies');
-      }
-      console.warn('[brief] detectAndStoreAnomalies failed:', err instanceof Error ? err.message : err);
     }
 
     const playbook = await playbookService.get(projectId);

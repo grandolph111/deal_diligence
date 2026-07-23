@@ -5,6 +5,9 @@ import { ApiError } from '../../utils/ApiError';
 import { InitiateUploadInput, ListDocumentsQuery } from './documents.validators';
 import { foldersService } from '../folders/folders.service';
 import { extractionService } from '../../services/extraction.service';
+import { extractionQueue } from '../../services/extraction-queue.service';
+import { libraryWriterService } from '../../services/library-writer.service';
+import { triageService } from '../../services/triage.service';
 import { resolveProjectScope } from '../../services/scope.service';
 
 export interface DocumentUploadResult {
@@ -220,11 +223,27 @@ export const documentsService = {
       throw ApiError.badRequest('Document upload already confirmed');
     }
 
-    // Trigger Claude extraction pipeline (async - does not wait for completion)
-    extractionService.triggerExtraction(documentId).catch((error: unknown) => {
-      // eslint-disable-next-line no-console
-      console.error(`Failed to trigger extraction for document ${documentId}:`, error);
-    });
+    // Triage before extraction: assign priority tier + extraction depth + de-dup.
+    // Decides how deeply/expensively this document is read and its queue order.
+    try {
+      const t = await triageService.triage(documentId);
+      await prisma.document.update({
+        where: { id: documentId },
+        data: {
+          priority: t.priority,
+          priorityReason: t.priorityReason,
+          extractionDepth: t.extractionDepth,
+          contentHash: t.contentHash,
+          duplicateOfId: t.duplicateOfId,
+        },
+      });
+    } catch (error) {
+      console.error(`Triage failed for document ${documentId}:`, error);
+    }
+
+    // Enqueue for extraction. The durable, priority-ordered queue claims the doc
+    // by priority (P0 first) and processes it under a concurrency cap.
+    extractionQueue.notify();
 
     // Return the document (still in PENDING status, processing runs async)
     return document;
@@ -282,6 +301,16 @@ export const documentsService = {
     await prisma.document.delete({
       where: { id: documentId },
     });
+
+    // Clean up the document's knowledge-library nodes (no FK cascade — plain
+    // column). Fire-and-forget so delete stays fast; reconcile refreshes status.
+    if (libraryWriterService.isEnabled()) {
+      libraryWriterService
+        .removeDocument(projectId, documentId)
+        .catch((e: unknown) =>
+          console.error('[library] removeDocument failed:', e instanceof Error ? e.message : e)
+        );
+    }
   },
 
   /**

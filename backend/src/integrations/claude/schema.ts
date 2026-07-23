@@ -72,7 +72,9 @@ const jsonArrayPreprocessor = (v: unknown) => {
 const nullToEmptyString = (v: unknown) => (v == null ? '' : v);
 
 export const extractionResponseSchema = z.object({
-  factSheet: z.string().min(1),
+  // Rendered deterministically from the structured fields post-extraction — the
+  // model no longer writes it (see prompts/extraction/shared.ts).
+  factSheet: z.string().default(''),
   documentType: z.string().nullable().optional(),
   riskScore: z.number().int().min(0).max(10),
   riskLevel: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
@@ -242,6 +244,74 @@ export const chatResponseSchema = z.object({
   ),
 });
 export type ChatResponse = z.infer<typeof chatResponseSchema>;
+
+// ============================================================
+// Library ToC routing (Haiku) — pick relevant checklist items for a query
+// ============================================================
+
+export const libraryRouteResponseSchema = z.object({
+  itemIds: z.preprocess(jsonArrayPreprocessor, z.array(z.string()).default([])),
+});
+export type LibraryRouteResponse = z.infer<typeof libraryRouteResponseSchema>;
+
+// Provision reranking (Haiku) — rank candidate clauses by relevance to a query.
+export const rerankResponseSchema = z.object({
+  rankedIds: z.preprocess(jsonArrayPreprocessor, z.array(z.string()).default([])),
+});
+export type RerankResponse = z.infer<typeof rerankResponseSchema>;
+
+// Citation flag adjudication (Haiku) — decide whether each deterministically-
+// flagged quote is genuinely fabricated, a faithful paraphrase, or actually
+// verbatim (a false positive). Restores precision to the free validator.
+export const ADJUDICATION_VERDICTS = ['VERBATIM', 'PARAPHRASE', 'FABRICATED'] as const;
+export const adjudicateResponseSchema = z.object({
+  verdicts: z.preprocess(
+    jsonArrayPreprocessor,
+    z
+      .array(
+        z.object({
+          index: z.number().int(),
+          verdict: z.enum(ADJUDICATION_VERDICTS),
+          actualPage: z.number().int().nullable().optional(),
+          note: z.string().nullable().optional(),
+        })
+      )
+      .default([])
+  ),
+});
+export type AdjudicateResponse = z.infer<typeof adjudicateResponseSchema>;
+
+// ============================================================
+// Library lint / gap-hunting (Sonnet)
+// ============================================================
+
+export const LINT_FINDING_TYPES = [
+  'GAP', // material checklist item with no/insufficient evidence
+  'THIN', // has evidence but likely incomplete
+  'RISK', // flagged item to escalate
+  'INCONSISTENCY', // conflicting evidence across documents
+  'SUGGESTION', // a document to request / next action
+] as const;
+export type LintFindingType = (typeof LINT_FINDING_TYPES)[number];
+
+export const lintResponseSchema = z.object({
+  findings: z.preprocess(
+    jsonArrayPreprocessor,
+    z
+      .array(
+        z.object({
+          type: z.enum(LINT_FINDING_TYPES),
+          severity: z.enum(['LOW', 'MEDIUM', 'HIGH']),
+          itemId: z.string().nullable().optional(), // related checklist item slug
+          title: z.string(),
+          detail: z.string(),
+          suggestedAction: z.string().nullable().optional(),
+        })
+      )
+      .default([])
+  ),
+});
+export type LintResponse = z.infer<typeof lintResponseSchema>;
 
 // ============================================================
 // Reconciliation (Sonnet)

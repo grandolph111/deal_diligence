@@ -17,6 +17,13 @@ const DMP: any =
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (diffMatchPatch as any).diff_match_patch ?? diffMatchPatch;
 const dmp = new DMP();
+// Locate an anchor anywhere in the page (not just near the start) and allow a
+// fuzzy anchor match. match_main/bitap itself is capped at 32 chars — see below.
+dmp.Match_Distance = 1_000_000;
+dmp.Match_Threshold = 0.5;
+
+const ANCHOR_LEN = 28; // must stay < diff-match-patch's 32-bit bitap limit
+const MAX_CMP = 400; // bound the Levenshtein comparison for very long quotes
 
 const normalize = (s: string): string =>
   s
@@ -55,9 +62,13 @@ export const extractPdfPages = async (
 };
 
 /**
- * Fuzzy similarity 0-1 between needle and haystack. Uses diff-match-patch
- * match_main which returns the best match position or -1, plus we measure
- * similarity by Levenshtein distance against the best-matching window.
+ * Fuzzy similarity 0-1 between needle and haystack.
+ *
+ * diff-match-patch's `match_main` (bitap) throws "Pattern too long" for any
+ * pattern over ~32 chars, so we can't hand it a full clause quote. Instead we
+ * locate the quote using a short (≤28-char) ANCHOR, then measure Levenshtein
+ * similarity over the full-length window at that position. This restores the
+ * fuzzy tolerance (OCR/typo/whitespace) the old code silently lost.
  */
 const similarity = (needle: string, haystack: string): number => {
   const n = normalize(needle);
@@ -65,14 +76,23 @@ const similarity = (needle: string, haystack: string): number => {
   if (!n || !h) return 0;
   if (h.includes(n)) return 1;
 
-  // Bound needle length for diff_levenshtein perf
-  const probe = n.length > 200 ? n.slice(0, 200) : n;
-  const position = dmp.match_main(h, probe, 0);
-  if (position === -1) return 0;
+  // Locate with a short anchor (bitap-safe). Try the start first; if the opening
+  // words differ (leading boilerplate), retry with an anchor from the middle.
+  const anchor = n.slice(0, Math.min(ANCHOR_LEN, n.length));
+  let pos = dmp.match_main(h, anchor, 0);
+  if (pos === -1 && n.length > ANCHOR_LEN) {
+    const mid = Math.floor(n.length / 2);
+    const midPos = dmp.match_main(h, n.slice(mid, mid + ANCHOR_LEN), 0);
+    if (midPos !== -1) pos = Math.max(0, midPos - mid);
+  }
+  if (pos === -1) return 0;
 
-  const window = h.slice(position, position + probe.length);
-  const distance = dmp.diff_levenshtein(dmp.diff_main(probe, window));
-  return Math.max(0, 1 - distance / probe.length);
+  // Levenshtein over the full-length window at the located position (bounded).
+  const cmp = n.length > MAX_CMP ? n.slice(0, MAX_CMP) : n;
+  const window = h.slice(pos, pos + cmp.length);
+  if (!window) return 0;
+  const distance = dmp.diff_levenshtein(dmp.diff_main(cmp, window));
+  return Math.max(0, 1 - distance / cmp.length);
 };
 
 const THRESHOLD_FLAG = 0.85; // below this → flag as mismatch

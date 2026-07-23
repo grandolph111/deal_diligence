@@ -20,6 +20,7 @@ import {
   classifyTextSample,
   extractDocument,
   verifyExtraction,
+  adjudicateFlags,
   pickExtractionModel,
   type ExtractionResponse,
   type ClassifyResponse,
@@ -28,7 +29,31 @@ import {
 } from '../integrations/claude';
 import { playbookService } from './playbook.service';
 import { reconciliationService } from './reconciliation.service';
+import { libraryWriterService } from './library-writer.service';
 import { extractPdfPages, validateCitations, type CitationIssue } from '../utils/citation-validator';
+import { renderFactSheet } from '../utils/fact-sheet-renderer';
+
+/**
+ * Adjudicate the low-precision HALLUCINATED_QUOTE flags with Haiku verdicts:
+ * keep only confirmed fabrications; drop faithful paraphrases and false
+ * positives (quotes Haiku found present that the fuzzy matcher missed). The
+ * verdict `index` maps to the position of the flag in the array we sent.
+ *
+ * Only hallucination flags are passed here — WRONG_PAGE flags are already
+ * precise (the validator located the quote verbatim), so they're never sent to
+ * Haiku and never overridden.
+ */
+const keepConfirmedFabrications = (
+  hallucinationFlags: CitationIssue[],
+  verdicts: Array<{ index: number; verdict: string }>
+): CitationIssue[] => {
+  const byIndex = new Map(verdicts.map((v) => [v.index, v]));
+  return hallucinationFlags.filter((_, i) => {
+    const v = byIndex.get(i);
+    if (!v) return true; // no verdict returned — keep the flag (conservative)
+    return v.verdict === 'FABRICATED'; // drop PARAPHRASE + VERBATIM false positives
+  });
+};
 
 /** Read the page count from a PDF without decoding content — fast, local. */
 const readPdfPageCount = async (bytes: Buffer): Promise<number | null> => {
@@ -209,35 +234,52 @@ export const extractionService = {
     return isClaudeConfigured();
   },
 
+  /**
+   * Atomically claim a specific PENDING document (→ PROCESSING). Race-safe: the
+   * `WHERE status='PENDING'` gate means only one caller (queue worker or a direct
+   * trigger) ever wins, so a document is never processed twice.
+   */
+  async claim(documentId: string): Promise<boolean> {
+    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+      UPDATE "Document" SET "processingStatus" = 'PROCESSING', "lastError" = NULL
+      WHERE "id" = ${documentId} AND "processingStatus" = 'PENDING'
+      RETURNING "id"`;
+    return rows.length > 0;
+  },
+
+  /** Direct entry point: claim then process. No-op if already claimed/complete. */
   async triggerExtraction(documentId: string): Promise<void> {
-    const document = await prisma.document.findUnique({
-      where: { id: documentId },
-    });
-    if (!document) throw new Error(`Document not found: ${documentId}`);
+    if (await this.claim(documentId)) await this.process(documentId);
+  },
+
+  /**
+   * Process a document that has already been claimed (status = PROCESSING).
+   * Called by the queue worker (after claimNext) and by triggerExtraction.
+   * Routes dedup → stub → full extraction.
+   */
+  async process(documentId: string): Promise<void> {
+    const document = await prisma.document.findUnique({ where: { id: documentId } });
+    if (!document) return;
+
+    // De-duplication: reuse an already-extracted identical document.
+    if (document.duplicateOfId) {
+      await this.reuseFromCanonical(documentId, document.duplicateOfId);
+      return;
+    }
+
+    // Lazy tier: P3 bulk documents are classified + counted, but full CUAD
+    // extraction is deferred until a query or a diligence gap needs them.
+    if (document.extractionDepth === 'STUB') {
+      await this.runStub(documentId);
+      return;
+    }
 
     const etag = await s3Service.getObjectETag(document.s3Key);
     const modelId = config.claude.models.extraction;
     const hash = buildExtractionHash(etag, modelId);
 
-    if (
-      document.extractionContentHash === hash &&
-      document.processingStatus === 'COMPLETE' &&
-      document.verificationStatus === 'VERIFIED'
-    ) {
-      console.log(`[extraction] ${document.name} → cache hit, skipping`);
-      return;
-    }
-
-    console.log(`[extraction] ${document.name} → starting (model: ${modelId})`);
+    console.log(`[extraction] ${document.name} → starting (priority ${document.priority})`);
     const startedAt = Date.now();
-
-    await prisma.document.update({
-      where: { id: documentId },
-      data: {
-        processingStatus: 'PROCESSING' as DocumentStatus,
-        lastError: null,
-      },
-    });
 
     try {
       const bytes = await s3Service.getObjectBytes(document.s3Key);
@@ -246,11 +288,35 @@ export const extractionService = {
         mimeType: document.mimeType,
         bytes,
         projectId: document.projectId,
+        priority: document.priority,
       });
       await this.persistResult(documentId, pipeline, hash, modelId);
 
       const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
       console.log(`[extraction] ${document.name} → complete in ${seconds}s`);
+
+      // Stage 7 — file into the knowledge library (dark behind LIBRARY_ENABLED).
+      // Best-effort: never fail extraction on a library error.
+      if (libraryWriterService.isEnabled()) {
+        try {
+          const project = await prisma.project.findUnique({
+            where: { id: document.projectId },
+            select: { name: true },
+          });
+          await libraryWriterService.fileDocument({
+            projectId: document.projectId,
+            projectName: project?.name ?? 'Deal',
+            documentId,
+            documentName: document.name,
+            extraction: pipeline.extraction,
+          });
+        } catch (libErr) {
+          console.error(
+            `[library] fileDocument failed for ${document.name}:`,
+            libErr instanceof Error ? libErr.message : libErr
+          );
+        }
+      }
 
       reconciliationService
         .scheduleRebuild(document.projectId)
@@ -270,6 +336,7 @@ export const extractionService = {
     mimeType: string;
     bytes: Buffer;
     projectId: string;
+    priority?: 'P0' | 'P1' | 'P2' | 'P3';
   }): Promise<PipelineResult> {
     // 1. Classify
     const classification = await this.classify(args);
@@ -284,14 +351,18 @@ export const extractionService = {
     const decision = pickExtractionModel({
       pageCount,
       documentType: classification.documentType,
+      priority: args.priority,
     });
     // eslint-disable-next-line no-console
     console.log(
       `[extraction] ${args.filename} → routed to ${decision.model} (${decision.reason})`
     );
 
-    // 4. Load playbook (per project)
-    const playbook = await playbookService.get(args.projectId);
+    // 4. Load playbooks: deal-specific (structured) + firm-wide house (markdown).
+    const [playbook, companyPlaybookMarkdown] = await Promise.all([
+      playbookService.get(args.projectId),
+      playbookService.getCompanyMarkdown(args.projectId),
+    ]);
 
     // 5. Extract
     const extraction = await this.extract({
@@ -300,30 +371,77 @@ export const extractionService = {
       bytes: args.bytes,
       documentType: classification.documentType,
       playbook,
+      companyPlaybookMarkdown,
       modelOverride: decision.model,
     });
 
-    // 4. Citation regex validation (only on PDFs — needs raw text)
-    let citationIssues: CitationIssue[] = [];
+    // Render the human-readable fact sheet deterministically from the structured
+    // fields (the model no longer writes it — saves ~3-4k output tokens/doc). Fall
+    // back to the model's text if an older prompt still produced one.
+    if (!extraction.factSheet || extraction.factSheet.trim().length === 0) {
+      extraction.factSheet = renderFactSheet(extraction, args.filename);
+    }
+
+    // 4. Parse page text ONCE — reused by the validator, the adjudicator, and the
+    //    verify pass, so the source document is never read (or paid for) twice.
+    let pages: string[] = [];
     if (args.mimeType === 'application/pdf') {
       try {
-        const { pages } = await extractPdfPages(args.bytes);
-        citationIssues = validateCitations(extraction, pages);
+        pages = (await extractPdfPages(args.bytes)).pages;
       } catch {
-        // ignore; verifier still runs
+        // parse failed — validator/text-verify skip; PDF verify can still fall back
       }
     }
 
-    // 5. Sonnet verify (only on PDFs; tool currently only supports PDF doc source)
-    let verify: VerifyResponse | null = null;
-    if (isClaudeConfigured() && args.mimeType === 'application/pdf') {
+    // 5. Deterministic citation validator (free) — runs on EVERY document.
+    let citationIssues: CitationIssue[] = pages.length
+      ? validateCitations(extraction, pages)
+      : [];
+
+    // 6. Adjudicate only the low-precision HALLUCINATED_QUOTE flags with a cheap,
+    //    TARGETED Haiku pass — clears faithful paraphrases + false positives so
+    //    only real fabrications reach a human. WRONG_PAGE flags are already
+    //    precise (verbatim match located) and pass through untouched.
+    const hallucinationFlags = citationIssues.filter((i) => i.type === 'HALLUCINATED_QUOTE');
+    if (isClaudeConfigured() && hallucinationFlags.length > 0 && pages.length) {
       try {
-        verify = await verifyExtraction({
-          pdfBytes: args.bytes,
+        const verdicts = await adjudicateFlags({
+          pages,
+          flags: hallucinationFlags.map((iss) => ({
+            clauseType: iss.clauseType,
+            quote: iss.quote,
+            citedPage: iss.citedPage,
+            actualPage: iss.actualPage ?? null,
+          })),
+        });
+        const others = citationIssues.filter((i) => i.type !== 'HALLUCINATED_QUOTE');
+        citationIssues = [...others, ...keepConfirmedFabrications(hallucinationFlags, verdicts)];
+      } catch {
+        // adjudication failed — keep the raw deterministic flags (conservative)
+      }
+    }
+
+    // 7. Proactive completeness/judgment pass — only where being wrong is costly:
+    //    material docs (P0/P1) or a low-confidence extraction. This catches what
+    //    the validator can't (missed clauses, mis-rated risk). Text-based (reuses
+    //    the parsed pages); PDF only as a fallback when text parsing failed.
+    let verify: VerifyResponse | null = null;
+    const materialPriority = args.priority === 'P0' || args.priority === 'P1';
+    const lowConfidence = (extraction.confidenceScore ?? 100) < 70;
+    if (
+      isClaudeConfigured() &&
+      args.mimeType === 'application/pdf' &&
+      (materialPriority || lowConfidence)
+    ) {
+      try {
+        const base = {
           extraction,
           documentType: classification.documentType,
           filename: args.filename,
-        });
+        };
+        verify = await verifyExtraction(
+          pages.length ? { ...base, pages } : { ...base, pdfBytes: args.bytes }
+        );
       } catch {
         // verifier failed — treat as "no verification" rather than fail extraction
       }
@@ -401,6 +519,7 @@ export const extractionService = {
     bytes: Buffer;
     documentType: DocumentType;
     playbook: Awaited<ReturnType<typeof playbookService.get>>;
+    companyPlaybookMarkdown?: string | null;
     modelOverride?: string;
   }): Promise<ExtractionResponse> {
     if (!isClaudeConfigured()) return mockExtract(args.filename);
@@ -408,6 +527,7 @@ export const extractionService = {
     const baseOptions = {
       documentType: args.documentType,
       playbook: args.playbook,
+      companyPlaybookMarkdown: args.companyPlaybookMarkdown,
       modelOverride: args.modelOverride,
     };
 
@@ -533,9 +653,10 @@ export const extractionService = {
     const nextRetry = (document.retryCount ?? 0) + 1;
 
     if (nextRetry <= MAX_RETRIES) {
+      // Reset to PENDING so the scheduled retry (or the queue worker) can re-claim.
       await prisma.document.update({
         where: { id: documentId },
-        data: { retryCount: nextRetry, lastError: message },
+        data: { retryCount: nextRetry, lastError: message, processingStatus: 'PENDING' as DocumentStatus },
       });
       const delayMs = Math.min(1000 * 2 ** nextRetry, 30_000);
       setTimeout(() => {
@@ -552,6 +673,108 @@ export const extractionService = {
         lastError: `Max retries exceeded. Last error: ${message}`,
       },
     });
+  },
+
+  /**
+   * De-dup reuse: point a duplicate at the canonical document's already-computed
+   * extraction (shared fact sheet + risk metadata) instead of re-reading it. Does
+   * NOT re-file the library — the duplicate would otherwise double-count evidence.
+   */
+  async reuseFromCanonical(documentId: string, canonicalId: string): Promise<void> {
+    const canonical = await prisma.document.findUnique({
+      where: { id: canonicalId },
+      select: {
+        extractionS3Key: true,
+        extractionSummary: true,
+        riskScore: true,
+        riskLevel: true,
+        riskSummary: true,
+        documentType: true,
+        documentTypeConfidence: true,
+        pageCount: true,
+      },
+    });
+    if (!canonical || !canonical.extractionS3Key) {
+      // Canonical isn't ready yet — fall back to a stub so this doc still resolves.
+      await this.runStub(documentId);
+      return;
+    }
+    await prisma.document.update({
+      where: { id: documentId },
+      data: {
+        processingStatus: 'COMPLETE' as DocumentStatus,
+        extractionS3Key: canonical.extractionS3Key,
+        extractionSummary: canonical.extractionSummary,
+        riskScore: canonical.riskScore,
+        riskLevel: canonical.riskLevel,
+        riskSummary: canonical.riskSummary,
+        documentType: canonical.documentType,
+        documentTypeConfidence: canonical.documentTypeConfidence,
+        pageCount: canonical.pageCount,
+        verificationStatus: 'VERIFIED',
+        extractionDepth: 'STUB',
+        lastError: null,
+        retryCount: 0,
+      },
+    });
+    console.log(`[extraction] ${documentId} → reused canonical ${canonicalId} (duplicate)`);
+  },
+
+  /**
+   * Stub tier (P3 bulk): classify only + record metadata, mark COMPLETE, and
+   * defer full CUAD extraction. Cheap — one Haiku classify (or none in mock mode).
+   * No fact sheet, no library filing; the document is categorized and findable and
+   * can be promoted to a full extraction later (gap-driven / on demand).
+   */
+  async runStub(documentId: string): Promise<void> {
+    const document = await prisma.document.findUnique({ where: { id: documentId } });
+    if (!document) return;
+    let documentType: string | null = null;
+    let confidence: number | null = null;
+    let pageCount: number | null = null;
+    try {
+      const bytes = await s3Service.getObjectBytes(document.s3Key);
+      if (document.mimeType === 'application/pdf') pageCount = await readPdfPageCount(bytes);
+      const classification = await this.classify({
+        filename: document.name,
+        mimeType: document.mimeType,
+        bytes,
+      });
+      documentType = classification.documentType;
+      confidence = classification.confidence;
+    } catch {
+      // classify failed — still mark stubbed so the doc resolves.
+    }
+    await prisma.document.update({
+      where: { id: documentId },
+      data: {
+        processingStatus: 'COMPLETE' as DocumentStatus,
+        extractionDepth: 'STUB',
+        documentType,
+        documentTypeConfidence: confidence,
+        pageCount,
+        extractionSummary: `Stub (${document.priority}): classified${documentType ? ` as ${documentType}` : ''}; deep extraction deferred.`,
+        verificationStatus: 'NEEDS_REVIEW',
+        lastError: null,
+        retryCount: 0,
+      },
+    });
+    console.log(`[extraction] ${document.name} → stubbed (${document.priority}, type=${documentType ?? '?'})`);
+  },
+
+  /** Promote a stubbed document to a full extraction (gap-driven / on demand). */
+  async promoteToFull(documentId: string): Promise<void> {
+    await prisma.document.update({
+      where: { id: documentId },
+      data: {
+        extractionDepth: 'FULL',
+        processingStatus: 'PENDING' as DocumentStatus,
+        extractionContentHash: null,
+        retryCount: 0,
+        lastError: null,
+      },
+    });
+    await this.triggerExtraction(documentId);
   },
 
   async manualRetry(documentId: string): Promise<void> {
