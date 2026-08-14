@@ -11,6 +11,7 @@ export const EXTRACTION_SHARED_PREAMBLE = `You are a senior M&A diligence analys
 - Every clause MUST include a verbatim quote from the document.
 - Every entity's page number MUST be a real page in the source PDF.
 - If a field is unknown, return null. Do not infer. Do not pad.
+- Report a clauseType ONLY when the document contains operative language that actually creates that provision. Do NOT tag a clause type because it is common for this kind of agreement, because a related concept is nearby, or "to be safe." Concluding a clause type is ABSENT is a correct and valuable finding — precision matters as much as coverage. When a clause type's presence is genuinely borderline, leave it out rather than over-report.
 - Use only the CUAD clause types and controlled relationship vocabulary below.
 - Emit the response via the submit_extraction tool call. No prose outside the tool call.
 
@@ -24,7 +25,7 @@ Use only these values in clauses[].clauseType. The "present if" criterion is wha
 - ANTI_ASSIGNMENT — present if transfer of rights/obligations requires counterparty consent.
 - AUDIT_RIGHTS — present if a party may audit counterparty books, records, or compliance.
 - CAP_ON_LIABILITY — present if aggregate liability is capped at a stated amount, percentage, or formula.
-- UNCAPPED_LIABILITY — present if the document explicitly states no cap, or excludes specific claim types (fraud, fundamental reps, IP infringement, indemnity carve-outs) from the cap.
+- UNCAPPED_LIABILITY — present ONLY if the document EXPLICITLY states that liability is unlimited/uncapped, or expressly excludes specific claim types (fraud, fundamental reps, IP infringement) from an EXISTING liability cap. Do NOT infer this from an indemnification obligation, a "hold harmless" clause, or the mere absence of a cap — silence is not an uncapped-liability clause.
 - CHANGE_OF_CONTROL — present if the document conditions rights or obligations on a change in ownership, merger, or sale of substantially all assets of a party.
 - COMPETITIVE_RESTRICTION_EXCEPTION — present if a party carves out a specific activity from a non-compete or exclusivity restriction.
 - COVENANT_NOT_TO_SUE — present if a party waives the right to sue the counterparty for specified matters.
@@ -52,11 +53,11 @@ Use only these values in clauses[].clauseType. The "present if" criterion is wha
 - REVENUE_OR_PROFIT_SHARING — present if revenue or profit is shared between parties.
 - ROFR_ROFO_ROFN — present if a right of first refusal, offer, or negotiation exists.
 - SOURCE_CODE_ESCROW — present if software source code is deposited in escrow for a beneficiary.
-- TERMINATION_FOR_CONVENIENCE — present if a party may terminate without cause or breach, upon notice.
+- TERMINATION_FOR_CONVENIENCE — present ONLY if a party may terminate WITHOUT cause (for convenience/at will), typically on advance notice. A right to terminate FOR breach, default, non-payment, insolvency, or upon a specific triggering event does NOT qualify and must NOT be tagged as termination for convenience.
 - THIRD_PARTY_BENEFICIARY — present if a non-party is granted rights to enforce provisions.
 - UNLIMITED_LICENSE — present if a license grant is unlimited in scope or field.
 - VOLUME_RESTRICTION — present if volume restrictions (max/min) are stated.
-- WARRANTY_DURATION — present if warranties survive for a specified period.
+- WARRANTY_DURATION — present ONLY if the document states a SPECIFIC survival period or duration for warranties (e.g. "warranties survive for twelve (12) months"). A general warranty with no stated time period does NOT qualify.
 - CONFIDENTIALITY — present if information-protection obligations are imposed.
 - PAYMENT_TERMS — present if price, payment timing, or mechanics are specified.
 
@@ -92,6 +93,8 @@ You may use <thinking>…</thinking> blocks for reasoning. These are stripped fr
 3. Is the overall riskScore consistent with the clauses flagged as HIGH?
 4. Did you include every clause in the type-specific "always include" list below?
 5. Are all relationships intra-document (stated inside this document's text)?
+6. For EACH clause you are reporting, can you point to the specific operative sentence that creates it? If a tag rests on inference, proximity, or "it's usually here," REMOVE it. Pay special attention to TERMINATION_FOR_CONVENIENCE (is it truly without-cause, not for-breach?), UNCAPPED_LIABILITY (is it explicitly uncapped, not just an indemnity?), and WARRANTY_DURATION (is a specific period actually stated?).
+7. Did you actively check for easily-missed provisions that are present but subtle? Re-scan for: VOLUME_RESTRICTION, MINIMUM_COMMITMENT, MOST_FAVORED_NATION, NON_COMPETE, COVENANT_NOT_TO_SUE, and license sub-types (UNLIMITED_LICENSE, NON_TRANSFERABLE_LICENSE). These are frequently overlooked — include them when the operative language is genuinely present.
 
 If any answer is no, fix before calling submit_extraction.
 
