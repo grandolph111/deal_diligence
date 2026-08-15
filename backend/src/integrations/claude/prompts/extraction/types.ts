@@ -175,7 +175,7 @@ const TYPE_GUIDANCE: Record<DocumentType, TypeGuidance> = {
   },
   GENERIC: {
     focus:
-      'Document type was not confidently classified. Apply the full CUAD vocabulary and use your judgment to identify the most material provisions.',
+      'Document type was not confidently classified — most commercial contracts (distribution, franchise, license, supply, services, joint venture) land here. Apply the FULL CUAD vocabulary and use your judgment. Actively scan for provisions that are easy to miss in commercial agreements: VOLUME_RESTRICTION, MINIMUM_COMMITMENT, REVENUE_OR_PROFIT_SHARING, TERMINATION_FOR_CONVENIENCE, MOST_FAVORED_NATION, PRICE_RESTRICTIONS, NON_COMPETE, NO_SOLICIT_CUSTOMERS, EXCLUSIVITY, ROFR_ROFO_ROFN, LIQUIDATED_DAMAGES, COVENANT_NOT_TO_SUE, and license sub-types (AFFILIATE_LICENSE_LICENSEE / AFFILIATE_LICENSE_LICENSOR, NON_TRANSFERABLE_LICENSE). Include each ONLY where operative language is genuinely present — do not report a type just because it is common for this kind of contract.',
     alwaysInclude: [],
     redFlags: [],
   },

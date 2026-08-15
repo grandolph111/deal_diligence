@@ -25,8 +25,8 @@ Use only these values in clauses[].clauseType. The "present if" criterion is wha
 - ANTI_ASSIGNMENT — present if transfer of rights/obligations requires counterparty consent.
 - AUDIT_RIGHTS — present if a party may audit counterparty books, records, or compliance.
 - CAP_ON_LIABILITY — present if aggregate liability is capped at a stated amount, percentage, or formula.
-- UNCAPPED_LIABILITY — present ONLY if the document EXPLICITLY states that liability is unlimited/uncapped, or expressly excludes specific claim types (fraud, fundamental reps, IP infringement) from an EXISTING liability cap. Do NOT infer this from an indemnification obligation, a "hold harmless" clause, or the mere absence of a cap — silence is not an uncapped-liability clause.
-- CHANGE_OF_CONTROL — present if the document conditions a right or obligation on a change in ownership, merger, or sale of substantially all assets (e.g. consent, termination, acceleration, or price change triggered by it). A standalone definition of the term with no operative effect anywhere is not by itself this clause.
+- UNCAPPED_LIABILITY — present if the document states liability is unlimited/uncapped, OR expressly carves specific claims OUT of a liability cap so they remain unlimited — common carve-outs: fraud, willful misconduct, gross negligence, breach of confidentiality, IP infringement, indemnification obligations, breach of fundamental reps. Do NOT infer merely from the absence of a cap, or from an indemnity that has its own stated limit.
+- CHANGE_OF_CONTROL — present if a right or obligation is TRIGGERED by a change in ownership, merger, or sale of substantially all assets of a party (consent required, termination right, acceleration, or price change on such an event). A termination-for-breach/default right is NOT this unless the trigger is specifically a change of control; a bare definition with no operative effect is not this clause.
 - COMPETITIVE_RESTRICTION_EXCEPTION — present if a party carves out a specific activity from a non-compete or exclusivity restriction.
 - COVENANT_NOT_TO_SUE — present if a party agrees not to bring suit / not to assert claims, or releases or waives claims against the counterparty for specified matters (look for "covenant not to sue", "shall not sue", "releases and discharges", "waiver of claims"). This is about forbearing from litigation, distinct from a liability cap.
 - EXCLUSIVITY — present if a party agrees not to engage with competitors or third parties for specified purposes.
@@ -39,26 +39,26 @@ Use only these values in clauses[].clauseType. The "present if" criterion is wha
 - LICENSE_GRANT — present if the document grants a license (scope, exclusivity, field, geography).
 - AFFILIATE_LICENSE_LICENSEE — present if a license granted to a party also extends to, or may be exercised/sublicensed by, that party's AFFILIATES (e.g. "Licensee and its Affiliates are granted…").
 - AFFILIATE_LICENSE_LICENSOR — present if the license granted covers the intellectual property OF the licensor's AFFILIATES, or is granted by/on behalf of the licensor's affiliates (e.g. "Licensor, on behalf of itself and its Affiliates, grants…").
-- LIQUIDATED_DAMAGES — present if pre-agreed damages are specified for particular breaches.
+- LIQUIDATED_DAMAGES — present if a specific pre-agreed sum or formula is payable on a particular breach or event — a stated penalty, per-day/per-unit charge, or fixed amount (often phrased "as liquidated damages and not as a penalty").
 - MINIMUM_COMMITMENT — present if minimum purchase, volume, or payment obligations are stated.
 - MOST_FAVORED_NATION — present if a party is entitled to terms at least as favorable as those offered to any third party (look for "most favored", "no less favorable than", "best pricing", automatic match of better terms given to others).
-- NO_SOLICIT_CUSTOMERS — present if a party is restricted from soliciting counterparty's customers.
+- NO_SOLICIT_CUSTOMERS — present if a party is restricted from soliciting, diverting, or doing business with the counterparty's customers, clients, or accounts (during or after the term).
 - NO_SOLICIT_EMPLOYEES — present if a party is restricted from soliciting counterparty's employees.
 - NON_COMPETE — present if a party is restricted from competing in a market, geography, or timeframe.
 - NON_DISPARAGEMENT — present if parties agree not to make disparaging statements.
 - NON_TRANSFERABLE_LICENSE — present if a granted license is stated to be non-transferable/non-assignable/non-sublicensable. Distinguish from a general anti-assignment clause covering the whole agreement, which is ANTI_ASSIGNMENT.
 - NOTICE_PERIOD_TO_TERMINATE_RENEWAL — present if a specific notice period is required to prevent auto-renewal.
-- POST_TERMINATION_SERVICES — present if a party must continue providing services after termination (transition assistance, wind-down, continued supply). Mere survival of confidentiality/indemnity clauses is not itself a post-termination service, but do include genuine continued-performance obligations.
-- PRICE_RESTRICTIONS — present if a party is restricted on pricing (floor, ceiling, MFN-tied).
+- POST_TERMINATION_SERVICES — present ONLY if a party must actively CONTINUE PERFORMING services or supply after termination (transition assistance, wind-down support, continued distribution/maintenance for a period). NOT this clause: survival of confidentiality/indemnity/payment obligations, a general "survival" section, or the return/destruction of materials — none of those are continued services.
+- PRICE_RESTRICTIONS — present if a party is RESTRICTED in the price it may charge THIRD parties — a price floor or ceiling, resale-price requirement, or MFN-tied price imposed on it. A party's own right to set or change ITS OWN prices or fees is NOT a price restriction.
 - REPRESENTATIONS_AND_WARRANTIES — present if a party makes affirmative statements of fact with liability attached.
 - RENEWAL_TERM — present if auto-renewal or renewal mechanics are specified.
-- REVENUE_OR_PROFIT_SHARING — present if revenue or profit is shared between parties.
+- REVENUE_OR_PROFIT_SHARING — present if revenue, profit, or proceeds are shared between the parties — including royalty splits, revenue-share percentages, profit distributions, or a commission tied to sales.
 - ROFR_ROFO_ROFN — present if a right of first refusal, offer, or negotiation exists.
 - SOURCE_CODE_ESCROW — present if software source code is deposited in escrow for a beneficiary.
 - TERMINATION_FOR_CONVENIENCE — present ONLY if a party may terminate WITHOUT cause (for convenience/at will), typically on advance notice. A right to terminate FOR breach, default, non-payment, insolvency, or upon a specific triggering event does NOT qualify and must NOT be tagged as termination for convenience.
-- THIRD_PARTY_BENEFICIARY — present if a non-party is granted rights to enforce provisions. Note the common inverse: a clause stating there are NO third-party beneficiaries ("confers no rights on any third party") is the opposite and is not this clause.
+- THIRD_PARTY_BENEFICIARY — present if a specific non-party (e.g. an affiliate, lender, guarantor, or named beneficiary) is given enforceable rights or benefits under the agreement, whether or not the word "beneficiary" is used. The inverse — a clause stating there are NO third-party beneficiaries ("confers no rights on any third party") — is NOT this clause.
 - UNLIMITED_LICENSE — present if a license grant is unlimited in scope or field.
-- VOLUME_RESTRICTION — present if volume restrictions (max/min) are stated.
+- VOLUME_RESTRICTION — present if a party is limited in the QUANTITY it may buy, sell, produce, order, or distribute — a maximum or minimum volume, cap, quota, or "not to exceed"/"at least N units" obligation (distinct from a dollar-based minimum commitment).
 - WARRANTY_DURATION — present ONLY if the document states a SPECIFIC survival period or duration for warranties (e.g. "warranties survive for twelve (12) months"). A general warranty with no stated time period does NOT qualify.
 - CONFIDENTIALITY — present if information-protection obligations are imposed.
 - PAYMENT_TERMS — present if price, payment timing, or mechanics are specified.
