@@ -105,6 +105,28 @@ const deriveRiskLevel = (score: number): 'LOW' | 'MEDIUM' | 'HIGH' => {
   return 'LOW';
 };
 
+/**
+ * True when a clause's content is a "checked-but-absent" confirmation (e.g. the
+ * type-specific alwaysInclude list makes the model emit "Present: no" or "No X
+ * provision found in this Agreement") rather than a real clause. These are not
+ * clause evidence — persisting them pollutes the library and counts as false
+ * positives in accuracy scoring, so they are dropped before persist + library filing.
+ * Requires an absence phrasing AND a provision/clause word AND an absence verb to
+ * avoid dropping genuine operative clauses that merely begin with "No".
+ */
+const isAbsentMarkerClause = (content: string | null | undefined): boolean => {
+  const t = (content ?? '').trim();
+  if (t.length < 3) return true;
+  if (/^present:\s*no\b/i.test(t)) return true;
+  if (/^not\s+(present|found|applicable|specified|included|disclosed)\b/i.test(t)) return true;
+  const head = t.slice(0, 180);
+  return (
+    /^(no\b|there (is|are) no\b)/i.test(head) &&
+    /\b(provision|clause|language|section)\b/i.test(head) &&
+    /\b(present|found|exist|appears?|applicable|contained|anywhere|in this (agreement|contract))\b/i.test(head)
+  );
+};
+
 const buildExtractionHash = (etag: string | null, modelId: string): string =>
   `${etag ?? 'no-etag'}::${modelId}`;
 
@@ -290,6 +312,18 @@ export const extractionService = {
         projectId: document.projectId,
         priority: document.priority,
       });
+      // Drop "checked-but-absent" confirmations the model sometimes emits as clauses
+      // (from the alwaysInclude coverage prompt) so they don't pollute the library or
+      // register as false positives. Filtered once here → both persist + library filing.
+      const beforeClauses = pipeline.extraction.clauses.length;
+      pipeline.extraction.clauses = pipeline.extraction.clauses.filter(
+        (c) => !isAbsentMarkerClause(c.content)
+      );
+      const droppedAbsent = beforeClauses - pipeline.extraction.clauses.length;
+      if (droppedAbsent > 0) {
+        console.log(`[extraction] ${document.name} → dropped ${droppedAbsent} absent-marker clause(s)`);
+      }
+
       await this.persistResult(documentId, pipeline, hash, modelId);
 
       const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);

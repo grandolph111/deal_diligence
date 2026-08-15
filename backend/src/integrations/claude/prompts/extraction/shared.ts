@@ -37,6 +37,8 @@ Use only these values in clauses[].clauseType. The "present if" criterion is wha
 - IRREVOCABLE_OR_PERPETUAL_LICENSE — present if a license grant is perpetual or irrevocable.
 - JOINT_IP_OWNERSHIP — present if IP is jointly owned by the parties.
 - LICENSE_GRANT — present if the document grants a license (scope, exclusivity, field, geography).
+- AFFILIATE_LICENSE_LICENSEE — present if a license granted to a party also extends to, or may be exercised/sublicensed by, that party's AFFILIATES (e.g. "Licensee and its Affiliates are granted…").
+- AFFILIATE_LICENSE_LICENSOR — present if the license granted covers the intellectual property OF the licensor's AFFILIATES, or is granted by/on behalf of the licensor's affiliates (e.g. "Licensor, on behalf of itself and its Affiliates, grants…").
 - LIQUIDATED_DAMAGES — present if pre-agreed damages are specified for particular breaches.
 - MINIMUM_COMMITMENT — present if minimum purchase, volume, or payment obligations are stated.
 - MOST_FAVORED_NATION — present if a party is entitled to terms at least as favorable as those offered to any third party (look for "most favored", "no less favorable than", "best pricing", automatic match of better terms given to others).
