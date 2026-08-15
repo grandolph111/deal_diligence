@@ -76,3 +76,9 @@ PROMPT.md
 
 # One-time setup scripts
 python-service/create_database.py
+
+# CUAD gold-set data (large; local eval only — not for the repo)
+CUAD_v1/
+
+# CUAD eval/ingest run artifacts (local only)
+backend/scripts/eval-results/
