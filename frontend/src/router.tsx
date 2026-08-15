@@ -141,8 +141,10 @@ export const router = createBrowserRouter([
             element: <LibraryGraphPage />,
           },
           {
+            // Legacy /members path → the team tab of settings. Relative "../" pops
+            // the "members" segment so this resolves to .../settings (not .../members/settings).
             path: 'members',
-            element: <Navigate to="settings?tab=team" replace />,
+            element: <Navigate to="../settings?tab=team" replace />,
           },
           {
             path: 'settings',

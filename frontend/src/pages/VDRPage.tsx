@@ -91,6 +91,7 @@ export function VDRPage() {
   // Document state
   const {
     documents,
+    pagination,
     loading: documentsLoading,
     error: documentsError,
     uploadProgress,
@@ -194,7 +195,9 @@ export function VDRPage() {
   // Fetch documents when folder changes
   useEffect(() => {
     if (!membersLoading && canAccessVDR && projectId) {
-      fetchDocuments({ folderId: selectedFolderId });
+      // Load up to the API's max page size (100) so the list isn't silently capped
+      // at the default 20. Data rooms above 100 docs need real pagination — follow-up.
+      fetchDocuments({ folderId: selectedFolderId, limit: 100 });
     }
   }, [membersLoading, canAccessVDR, projectId, selectedFolderId, fetchDocuments]);
 
@@ -600,6 +603,7 @@ export function VDRPage() {
 
             <DocumentList
               documents={documents}
+              totalCount={pagination?.total}
               loading={documentsLoading || foldersLoading}
               viewMode={viewMode}
               onViewModeChange={setViewMode}

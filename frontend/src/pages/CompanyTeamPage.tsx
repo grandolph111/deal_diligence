@@ -16,7 +16,12 @@ export function CompanyTeamPage() {
       </div>
     );
   }
-  if (!user?.companyId) {
+  // Only company/platform admins can view the company team page — the underlying
+  // company-detail endpoint 403s for members. Bounce everyone else to the dashboard
+  // instead of rendering a dead-end error card.
+  const canView =
+    user?.platformRole === 'SUPER_ADMIN' || user?.platformRole === 'CUSTOMER_ADMIN';
+  if (!user?.companyId || !canView) {
     return <Navigate to="/dashboard" replace />;
   }
   return (

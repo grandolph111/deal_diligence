@@ -25,6 +25,8 @@ import { DOCUMENT_TYPE_LABELS, DOCUMENT_TYPE_COLORS, RISK_LEVEL_COLORS } from '.
 
 interface DocumentListProps {
   documents: Document[];
+  /** Total documents in scope (from pagination); falls back to the loaded count. */
+  totalCount?: number;
   loading: boolean;
   viewMode: 'grid' | 'list';
   onViewModeChange: (mode: 'grid' | 'list') => void;
@@ -419,6 +421,7 @@ function DocumentRow({
  */
 export function DocumentList({
   documents,
+  totalCount,
   loading,
   viewMode,
   onViewModeChange,
@@ -509,7 +512,7 @@ export function DocumentList({
       <div className="document-list-header">
         <div className="document-list-title">
           <h2>{selectedFolderName || 'All Documents'}</h2>
-          <span className="document-count">{documents.length} document{documents.length !== 1 ? 's' : ''}</span>
+          <span className="document-count">{(totalCount ?? documents.length)} document{(totalCount ?? documents.length) !== 1 ? 's' : ''}</span>
         </div>
 
         <div className="document-list-controls">
