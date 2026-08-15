@@ -26,27 +26,27 @@ Use only these values in clauses[].clauseType. The "present if" criterion is wha
 - AUDIT_RIGHTS — present if a party may audit counterparty books, records, or compliance.
 - CAP_ON_LIABILITY — present if aggregate liability is capped at a stated amount, percentage, or formula.
 - UNCAPPED_LIABILITY — present ONLY if the document EXPLICITLY states that liability is unlimited/uncapped, or expressly excludes specific claim types (fraud, fundamental reps, IP infringement) from an EXISTING liability cap. Do NOT infer this from an indemnification obligation, a "hold harmless" clause, or the mere absence of a cap — silence is not an uncapped-liability clause.
-- CHANGE_OF_CONTROL — present if the document conditions rights or obligations on a change in ownership, merger, or sale of substantially all assets of a party.
+- CHANGE_OF_CONTROL — present if the document conditions a right or obligation on a change in ownership, merger, or sale of substantially all assets (e.g. consent, termination, acceleration, or price change triggered by it). A standalone definition of the term with no operative effect anywhere is not by itself this clause.
 - COMPETITIVE_RESTRICTION_EXCEPTION — present if a party carves out a specific activity from a non-compete or exclusivity restriction.
-- COVENANT_NOT_TO_SUE — present if a party waives the right to sue the counterparty for specified matters.
+- COVENANT_NOT_TO_SUE — present if a party agrees not to bring suit / not to assert claims, or releases or waives claims against the counterparty for specified matters (look for "covenant not to sue", "shall not sue", "releases and discharges", "waiver of claims"). This is about forbearing from litigation, distinct from a liability cap.
 - EXCLUSIVITY — present if a party agrees not to engage with competitors or third parties for specified purposes.
 - GOVERNING_LAW — the jurisdiction whose law governs the agreement.
 - INDEMNIFICATION — present if one party agrees to cover another's losses from specified events.
 - INSURANCE — present if insurance coverage requirements are imposed on a party.
-- IP_OWNERSHIP_ASSIGNMENT — present if IP rights are transferred or assigned between parties.
+- IP_OWNERSHIP_ASSIGNMENT — present if ownership of IP is transferred or assigned to a party (e.g. "hereby assigns all right, title and interest"). Distinguish from a license: a bare right to use, with ownership retained, is LICENSE_GRANT, not an assignment.
 - IRREVOCABLE_OR_PERPETUAL_LICENSE — present if a license grant is perpetual or irrevocable.
 - JOINT_IP_OWNERSHIP — present if IP is jointly owned by the parties.
 - LICENSE_GRANT — present if the document grants a license (scope, exclusivity, field, geography).
 - LIQUIDATED_DAMAGES — present if pre-agreed damages are specified for particular breaches.
 - MINIMUM_COMMITMENT — present if minimum purchase, volume, or payment obligations are stated.
-- MOST_FAVORED_NATION — present if a party is entitled to automatic benefit of better terms offered to others.
+- MOST_FAVORED_NATION — present if a party is entitled to terms at least as favorable as those offered to any third party (look for "most favored", "no less favorable than", "best pricing", automatic match of better terms given to others).
 - NO_SOLICIT_CUSTOMERS — present if a party is restricted from soliciting counterparty's customers.
 - NO_SOLICIT_EMPLOYEES — present if a party is restricted from soliciting counterparty's employees.
 - NON_COMPETE — present if a party is restricted from competing in a market, geography, or timeframe.
 - NON_DISPARAGEMENT — present if parties agree not to make disparaging statements.
-- NON_TRANSFERABLE_LICENSE — present if a license is expressly non-transferable.
+- NON_TRANSFERABLE_LICENSE — present if a granted license is stated to be non-transferable/non-assignable/non-sublicensable. Distinguish from a general anti-assignment clause covering the whole agreement, which is ANTI_ASSIGNMENT.
 - NOTICE_PERIOD_TO_TERMINATE_RENEWAL — present if a specific notice period is required to prevent auto-renewal.
-- POST_TERMINATION_SERVICES — present if a party must continue providing services after termination.
+- POST_TERMINATION_SERVICES — present if a party must continue providing services after termination (transition assistance, wind-down, continued supply). Mere survival of confidentiality/indemnity clauses is not itself a post-termination service, but do include genuine continued-performance obligations.
 - PRICE_RESTRICTIONS — present if a party is restricted on pricing (floor, ceiling, MFN-tied).
 - REPRESENTATIONS_AND_WARRANTIES — present if a party makes affirmative statements of fact with liability attached.
 - RENEWAL_TERM — present if auto-renewal or renewal mechanics are specified.
@@ -54,7 +54,7 @@ Use only these values in clauses[].clauseType. The "present if" criterion is wha
 - ROFR_ROFO_ROFN — present if a right of first refusal, offer, or negotiation exists.
 - SOURCE_CODE_ESCROW — present if software source code is deposited in escrow for a beneficiary.
 - TERMINATION_FOR_CONVENIENCE — present ONLY if a party may terminate WITHOUT cause (for convenience/at will), typically on advance notice. A right to terminate FOR breach, default, non-payment, insolvency, or upon a specific triggering event does NOT qualify and must NOT be tagged as termination for convenience.
-- THIRD_PARTY_BENEFICIARY — present if a non-party is granted rights to enforce provisions.
+- THIRD_PARTY_BENEFICIARY — present if a non-party is granted rights to enforce provisions. Note the common inverse: a clause stating there are NO third-party beneficiaries ("confers no rights on any third party") is the opposite and is not this clause.
 - UNLIMITED_LICENSE — present if a license grant is unlimited in scope or field.
 - VOLUME_RESTRICTION — present if volume restrictions (max/min) are stated.
 - WARRANTY_DURATION — present ONLY if the document states a SPECIFIC survival period or duration for warranties (e.g. "warranties survive for twelve (12) months"). A general warranty with no stated time period does NOT qualify.
