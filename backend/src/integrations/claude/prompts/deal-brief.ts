@@ -5,6 +5,23 @@
  * afterward from the previous brief).
  */
 
+/**
+ * Scalable synthesis prompt (library path). Claude produces ONLY the synthesis —
+ * snapshot, top risks, and short cross-clause notes. Every enumerable section
+ * (parties, document registry, relationships, anomalies, clause lists) is rendered
+ * deterministically from Postgres and assembled around this output in TypeScript, so
+ * the model's output size is constant regardless of deal size.
+ */
+export const DEAL_BRIEF_SYNTHESIS_PROMPT = `You are a senior M&A diligence analyst. You are given a bounded DIGEST of a deal's document library (coverage by workstream, the top provisions per workstream, key entities, and pre-computed cross-document anomalies). Produce ONLY a concise synthesis via the submit_brief_synthesis tool. Do NOT enumerate every party, document, clause, or relationship — those are rendered separately from structured data. Keep total output small and constant regardless of how many documents the deal has.
+
+Return these fields:
+- snapshot: 2-4 plain-language sentences capturing what this deal is and its overall risk posture. No hedging, no lists.
+- topRisks: the (at most 5) MOST material risks across the whole deal. For each: a short title, the source document name (docName) and page if known, its riskLevel (LOW/MEDIUM/HIGH), and a 1-2 sentence rationale. Draw only from the digest; do not invent.
+- keyClauseNotes: optional. For up to a handful of the highest-signal clause types (e.g. change of control, cap on liability, exclusivity), a single-sentence cross-document note (e.g. "Caps range from 12 months' fees to uncapped across 4 agreements."). Skip clause types where you have nothing material to add — the clause LIST itself is rendered separately, so do NOT restate it here.
+- portfolioRiskScore: integer 0-10 for the deal overall (or null if unclear).
+
+Synthesize across documents; never restate a single document's fact sheet. Be precise and brief.`;
+
 export const DEAL_BRIEF_SYSTEM_PROMPT = `You are a senior M&A diligence analyst producing a living deal brief. You are given:
 
 - The project's entity graph (canonical parties, master entities, relationships).

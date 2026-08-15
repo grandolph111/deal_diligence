@@ -2,7 +2,7 @@ export { getClaudeClient, getModelId, isMock } from './client';
 export { extractDocument } from './extract';
 export { classifyDocument, classifyTextSample, slicePdfPages } from './classify';
 export { verifyExtraction } from './verify';
-export { generateDealBrief } from './deal-brief';
+export { generateDealBrief, generateBriefSynthesis } from './deal-brief';
 export { detectAnomalies } from './anomaly';
 export { generateRiskReport, type AttachedDoc } from './riskReport';
 export { runChat, type ChatTurn } from './chat';
@@ -26,6 +26,7 @@ export {
   reconciliationResponseSchema,
   anomalyResponseSchema,
   briefResponseSchema,
+  briefSynthesisSchema,
   lintResponseSchema,
   LINT_FINDING_TYPES,
   type LintResponse,
@@ -44,6 +45,7 @@ export {
   type ReconciliationResponse,
   type AnomalyResponse,
   type BriefResponse,
+  type BriefSynthesis,
   type Playbook,
 } from './schema';
 export { renderPlaybookBlock, buildExtractionPrompt } from './prompts/extraction';

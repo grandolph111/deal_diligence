@@ -19,9 +19,10 @@ import {
 } from '../utils/brief-markers';
 import { computeScopeKey, SCOPE_FULL } from '../utils/scope-key';
 import { isClaudeConfigured } from '../config';
-import { generateDealBrief, type AttachedDoc, type Playbook } from '../integrations/claude';
+import { generateDealBrief, generateBriefSynthesis, type AttachedDoc, type Playbook } from '../integrations/claude';
 import { documentsService } from '../modules/documents/documents.service';
 import { libraryWriterService } from './library-writer.service';
+import { renderDeterministicSections, assembleBrief } from './deal-brief-render';
 
 /**
  * Resolve a scope key to its in-scope document ids (null = full access / all).
@@ -173,39 +174,44 @@ export const dealBriefService = {
   }): Promise<string | null> {
     if (!isClaudeConfigured()) return null;
 
-    // Scalable brief (Phase C): when the library is enabled, "reduce" over a
-    // bounded library DIGEST (coverage + top evidence per workstream + entities +
-    // anomalies) instead of stuffing every in-scope fact sheet — so brief input is
-    // independent of document count. Otherwise fall back to the legacy fact-sheet path.
-    let factSheets: AttachedDoc[];
-    if (libraryWriterService.isEnabled() && (await libraryWriterService.isSeeded(args.projectId))) {
-      const allowedDocIds = await resolveScopeDocIds(args.projectId, args.scopeKey);
-      if (allowedDocIds !== null && allowedDocIds.size === 0) return null; // restricted, no docs in scope
-      const digest = await libraryWriterService.buildDigest(args.projectId, allowedDocIds);
-      factSheets = [
-        { documentId: 'library-digest', documentName: 'Deal library digest', factSheetMarkdown: digest },
-      ];
-    } else {
-      factSheets = await loadFactSheetsForScope(args.projectId, args.scopeKey);
-      if (factSheets.length === 0) return null;
-    }
-
     const prev = await this.loadBrief(args.projectId, args.scopeKey);
     const humanSections = extractHumanSections(prev);
 
-    const response = await generateDealBrief({
-      projectName: args.projectName,
-      scopeLabel: args.scopeKey,
-      factSheets,
-      masterEntitiesSummary: args.masterEntitiesSummary,
-      playbook: args.playbook,
-      previousBriefHumanSections: humanSections,
-    });
+    let merged: string;
+    if (libraryWriterService.isEnabled() && (await libraryWriterService.isSeeded(args.projectId))) {
+      // Scalable path: Claude synthesizes ONLY the snapshot/top-risks/clause-notes over a
+      // bounded digest; every enumerable section is rendered deterministically from Postgres
+      // and assembled in TS. Output is bounded, so it never overflows regardless of deal size.
+      const allowedDocIds = await resolveScopeDocIds(args.projectId, args.scopeKey);
+      if (allowedDocIds !== null && allowedDocIds.size === 0) return null; // restricted, no docs in scope
+      const digest = await libraryWriterService.buildDigest(args.projectId, allowedDocIds);
+      const synthesis = await generateBriefSynthesis({
+        projectName: args.projectName,
+        scopeLabel: args.scopeKey,
+        digest,
+        masterEntitiesSummary: args.masterEntitiesSummary,
+        playbook: args.playbook,
+      });
+      const sections = await renderDeterministicSections(args.projectId, allowedDocIds, synthesis.keyClauseNotes);
+      const assembled = assembleBrief({ projectName: args.projectName, scopeKey: args.scopeKey, synthesis, sections });
+      merged = spliceHumanSections(assembled, humanSections);
+    } else {
+      // Legacy path (library disabled): Claude emits the full brief markdown from fact sheets.
+      const factSheets = await loadFactSheetsForScope(args.projectId, args.scopeKey);
+      if (factSheets.length === 0) return null;
+      const response = await generateDealBrief({
+        projectName: args.projectName,
+        scopeLabel: args.scopeKey,
+        factSheets,
+        masterEntitiesSummary: args.masterEntitiesSummary,
+        playbook: args.playbook,
+        previousBriefHumanSections: humanSections,
+      });
+      merged = spliceHumanSections(response.brief, humanSections);
+    }
 
-    const merged = spliceHumanSections(response.brief, humanSections);
     const key = briefKey(args.projectId, args.scopeKey);
     await s3Service.putObjectText(key, merged);
-
     await this.updateManifest(args.projectId, args.scopeKey, key);
     return merged;
   },

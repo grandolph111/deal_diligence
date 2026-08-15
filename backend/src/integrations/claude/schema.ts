@@ -387,6 +387,33 @@ export const briefResponseSchema = z.object({
 });
 export type BriefResponse = z.infer<typeof briefResponseSchema>;
 
+// Scalable brief (library path): Claude returns ONLY the synthesis sections; every
+// enumerable section (parties, registry, relationships, anomalies, clause lists) is
+// rendered deterministically from Postgres and assembled in TS. Output is bounded by
+// construction — it does not grow with document count — so it cannot overflow maxTokens.
+// Numeric/short fields come FIRST so a truncated response still validates.
+export const briefSynthesisSchema = z.object({
+  portfolioRiskScore: z.number().int().min(0).max(10).nullable().optional(),
+  snapshot: z.string().min(1), // 2-4 sentence deal snapshot
+  topRisks: z
+    .array(
+      z.object({
+        title: z.string(),
+        docName: z.string(),
+        page: z.number().int().nullable().optional(),
+        riskLevel: z.enum(['LOW', 'MEDIUM', 'HIGH']),
+        rationale: z.string(),
+      })
+    )
+    .max(5)
+    .default([]),
+  keyClauseNotes: z // optional one-line cross-doc synthesis per high-signal clause type
+    .array(z.object({ clauseType: z.string(), note: z.string() }))
+    .max(12)
+    .default([]),
+});
+export type BriefSynthesis = z.infer<typeof briefSynthesisSchema>;
+
 // ============================================================
 // Playbook (stored on Project.playbook)
 // ============================================================
