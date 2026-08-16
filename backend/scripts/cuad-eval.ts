@@ -41,10 +41,13 @@ const METRIC_GLOSSARY = `WHAT THE METRICS MEAN  (ground truth: authoritative CUA
               False alarms hurt this. Low precision = we are OVER-REPORTING clauses that aren't there (review noise).
               Scored only on the 36 clause categories; our extra types (indemnification, reps & warranties,
               confidentiality, payment terms) and CUAD metadata (parties/dates) are excluded.
-  GROUNDING — Of the verbatim quotes we attached, what fraction actually appear word-for-word in the document?
-              A hallucination check. Low grounding = we are FABRICATING or mis-transcribing supporting text.
+  GROUNDING — Of our attached quotes, what fraction are NOT fabricated (appear in the document at all)?
+              The pure hallucination check — only quotes that match nothing (<50% sim) count against it.
+  VERBATIM  — Stricter: what fraction match the source WORD-FOR-WORD? A present-but-paraphrased/OCR-drifted
+              quote passes grounding (it's real) but fails verbatim. The gap = transcription fidelity.
   SPAN ACC  — When we correctly flag a category present, does our quote overlap the annotator's highlighted
-              span? Pinpoint accuracy — did we quote the RIGHT sentence, not just find the right category.`;
+              span? A pessimistic lower bound — CUAD marks ONE span/category, but a clause can appear in
+              several valid places, so quoting a different-but-correct instance scores as a miss.`;
 
 const buildPdfIndex = (): Map<string, string> => {
   const idx = new Map<string, string>();
@@ -68,6 +71,7 @@ interface DocResult {
   recall: number;
   precision: number;
   grounding: number;
+  verbatim: number; // stricter than grounding: quote matches source word-for-word (loose matches excluded)
   spanAcc: number | null; // of correct-category clauses, fraction whose quote overlaps the annotator span
   missedCategories: string[]; // gold clauses we failed to find (recall failures)
   falsePositives: string[]; // CUAD categories we claimed that gold says aren't there (precision failures)
@@ -89,6 +93,7 @@ function persist(
   const aggRecall = mean(perDoc.map((d) => d.recall));
   const aggPrecision = mean(perDoc.map((d) => d.precision));
   const aggGrounding = mean(perDoc.map((d) => d.grounding));
+  const aggVerbatim = mean(perDoc.map((d) => d.verbatim));
   const spanVals = perDoc.map((d) => d.spanAcc).filter((x): x is number => x !== null);
   const aggSpan = spanVals.length ? mean(spanVals) : null;
   const worst = [...catHits.entries()]
@@ -102,7 +107,7 @@ function persist(
     ranAt: new Date().toISOString(),
     status,
     config: { SAMPLE, OFFSET, BUDGET, MINUTES },
-    aggregate: { contracts: perDoc.length, recall: aggRecall, precision: aggPrecision, grounding: aggGrounding, spanAccuracy: aggSpan },
+    aggregate: { contracts: perDoc.length, recall: aggRecall, precision: aggPrecision, grounding: aggGrounding, verbatim: aggVerbatim, spanAccuracy: aggSpan },
     categoryRecall: [...catHits.entries()]
       .map(([c, r]) => ({ category: c, hit: r.hit, total: r.total, rate: r.hit / r.total }))
       .sort((a, b) => a.rate - b.rate),
@@ -130,7 +135,8 @@ function persist(
   md.push('|---|---|');
   md.push(`| Clause recall | ${(aggRecall * 100).toFixed(1)}% |`);
   md.push(`| Clause precision | ${(aggPrecision * 100).toFixed(1)}% |`);
-  md.push(`| Quote grounding | ${(aggGrounding * 100).toFixed(1)}% |`);
+  md.push(`| Grounding (fabrication-free) | ${(aggGrounding * 100).toFixed(1)}% |`);
+  md.push(`| Verbatim rate (word-for-word) | ${(aggVerbatim * 100).toFixed(1)}% |`);
   md.push(`| Span accuracy | ${aggSpan === null ? 'n/a' : (aggSpan * 100).toFixed(1) + '%'} |`);
   md.push(`| Spend | $${spend.totalUsd.toFixed(2)} (~$${(spend.totalUsd / (perDoc.length || 1)).toFixed(3)}/contract) |`);
   md.push('');
@@ -261,7 +267,11 @@ async function main() {
       const total = (extraction.clauses ?? []).length;
       const hallucIssues = citationIssues.filter((i: CitationIssue) => i.type === 'HALLUCINATED_QUOTE');
       for (const h of hallucIssues) hallucByType.set(h.clauseType, (hallucByType.get(h.clauseType) ?? 0) + 1);
-      const grounding = total ? (total - hallucIssues.length) / total : 1;
+      // grounding = fabrication-free (HIGH severity = "does not appear anywhere"); verbatim
+      // rate is the stricter measure that also counts MEDIUM loose/paraphrase matches.
+      const fabricated = hallucIssues.filter((h) => h.severity === 'HIGH').length;
+      const grounding = total ? (total - fabricated) / total : 1;
+      const verbatim = total ? (total - hallucIssues.length) / total : 1;
 
       // span accuracy: of our clauses that hit a real gold category, does the quote overlap the annotator span?
       const tr = truth.get(truthKey(filename));
@@ -278,7 +288,7 @@ async function main() {
 
       perDoc.push({
         name: short, model, documentType: cls.documentType,
-        goldCount: goldCats.length, oursCount: total, recall, precision, grounding, spanAcc,
+        goldCount: goldCats.length, oursCount: total, recall, precision, grounding, verbatim, spanAcc,
         missedCategories, falsePositives,
         hallucinatedQuotes: hallucIssues.map((h) => ({ clauseType: h.clauseType, quote: h.quote, similarity: h.similarity })),
       });
@@ -305,7 +315,8 @@ async function main() {
   console.log(`\n=== aggregate over ${perDoc.length} contracts ===`);
   console.log(`  mean clause recall:    ${(mean(perDoc.map((d) => d.recall)) * 100).toFixed(1)}%`);
   console.log(`  mean clause precision: ${(mean(perDoc.map((d) => d.precision)) * 100).toFixed(1)}%`);
-  console.log(`  mean quote grounding:  ${(mean(perDoc.map((d) => d.grounding)) * 100).toFixed(1)}%`);
+  console.log(`  mean grounding:        ${(mean(perDoc.map((d) => d.grounding)) * 100).toFixed(1)}%  (fabrication-free)`);
+  console.log(`  mean verbatim rate:    ${(mean(perDoc.map((d) => d.verbatim)) * 100).toFixed(1)}%  (word-for-word)`);
   console.log(`  span accuracy:         ${spanDenTotal ? (spanHitTotal / spanDenTotal * 100).toFixed(1) + '%' : 'n/a'}  (of ${spanDenTotal} correct-category clauses, quote overlaps annotator span)`);
 
   const spend = usageMeter.snapshot();

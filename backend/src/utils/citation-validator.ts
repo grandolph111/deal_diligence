@@ -153,6 +153,13 @@ export const validateCitations = (
         similarity: bestSim,
         description: `Quote appears on page ${bestPage}, not cited page ${cited}.`,
       });
+    } else if (globalBest >= THRESHOLD_FLAG) {
+      // The quote IS present in the document at high fidelity, but not within any
+      // single page window — it straddles a page boundary (matches the joined
+      // fullText) or the page split landed mid-quote. This is grounded, NOT a
+      // hallucination. (Previously this fell through to the loose-match branch and
+      // was mis-flagged, understating grounding.)
+      continue;
     } else {
       issues.push({
         type: 'HALLUCINATED_QUOTE',

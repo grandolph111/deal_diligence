@@ -52,7 +52,7 @@ async function main() {
   }
   console.log(`Scoring ${docs.length} persisted docs vs AUTHORITATIVE CUAD_v1.json (no Claude calls)\n`);
 
-  interface Row { name: string; recall: number; precision: number; grounding: number; spanAcc: number | null; gold: number; ours: number; missed: string[]; metaGold: number }
+  interface Row { name: string; recall: number; precision: number; grounding: number; verbatim: number; spanAcc: number | null; gold: number; ours: number; missed: string[]; metaGold: number }
   const perDoc: Row[] = [];
   const catHits = new Map<string, { hit: number; total: number }>();
   const catFalsePos = new Map<string, number>();
@@ -89,10 +89,16 @@ async function main() {
     const pdfPath = pdfIndex.get(d.name.toLowerCase());
     let pages: string[] | null = null;
     if (pdfPath) pages = (await extractPdfPages(fs.readFileSync(pdfPath))).pages;
+    let verbatim = 1;
     if (pages && d.annotations.length) {
       const pseudo = { clauses: d.annotations.map((a) => ({ clauseType: a.clauseType || '', content: a.content, pageNumber: a.pageNumber ?? null, title: '', riskLevel: 'LOW' })) } as never;
-      const halluc = validateCitations(pseudo, pages).filter((i) => i.type === 'HALLUCINATED_QUOTE').length;
-      grounding = (d.annotations.length - halluc) / d.annotations.length;
+      const halluc = validateCitations(pseudo, pages).filter((i) => i.type === 'HALLUCINATED_QUOTE');
+      // GROUNDING = fabrication-free rate: only HIGH-severity (globalBest<0.5, "does not
+      // appear anywhere") is a true hallucination. MEDIUM = a loose/paraphrase match that
+      // IS present but not verbatim — that belongs in the stricter verbatim rate, not here.
+      const fabricated = halluc.filter((i) => i.severity === 'HIGH').length;
+      grounding = (d.annotations.length - fabricated) / d.annotations.length;
+      verbatim = (d.annotations.length - halluc.length) / d.annotations.length;
     }
 
     // span accuracy (NEW): of our clauses that hit a real gold category, does the quote
@@ -110,7 +116,7 @@ async function main() {
     spanHitTotal += spanHit; spanDenTotal += spanDen;
     const spanAcc = spanDen ? spanHit / spanDen : null;
 
-    perDoc.push({ name: d.name.slice(0, 44), recall, precision, grounding, spanAcc, gold: goldClause.length, ours: d.annotations.length, missed, metaGold: t.metadata.size });
+    perDoc.push({ name: d.name.slice(0, 44), recall, precision, grounding, verbatim, spanAcc, gold: goldClause.length, ours: d.annotations.length, missed, metaGold: t.metadata.size });
     console.log(`  ${d.name.slice(0, 44).padEnd(46)} recall=${(recall * 100).toFixed(0)}% (${hit}/${goldClause.length}) prec=${(precision * 100).toFixed(0)}% ground=${(grounding * 100).toFixed(0)}% span=${spanAcc === null ? 'n/a' : (spanAcc * 100).toFixed(0) + '%'}`);
   }
 
@@ -119,12 +125,14 @@ async function main() {
     recall: mean(perDoc.map((d) => d.recall)),
     precision: mean(perDoc.map((d) => d.precision)),
     grounding: mean(perDoc.map((d) => d.grounding)),
+    verbatim: mean(perDoc.map((d) => d.verbatim)),
     spanAccuracy: spanDenTotal ? spanHitTotal / spanDenTotal : 0,
   };
   console.log(`\n=== ${perDoc.length} contracts vs authoritative CUAD_v1.json ===`);
   console.log(`  clause recall:    ${(agg.recall * 100).toFixed(1)}%`);
   console.log(`  clause precision: ${(agg.precision * 100).toFixed(1)}%`);
-  console.log(`  quote grounding:  ${(agg.grounding * 100).toFixed(1)}%`);
+  console.log(`  grounding:        ${(agg.grounding * 100).toFixed(1)}%  (fabrication-free: quote is NOT invented)`);
+  console.log(`  verbatim rate:    ${(agg.verbatim * 100).toFixed(1)}%  (stricter: quote matches source word-for-word)`);
   console.log(`  span accuracy:    ${(agg.spanAccuracy * 100).toFixed(1)}%  (of ${spanDenTotal} correct-category clauses, quote overlaps annotator span)`);
 
   const worst = [...catHits.entries()].map(([c, r]) => ({ c, rate: r.hit / r.total, ...r })).sort((a, b) => a.rate - b.rate || b.total - a.total).slice(0, 12);
