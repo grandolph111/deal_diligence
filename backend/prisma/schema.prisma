@@ -408,6 +408,11 @@ model Document {
   retryCount       Int?           @default(0)
   lastError        String?
 
+  // Async bulk extraction. Set while processingStatus = BATCHED; the batch
+  // poller matches results back by document id (used as the batch custom_id).
+  extractionBatchId String?
+  extractionBatch   ExtractionBatch? @relation(fields: [extractionBatchId], references: [id], onDelete: SetNull)
+
   // Ingestion triage (scale): priority tier decides extraction fidelity + queue order.
   priority        DocumentPriority @default(P2)
   priorityReason  String?
@@ -480,8 +485,23 @@ model Document {
 enum DocumentStatus {
   PENDING
   PROCESSING
+  // Submitted to the Message Batches API and awaiting results. Distinct from
+  // PROCESSING because nothing is in flight locally — the job lives on
+  // Anthropic's side and is recovered by polling, so it must survive a restart
+  // without being re-claimed by the synchronous queue.
+  BATCHED
   COMPLETE
   FAILED
+}
+
+// A submission to the Message Batches API. Bulk (P2/P3) backlogs above a
+// threshold are extracted asynchronously at 50% cost rather than contending with
+// interactive traffic for the same per-minute rate limit.
+enum ExtractionBatchStatus {
+  SUBMITTED
+  ENDED
+  FAILED
+  CANCELED
 }
 
 // Ingestion priority tier — decides model fidelity, extraction depth, and queue order.
@@ -875,4 +895,31 @@ model ProvisionEmbedding {
   node LibraryNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+}
+
+/// A Message Batches API submission covering many bulk documents.
+///
+/// Tracked in Postgres rather than memory because a batch can take up to 24
+/// hours and must survive restarts: on boot the poller reconciles every
+/// SUBMITTED batch against the API, which is the only way a document sitting in
+/// BATCHED ever gets released.
+model ExtractionBatch {
+  id     String                @id /// Anthropic batch id (msgbatch_...)
+  status ExtractionBatchStatus @default(SUBMITTED)
+
+  documentCount  Int
+  succeededCount Int @default(0)
+  erroredCount   Int @default(0)
+
+  /// Model every request in the batch was submitted with.
+  model String
+
+  lastError String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  endedAt   DateTime?
+
+  documents Document[]
+
+  @@index([status])
 }

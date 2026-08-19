@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { Document, DocumentStatus } from '@prisma/client';
 import { s3Service } from '../../services/s3.service';
+import { deleteParsedPages } from '../../services/parsed-page-cache.service';
 import { ApiError } from '../../utils/ApiError';
 import { InitiateUploadInput, ListDocumentsQuery } from './documents.validators';
 import { foldersService } from '../folders/folders.service';
@@ -296,6 +297,12 @@ export const documentsService = {
         console.error(`Failed to delete S3 object: ${document.s3Key}`);
       }
     }
+
+    // Drop the cached page parse alongside the source. It is ETag-guarded so a
+    // stale entry could not be served anyway, but leaving derived copies of a
+    // deleted document's full text in object storage is not a defensible
+    // position for a diligence platform.
+    await deleteParsedPages(documentId);
 
     // Delete from database
     await prisma.document.delete({

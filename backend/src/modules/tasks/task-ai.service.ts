@@ -12,7 +12,7 @@ import { config, isClaudeConfigured } from '../../config';
 import { s3Service } from '../../services/s3.service';
 import { dealBriefService } from '../../services/deal-brief.service';
 import { resolveProjectScope } from '../../services/scope.service';
-import { libraryTocRetriever } from '../../integrations/retrieval';
+import { defaultRetriever } from '../../integrations/retrieval';
 import {
   generateRiskReport,
   type AttachedDoc,
@@ -199,7 +199,7 @@ export const taskAiService = {
       // No docs attached + library enabled → navigate the diligence ToC for the
       // evidence relevant to this task's prompt (scoped), instead of relying on
       // the brief alone. AttachedDoc and the retriever's DocRef share a shape.
-      if (task.attachments.length === 0 && config.library.enabled && task.aiPrompt) {
+      if (task.attachments.length === 0 && task.aiPrompt) {
         const user = await prisma.user.findUnique({
           where: { id: membership.userId },
           select: { id: true, platformRole: true, companyId: true },
@@ -207,7 +207,7 @@ export const taskAiService = {
         if (user) {
           const scope = await resolveProjectScope(user, task.projectId);
           if (scope.isFullAccess || scope.allowedFolderIds.length > 0) {
-            const retrieved = await libraryTocRetriever.search(task.aiPrompt, {
+            const retrieved = await defaultRetriever.search(task.aiPrompt, {
               projectId: task.projectId,
               folderIds: scope.isFullAccess ? undefined : scope.allowedFolderIds,
             });

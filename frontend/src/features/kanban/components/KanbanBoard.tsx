@@ -156,6 +156,7 @@ export function KanbanBoard({ projectId, boardId, boardFolderIds, currentUserId,
       </DndContext>
 
       <TaskCreateModal
+        projectId={projectId}
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onCreate={createTask}

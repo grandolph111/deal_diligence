@@ -4,6 +4,7 @@ import { TaskForm } from './TaskForm';
 import type { Task, TaskStatus, CreateTaskDto, ProjectMember } from '../../../types/api';
 
 interface TaskCreateModalProps {
+  projectId?: string;
   isOpen: boolean;
   onClose: () => void;
   onCreate: (data: CreateTaskDto) => Promise<Task>;
@@ -11,7 +12,7 @@ interface TaskCreateModalProps {
   members?: ProjectMember[];
 }
 
-export function TaskCreateModal({ isOpen, onClose, onCreate, initialStatus, members }: TaskCreateModalProps) {
+export function TaskCreateModal({ projectId, isOpen, onClose, onCreate, initialStatus, members }: TaskCreateModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
@@ -37,6 +38,7 @@ export function TaskCreateModal({ isOpen, onClose, onCreate, initialStatus, memb
         </div>
         <div className="modal-content">
           <TaskForm
+            projectId={projectId}
             initialStatus={initialStatus}
             members={members}
             onSubmit={handleCreate}

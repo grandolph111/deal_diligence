@@ -116,7 +116,21 @@ export const extractionResponseSchema = z.object({
           title: z.string().nullable().optional(),
           // content can come back null from Haiku if no verbatim quote was
           // captured. Coerce to '' rather than failing the whole extraction.
+          // In anchor mode this arrives empty and is filled in deterministically
+          // from the source text — see utils/anchor-resolver.
           content: z.preprocess(nullToEmptyString, z.string()),
+          /**
+           * Anchor mode: the opening and closing few words of the clause, used
+           * to locate it in the parsed page text.
+           *
+           * Emitting a locator instead of the whole quote is what removes the
+           * dominant output cost — the model was spending most of its
+           * generation time retyping a document we already hold in memory. The
+           * resolved span is then verbatim by construction rather than by
+           * instruction, which is the stronger guarantee.
+           */
+          startAnchor: z.preprocess(nullToEmptyString, z.string()).optional(),
+          endAnchor: z.preprocess(nullToEmptyString, z.string()).optional(),
           pageNumber: z.number().int().nullable().optional(),
           riskLevel: z.enum(['LOW', 'MEDIUM', 'HIGH']).nullable().optional(),
           confidence: z.number().min(0).max(1).default(0.9),
@@ -179,7 +193,6 @@ export const verifyResponseSchema = z.object({
       )
       .default([])
   ),
-  correctedFactSheet: z.string().optional(),
 });
 export type VerifyResponse = z.infer<typeof verifyResponseSchema>;
 
@@ -442,3 +455,53 @@ export const emptyPlaybook: Playbook = {
   redFlags: [],
   standardPositions: [],
 };
+
+// ============================================================
+// Window consolidation (large documents split into page windows)
+// ============================================================
+
+/**
+ * Document-level judgment reconstructed after per-window extraction.
+ *
+ * Only the fields a single window genuinely cannot decide correctly live here.
+ * Clause/entity/relationship lists are merged deterministically in code — the
+ * model is asked for the things that require seeing the whole document at once.
+ */
+export const consolidateResponseSchema = z.object({
+  riskScore: z.number().int().min(0).max(10),
+  riskLevel: z.enum(['LOW', 'MEDIUM', 'HIGH']),
+  riskSummary: z.string().default(''),
+  confidenceScore: z.number().int().min(0).max(100).default(85),
+  confidenceReason: z.string().default(''),
+  parties: z.preprocess(jsonArrayPreprocessor, z.array(z.string()).default([])),
+  effectiveDate: z.string().nullable().optional(),
+  governingLaw: z.string().nullable().optional(),
+  currency: z.string().nullable().optional(),
+  dealValue: z.number().nullable().optional(),
+  /**
+   * Risks that are invisible from inside any single window — a cap in one
+   * article contradicted by a survival period in another, a defined term used
+   * inconsistently across the document, an obligation with no matching remedy.
+   * This is the reason consolidation is a model pass and not a reduce().
+   */
+  crossWindowFindings: z.preprocess(
+    jsonArrayPreprocessor,
+    z
+      .array(
+        z.object({
+          note: z.string(),
+          severity: z.enum(['LOW', 'MEDIUM', 'HIGH']).default('MEDIUM'),
+          clauseTypes: z.preprocess(
+            jsonArrayPreprocessor,
+            z.array(z.string()).default([])
+          ),
+          pageNumbers: z.preprocess(
+            jsonArrayPreprocessor,
+            z.array(z.number().int()).default([])
+          ),
+        })
+      )
+      .default([])
+  ),
+});
+export type ConsolidateResponse = z.infer<typeof consolidateResponseSchema>;

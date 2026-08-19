@@ -2,7 +2,7 @@ import { prisma } from '../../config/database';
 import { ChatConversation, ChatMessage, ChatMessageRole, ProjectMember, Prisma } from '@prisma/client';
 import { ApiError } from '../../utils/ApiError';
 import { runChat, isMock, getClaudeClient, getModelId } from '../../integrations/claude';
-import { stuffRetriever, libraryTocRetriever } from '../../integrations/retrieval';
+import { stuffRetriever, defaultRetriever } from '../../integrations/retrieval';
 import { dealBriefService } from '../../services/deal-brief.service';
 import { resolveProjectScope } from '../../services/scope.service';
 import { config } from '../../config';
@@ -296,8 +296,11 @@ export const chatService = {
         ...retrievalScope,
         documentIds: data.documentIds,
       });
-    } else if (config.library.enabled) {
-      pinnedDocs = await libraryTocRetriever.search(data.content, retrievalScope);
+    } else {
+      // Checklist navigation is the default. It degrades to bounded stuffing
+      // when a project has no library evidence yet, so this no longer depends
+      // on the LIBRARY_ENABLED flag — an unpopulated project still answers.
+      pinnedDocs = await defaultRetriever.search(data.content, retrievalScope);
     }
 
     // If Claude isn't configured, return a helpful fallback message.

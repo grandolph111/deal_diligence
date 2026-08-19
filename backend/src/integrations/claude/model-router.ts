@@ -1,14 +1,16 @@
 /**
  * Tiered model selection for extraction.
  *
- * Rule of thumb: the bigger and more complex the document, the bigger the model.
- *   - Small (≤ N pages): Haiku — cheap, fine for NDAs, employment letters, resolutions.
- *   - Medium (N < p ≤ M pages): Sonnet — balanced; good for most SPAs/APAs/LOIs.
+ * Sonnet is the baseline: every tier at or below medium resolves to it. Extraction
+ * quality is the product, and a short document is cheap to read well, so there is no
+ * tier that trades measured accuracy for a few cents.
+ *   - Small (≤ N pages) / Medium (N < p ≤ M pages): Sonnet — the evaluated baseline.
  *   - Large (> M pages): Opus — premium; complex collaboration/debt agreements.
  *
- * Document type can override up a tier (e.g. SPA at 12 pages still wants Sonnet —
- * dense terms per page) or down (e.g. a 30-page cap-table FINANCIAL doc can stay on
- * Haiku — low extraction complexity).
+ * The small/medium split is retained because it is the seam a cheaper tier would slot
+ * into, and because document type can still bump a short dense instrument (SPA/APA/LOI)
+ * up out of it. Point CLAUDE_EXTRACTION_MODEL_SMALL at a cheaper model to re-open that
+ * seam — and run the CUAD harness against it first.
  *
  * Thresholds + model IDs are env-configurable.
  */
@@ -55,13 +57,14 @@ const applyTypeAdjustment = (
 ): { tier: ModelTier; bumped: boolean } => {
   if (!documentType) return { tier: baseTier, bumped: false };
 
-  // Dense deal instruments → never use Haiku; bump small → medium.
+  // Dense deal instruments → never read at the small tier; bump small → medium.
   if (TYPES_FORCING_MEDIUM.includes(documentType) && baseTier === 'small') {
     return { tier: 'medium', bumped: true };
   }
 
-  // Light document types → allow Haiku even if page count is in medium range.
-  // Skipping this for now; default to page count. Opt in later if cost pressure.
+  // Light document types → could be allowed to drop a tier even when the page count
+  // sits in the medium band. Not wired: with Sonnet as the baseline there is nothing
+  // cheaper to drop to. Revisit only alongside an eval of whatever tier gets added.
 
   return { tier: baseTier, bumped: false };
 };

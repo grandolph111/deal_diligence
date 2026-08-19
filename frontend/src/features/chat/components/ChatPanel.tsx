@@ -5,6 +5,8 @@ import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 import { SelectedDocuments } from './SelectedDocuments';
 import { useChat } from '../hooks/useChat';
+import { useProjectReadiness } from '../../../api/hooks/useProjectReadiness';
+import { AiReadinessGate } from '../../../components/ai/AiReadinessGate';
 
 interface SelectedDocument {
   id: string;
@@ -30,6 +32,7 @@ export function ChatPanel({
   onDocumentClick,
   initialDocument,
 }: ChatPanelProps) {
+  const { readiness } = useProjectReadiness(projectId);
   const {
     conversations,
     currentConversation,
@@ -127,8 +130,9 @@ export function ChatPanel({
           </div>
         )}
 
-        {/* Content */}
+        {/* Content — gated on the deal having been read far enough to answer */}
         <div className="chat-panel-content">
+          <AiReadinessGate readiness={readiness} onUploadClick={onClose}>
           {currentConversation ? (
             // Show messages for current conversation
             <div className="chat-messages-container">
@@ -151,10 +155,12 @@ export function ChatPanel({
               onRename={updateConversationTitle}
             />
           )}
+          </AiReadinessGate>
         </div>
 
         {/* Input (only show when in a conversation or starting fresh) */}
-        {(currentConversation || conversations.length === 0) && (
+        {readiness?.ready !== false &&
+          (currentConversation || conversations.length === 0) && (
           <div className="chat-panel-footer">
             {/* Show selected documents */}
             <SelectedDocuments

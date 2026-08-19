@@ -4,6 +4,7 @@ import { prisma } from './config/database';
 import { s3Service } from './services/s3.service';
 import { boardsService } from './services/boards.service';
 import { extractionQueue } from './services/extraction-queue.service';
+import { extractionBatchService } from './services/extraction-batch.service';
 
 const startServer = async () => {
   try {
@@ -48,6 +49,11 @@ const startServer = async () => {
 
     // Start the durable, priority-ordered extraction queue worker.
     extractionQueue.startWorker();
+    // Bulk (P2/P3) backlogs above a threshold are extracted asynchronously at
+    // 50% cost instead of contending with interactive traffic. No-op unless
+    // CLAUDE_BATCH_ENABLED=true. Also recovers documents left in BATCHED by a
+    // restart — nothing else can release them.
+    extractionBatchService.startWorker();
 
     app.listen(config.port, () => {
       console.log('');

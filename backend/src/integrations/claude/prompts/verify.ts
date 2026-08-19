@@ -20,7 +20,7 @@ For each problem, emit an issue via the submit_verification tool.
 # Rules
 
 - Be strict. False positives are cheaper than undetected hallucinations.
-- If you can safely auto-correct the entire fact sheet (e.g. fix page numbers, remove a fabricated clause), return it in correctedFactSheet. Otherwise leave that field unset.
+- Report problems only. Do NOT rewrite or restate the fact sheet — it is generated deterministically from structured fields, so a prose replacement would be discarded. Keep each description to one sentence.
 - If the fact sheet is materially correct, verified=true and issues=[].
 - Return ONLY the tool call.
 

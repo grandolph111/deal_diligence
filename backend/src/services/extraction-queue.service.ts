@@ -87,6 +87,12 @@ export const extractionQueue = {
     started = true;
     setInterval(() => this.notify(), POLL_MS).unref?.();
     this.notify();
+    // Verification runs off the extraction critical path, so an interrupted one
+    // leaves the document at verificationStatus='PENDING' with nothing left to
+    // drive it. Resume those on boot.
+    void extractionService.sweepStaleVerifications().catch((err) => {
+      console.error('[queue] verification sweep failed:', err instanceof Error ? err.message : err);
+    });
     // eslint-disable-next-line no-console
     console.log(`✓ Extraction queue started (concurrency=${CONCURRENCY}, poll=${POLL_MS}ms)`);
   },

@@ -471,7 +471,9 @@ export interface FolderTreeNode extends Folder {
 }
 
 // Document model
-export type VerificationStatus = 'VERIFIED' | 'NEEDS_REVIEW' | 'FAILED';
+// PENDING = extraction is complete and readable; the verification pass is
+// still running off the critical path and will patch this when it lands.
+export type VerificationStatus = 'VERIFIED' | 'NEEDS_REVIEW' | 'FAILED' | 'PENDING';
 
 export interface VerificationIssue {
   type: string;
@@ -1200,4 +1202,41 @@ export interface SendMessageResponse {
   assistantMessage: ChatMessage;
   citations: Citation[];
   generatedTitle?: string;
+}
+
+// ============================================================
+// AI readiness
+// ============================================================
+
+/**
+ * Whether a deal has been read far enough for AI chat and Kanban reports to
+ * answer from it.
+ *
+ * Retrieval searches the knowledge library, and the library is built by
+ * extraction — so before the first document finishes there is nothing to search.
+ * Surfacing that as an explicit state is deliberate: an answer drawn from a
+ * half-ingested deal that does not say so is the worst outcome in diligence,
+ * where the whole question is what you might have missed.
+ */
+export type ProjectReadinessState =
+  | 'EMPTY'
+  | 'PROCESSING'
+  | 'PARTIAL'
+  | 'READY'
+  | 'NO_ACCESS'
+  | 'FAILED';
+
+export interface ProjectReadiness {
+  total: number;
+  complete: number;
+  processing: number;
+  pending: number;
+  failed: number;
+  evidenceCount: number;
+  /** At least one document has been extracted — AI features can answer. */
+  ready: boolean;
+  /** Ready, but still ingesting; answers will get more complete. */
+  partial: boolean;
+  state: ProjectReadinessState;
+  message: string;
 }

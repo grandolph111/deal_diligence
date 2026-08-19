@@ -11,6 +11,12 @@
 
 import mammoth from 'mammoth';
 import { PDFDocument } from 'pdf-lib';
+import { resolveExtractionAnchors } from '../utils/anchor-resolver';
+import { readParsedPages, writeParsedPages } from './parsed-page-cache.service';
+import {
+  extractDocumentWindowed,
+  type WindowSource,
+} from '../integrations/claude/extract-windowed';
 import { DocumentStatus, Prisma } from '@prisma/client';
 import { prisma } from '../config/database';
 import { config, isClaudeConfigured } from '../config';
@@ -65,6 +71,144 @@ const readPdfPageCount = async (bytes: Buffer): Promise<number | null> => {
   }
 };
 
+/* ---------- Source preparation ---------- */
+
+const DOCX_MIME =
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+const isDocx = (mimeType: string, filename: string): boolean =>
+  mimeType === DOCX_MIME || filename.toLowerCase().endsWith('.docx');
+
+/**
+ * A document normalized into whatever form we're going to send to Claude, plus
+ * the parsed page text every downstream stage reuses.
+ *
+ * `kind: 'text'` is strongly preferred for PDFs. Shipping a PDF as a base64
+ * document block costs ~3,200 input tokens/page (it is rendered to images);
+ * the same pages as parsed text cost ~740. Measured on a 7-page contract:
+ * 22,209 input tokens as PDF vs 5,177 as text — for an identical 68s wall
+ * clock and the same clause coverage, because extraction latency is bound by
+ * OUTPUT tokens, not input. So the PDF path buys nothing but cost, and we take
+ * it only when the file has no usable text layer (scans / image-only PDFs).
+ */
+interface DocumentSource {
+  /** What we send to Claude. */
+  kind: 'pdf' | 'text';
+  /** Present when kind === 'pdf'. */
+  bytes?: Buffer;
+  /** Present when kind === 'text'. Page-marked for PDFs, raw for docx/plain. */
+  text?: string;
+  /** Parsed per-page text. Empty when unavailable (docx, plain text, scans). */
+  pages: string[];
+  /** True when `text` carries `=== Page N ===` markers. */
+  pageMarked: boolean;
+  /** Page count from the PDF itself (authoritative), null for non-PDFs. */
+  pageCount: number | null;
+}
+
+/**
+ * True when a PDF's extracted text layer is rich enough to extract from.
+ * Scanned/image-only PDFs parse to a handful of stray characters; sending those
+ * to Claude as text would silently gut the extraction, so they must keep the
+ * (expensive) native PDF path where Claude does its own OCR.
+ */
+export const hasUsableTextLayer = (pages: string[]): boolean => {
+  if (pages.length === 0) return false;
+  const totalChars = pages.reduce((sum, p) => sum + p.length, 0);
+  return totalChars >= 500 && totalChars / pages.length >= 40;
+};
+
+export const withPageMarkers = (pages: string[]): string =>
+  pages.map((p, i) => `=== Page ${i + 1} ===\n${p}`).join('\n\n');
+
+/**
+ * Parse a document ONCE into the form we send to Claude plus reusable page text.
+ * Every later stage (extraction, citation validator, verification) reads from
+ * this — the source is never parsed, downloaded, or paid for twice.
+ */
+export const prepareSource = async (args: {
+  filename: string;
+  mimeType: string;
+  bytes: Buffer;
+  /**
+   * Enables the S3 parse cache. Omit for callers that already hold bytes with
+   * no stable identity (an eval script, an ad-hoc parse) — they simply parse.
+   */
+  documentId?: string;
+  /** Source object ETag, so a re-upload cannot serve the previous file's text. */
+  sourceETag?: string | null;
+}): Promise<DocumentSource> => {
+  if (args.mimeType === 'application/pdf') {
+    // A cached parse skips the most expensive local step. It matters most for
+    // the paths that run long after extraction — verification sweeps, batch
+    // results, and re-checking anchored clauses against their stored offsets,
+    // all of which would otherwise re-parse the whole contract to read one page.
+    if (args.documentId) {
+      const cached = await readParsedPages(args.documentId, args.sourceETag ?? null);
+      if (cached && hasUsableTextLayer(cached.pages)) {
+        return {
+          kind: 'text',
+          text: withPageMarkers(cached.pages),
+          pages: cached.pages,
+          pageMarked: true,
+          pageCount: cached.pageCount ?? cached.pages.length,
+        };
+      }
+    }
+
+    const [pageCount, parsed] = await Promise.all([
+      readPdfPageCount(args.bytes),
+      extractPdfPages(args.bytes).catch(() => ({ pages: [] as string[] })),
+    ]);
+    const pages = parsed.pages;
+    if (args.documentId) {
+      // Fire-and-forget: the parse is already in hand, so a slow or failed
+      // cache write must not hold up (or fail) the extraction behind it.
+      void writeParsedPages(
+        args.documentId,
+        args.sourceETag ?? null,
+        pages,
+        pageCount ?? pages.length
+      );
+    }
+    if (hasUsableTextLayer(pages)) {
+      return {
+        kind: 'text',
+        text: withPageMarkers(pages),
+        pages,
+        pageMarked: true,
+        pageCount: pageCount ?? pages.length,
+      };
+    }
+    // No usable text layer — scan or image-only. Fall back to native PDF input
+    // so Claude reads the pixels. `pages` stays whatever we got (often empty),
+    // which correctly disables the text-based validator and verifier.
+    console.log(
+      `[extraction] ${args.filename} → no usable text layer (${pages.length} pages parsed); using native PDF input`
+    );
+    return {
+      kind: 'pdf',
+      bytes: args.bytes,
+      pages,
+      pageMarked: false,
+      pageCount,
+    };
+  }
+
+  if (isDocx(args.mimeType, args.filename)) {
+    const { value } = await mammoth.extractRawText({ buffer: args.bytes });
+    return { kind: 'text', text: value, pages: [], pageMarked: false, pageCount: null };
+  }
+
+  return {
+    kind: 'text',
+    text: args.bytes.toString('utf8'),
+    pages: [],
+    pageMarked: false,
+    pageCount: null,
+  };
+};
+
 /**
  * Normalize entity types to the canonical vocabulary the frontend expects.
  * Claude sometimes emits synonyms (COMPANY vs ORGANIZATION, AMOUNT vs MONEY)
@@ -96,6 +240,50 @@ const normalizeEntityType = (raw: string): string => {
 
 const MAX_RETRIES = 3;
 const LOW_CONFIDENCE_THRESHOLD = 0.8;
+
+/**
+ * Verification runs AFTER the document is marked COMPLETE, so it is not counted
+ * by the extraction queue's own concurrency cap. Without a separate bound, a
+ * burst of N extractions finishing together would fire N verifications on top of
+ * the next N extractions the queue immediately claims — doubling in-flight Claude
+ * calls and tripping the per-minute rate limit. Cap them independently.
+ */
+const VERIFY_CONCURRENCY = Math.max(
+  1,
+  parseInt(process.env.EXTRACTION_VERIFY_CONCURRENCY || '3', 10)
+);
+let verifyInFlight = 0;
+const verifyWaiters: Array<() => void> = [];
+
+const acquireVerifySlot = async (): Promise<() => void> => {
+  if (verifyInFlight >= VERIFY_CONCURRENCY) {
+    await new Promise<void>((resolve) => verifyWaiters.push(resolve));
+  }
+  verifyInFlight += 1;
+  let released = false;
+  return () => {
+    if (released) return; // idempotent — double-release must not corrupt the count
+    released = true;
+    verifyInFlight -= 1;
+    verifyWaiters.shift()?.();
+  };
+};
+
+/**
+ * A document is only worth the (Sonnet-tier) verification pass where being wrong
+ * is costly: material documents, or an extraction the model itself flagged as
+ * shaky. Text-based, so it needs parsed pages or the raw PDF to fall back on.
+ */
+export const shouldVerify = (args: {
+  priority?: string;
+  confidenceScore?: number | null;
+  isPdf: boolean;
+}): boolean => {
+  if (!isClaudeConfigured() || !args.isPdf) return false;
+  const material = args.priority === 'P0' || args.priority === 'P1';
+  const lowConfidence = (args.confidenceScore ?? 100) < 70;
+  return material || lowConfidence;
+};
 
 const extractionKey = (documentId: string) => `extractions/${documentId}.md`;
 
@@ -227,15 +415,20 @@ const verifyIssueToJson = (issue: VerifyResponse['issues'][number]) => ({
   suggestedCorrection: issue.suggestedCorrection ?? null,
 });
 
+export type VerificationStatus =
+  | 'VERIFIED'
+  | 'NEEDS_REVIEW'
+  | 'FAILED'
+  | 'PENDING';
+
 const determineVerificationStatus = (
   verify: VerifyResponse | null,
-  citationIssues: CitationIssue[],
-  correctionApplied: boolean
+  citationIssues: CitationIssue[]
 ): 'VERIFIED' | 'NEEDS_REVIEW' | 'FAILED' => {
   const verifyCritical = verify?.issues.some((i) => i.severity === 'CRITICAL') ?? false;
   const verifyOther = (verify?.issues.length ?? 0) > 0 || citationIssues.length > 0;
 
-  if (verifyCritical && !correctionApplied) return 'FAILED';
+  if (verifyCritical) return 'FAILED';
   if (verifyOther) return 'NEEDS_REVIEW';
   return 'VERIFIED';
 };
@@ -246,9 +439,16 @@ interface PipelineResult {
   classification: ClassifyResponse;
   extraction: ExtractionResponse;
   citationIssues: CitationIssue[];
-  verify: VerifyResponse | null;
-  verificationStatus: 'VERIFIED' | 'NEEDS_REVIEW' | 'FAILED';
+  /**
+   * Status from the deterministic checks alone. 'PENDING' when a verification
+   * pass has been queued — it will be patched in when that pass lands.
+   */
+  verificationStatus: VerificationStatus;
   verificationIssues: Array<Record<string, unknown>>;
+  /** Parsed page text, carried through so background verification never re-parses. */
+  pages: string[];
+  /** Whether this document earned a verification pass. */
+  verifyQueued: boolean;
 }
 
 export const extractionService = {
@@ -311,6 +511,8 @@ export const extractionService = {
         bytes,
         projectId: document.projectId,
         priority: document.priority,
+        documentId,
+        sourceETag: etag,
       });
       // Drop "checked-but-absent" confirmations the model sometimes emits as clauses
       // (from the alwaysInclude coverage prompt) so they don't pollute the library or
@@ -355,6 +557,20 @@ export const extractionService = {
       reconciliationService
         .scheduleRebuild(document.projectId)
         .catch(() => undefined);
+
+      // Fire the verification pass AFTER the document is COMPLETE and readable.
+      // Deliberately not awaited — it only patches review metadata. Errors are
+      // swallowed inside verifyDocument so a rejected promise can never bubble
+      // into the extraction retry path or crash the process.
+      if (pipeline.verifyQueued) {
+        void this.verifyDocument(documentId, {
+          pages: pipeline.pages,
+          extraction: pipeline.extraction,
+          documentType: pipeline.classification.documentType,
+          filename: document.name,
+          citationIssues: pipeline.citationIssues,
+        });
+      }
     } catch (error) {
       const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
       console.error(
@@ -370,44 +586,68 @@ export const extractionService = {
     mimeType: string;
     bytes: Buffer;
     projectId: string;
+    /** Enables the S3 parse cache. Omitted by ad-hoc callers (eval scripts). */
+    documentId?: string;
+    sourceETag?: string | null;
     priority?: 'P0' | 'P1' | 'P2' | 'P3';
+    /**
+     * Extraction that already happened elsewhere — currently the Message
+     * Batches path, where the model call ran hours earlier on Anthropic's side.
+     *
+     * Supplying it here rather than giving the batch path its own pipeline is
+     * deliberate: fact-sheet rendering, citation validation, adjudication and
+     * verification gating are the same work regardless of how the extraction
+     * was obtained, and a second copy of that sequence would drift from this
+     * one within a release or two.
+     */
+    precomputed?: {
+      extraction: ExtractionResponse;
+      classification: ClassifyResponse;
+    };
   }): Promise<PipelineResult> {
-    // 1. Classify
-    const classification = await this.classify(args);
+    // 1. Parse the source ONCE, up front. Everything downstream — classification,
+    //    extraction, the citation validator, verification — reads from this. For
+    //    PDFs with a text layer this also swaps the input we send Claude from
+    //    base64 images to parsed text (~4x fewer input tokens, same latency).
+    const source = await prepareSource(args);
+    if (source.kind === 'text' && source.pageMarked) {
+      console.log(
+        `[extraction] ${args.filename} → text layer OK (${source.pages.length} pages, ${source.text!.length} chars); sending as text`
+      );
+    }
 
-    // 2. Page count (cheap local read, PDF only) — drives model router
-    const pageCount =
-      args.mimeType === 'application/pdf'
-        ? await readPdfPageCount(args.bytes)
-        : null;
-
-    // 3. Pick extraction model based on size + type
-    const decision = pickExtractionModel({
-      pageCount,
-      documentType: classification.documentType,
-      priority: args.priority,
-    });
-    // eslint-disable-next-line no-console
-    console.log(
-      `[extraction] ${args.filename} → routed to ${decision.model} (${decision.reason})`
-    );
-
-    // 4. Load playbooks: deal-specific (structured) + firm-wide house (markdown).
-    const [playbook, companyPlaybookMarkdown] = await Promise.all([
+    // 2. Classify + load playbooks concurrently — independent of each other.
+    //    A batched document arrives already classified and extracted, so both
+    //    model calls are skipped and only the playbooks are loaded.
+    const [classification, playbook, companyPlaybookMarkdown] = await Promise.all([
+      args.precomputed
+        ? Promise.resolve(args.precomputed.classification)
+        : this.classify({ filename: args.filename, source }),
       playbookService.get(args.projectId),
       playbookService.getCompanyMarkdown(args.projectId),
     ]);
 
-    // 5. Extract
-    const extraction = await this.extract({
-      filename: args.filename,
-      mimeType: args.mimeType,
-      bytes: args.bytes,
+    // 3. Pick the extraction model based on size + type.
+    const decision = pickExtractionModel({
+      pageCount: source.pageCount,
       documentType: classification.documentType,
-      playbook,
-      companyPlaybookMarkdown,
-      modelOverride: decision.model,
+      priority: args.priority,
     });
+    console.log(
+      `[extraction] ${args.filename} → routed to ${decision.model} (${decision.reason})`
+    );
+
+    // 4. Extract (unless the batch path already did).
+    const extraction =
+      args.precomputed?.extraction ??
+      (await this.extract({
+        filename: args.filename,
+        source,
+        documentType: classification.documentType,
+        playbook,
+        companyPlaybookMarkdown,
+        modelOverride: decision.model,
+      }));
 
     // Render the human-readable fact sheet deterministically from the structured
     // fields (the model no longer writes it — saves ~3-4k output tokens/doc). Fall
@@ -416,20 +656,9 @@ export const extractionService = {
       extraction.factSheet = renderFactSheet(extraction, args.filename);
     }
 
-    // 4. Parse page text ONCE — reused by the validator, the adjudicator, and the
-    //    verify pass, so the source document is never read (or paid for) twice.
-    let pages: string[] = [];
-    if (args.mimeType === 'application/pdf') {
-      try {
-        pages = (await extractPdfPages(args.bytes)).pages;
-      } catch {
-        // parse failed — validator/text-verify skip; PDF verify can still fall back
-      }
-    }
-
     // 5. Deterministic citation validator (free) — runs on EVERY document.
-    let citationIssues: CitationIssue[] = pages.length
-      ? validateCitations(extraction, pages)
+    let citationIssues: CitationIssue[] = source.pages.length
+      ? validateCitations(extraction, source.pages)
       : [];
 
     // 6. Adjudicate only the low-precision HALLUCINATED_QUOTE flags with a cheap,
@@ -437,10 +666,10 @@ export const extractionService = {
     //    only real fabrications reach a human. WRONG_PAGE flags are already
     //    precise (verbatim match located) and pass through untouched.
     const hallucinationFlags = citationIssues.filter((i) => i.type === 'HALLUCINATED_QUOTE');
-    if (isClaudeConfigured() && hallucinationFlags.length > 0 && pages.length) {
+    if (isClaudeConfigured() && hallucinationFlags.length > 0 && source.pages.length) {
       try {
         const verdicts = await adjudicateFlags({
-          pages,
+          pages: source.pages,
           flags: hallucinationFlags.map((iss) => ({
             clauseType: iss.clauseType,
             quote: iss.quote,
@@ -455,89 +684,53 @@ export const extractionService = {
       }
     }
 
-    // 7. Proactive completeness/judgment pass — only where being wrong is costly:
-    //    material docs (P0/P1) or a low-confidence extraction. This catches what
-    //    the validator can't (missed clauses, mis-rated risk). Text-based (reuses
-    //    the parsed pages); PDF only as a fallback when text parsing failed.
-    let verify: VerifyResponse | null = null;
-    const materialPriority = args.priority === 'P0' || args.priority === 'P1';
-    const lowConfidence = (extraction.confidenceScore ?? 100) < 70;
-    if (
-      isClaudeConfigured() &&
-      args.mimeType === 'application/pdf' &&
-      (materialPriority || lowConfidence)
-    ) {
-      try {
-        const base = {
-          extraction,
-          documentType: classification.documentType,
-          filename: args.filename,
-        };
-        verify = await verifyExtraction(
-          pages.length ? { ...base, pages } : { ...base, pdfBytes: args.bytes }
-        );
-      } catch {
-        // verifier failed — treat as "no verification" rather than fail extraction
-      }
-    }
-
-    // 6. Auto-correct if verify provided a full replacement fact sheet
-    let correctionApplied = false;
-    if (verify?.correctedFactSheet) {
-      extraction.factSheet = verify.correctedFactSheet;
-      correctionApplied = true;
-    }
-
-    const verificationStatus = determineVerificationStatus(
-      verify,
-      citationIssues,
-      correctionApplied
-    );
-
-    const allIssues = [
-      ...citationIssues.map(issueToJson),
-      ...(verify?.issues.map(verifyIssueToJson) ?? []),
-    ];
+    // 7. Verification is NOT on this path. It is a Sonnet-tier judgment pass that
+    //    costs ~2.5k output tokens (~45s) and produces only review metadata — no
+    //    field the reader sees first depends on it. Running it inline was a third
+    //    of end-to-end latency for zero perceived benefit, so the document goes
+    //    COMPLETE now and `process()` fires verification in the background, which
+    //    patches verificationStatus when it lands.
+    const verifyQueued = shouldVerify({
+      priority: args.priority,
+      confidenceScore: extraction.confidenceScore,
+      isPdf: args.mimeType === 'application/pdf',
+    });
 
     return {
       classification,
       extraction,
       citationIssues,
-      verify,
-      verificationStatus,
-      verificationIssues: allIssues,
+      verificationStatus: verifyQueued
+        ? 'PENDING'
+        : determineVerificationStatus(null, citationIssues),
+      verificationIssues: citationIssues.map(issueToJson),
+      pages: source.pages,
+      verifyQueued,
     };
   },
 
   async classify(args: {
     filename: string;
-    mimeType: string;
-    bytes: Buffer;
+    source: DocumentSource;
   }): Promise<ClassifyResponse> {
     if (!isClaudeConfigured()) {
       return { documentType: 'GENERIC', confidence: 0.5, reasoning: 'Mock' };
     }
     try {
-      if (args.mimeType === 'application/pdf') {
+      // Prefer parsed text — classifying from the first two pages of text costs a
+      // fraction of the same pages shipped as a PDF slice, and skips the pdf-lib
+      // re-save entirely. Native PDF only for sources with no usable text layer.
+      if (args.source.kind === 'pdf') {
         return await classifyDocument({
-          pdfBytes: args.bytes,
+          pdfBytes: args.source.bytes!,
           filename: args.filename,
           pagesToRead: 2,
         });
       }
-      if (
-        args.mimeType ===
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-        args.filename.toLowerCase().endsWith('.docx')
-      ) {
-        const { value } = await mammoth.extractRawText({ buffer: args.bytes });
-        return await classifyTextSample({
-          text: value,
-          filename: args.filename,
-        });
-      }
-      const text = args.bytes.toString('utf8');
-      return await classifyTextSample({ text, filename: args.filename });
+      const sample = args.source.pages.length
+        ? args.source.pages.slice(0, 2).join('\n\n')
+        : (args.source.text ?? '');
+      return await classifyTextSample({ text: sample, filename: args.filename });
     } catch {
       return {
         documentType: 'GENERIC',
@@ -549,8 +742,7 @@ export const extractionService = {
 
   async extract(args: {
     filename: string;
-    mimeType: string;
-    bytes: Buffer;
+    source: DocumentSource;
     documentType: DocumentType;
     playbook: Awaited<ReturnType<typeof playbookService.get>>;
     companyPlaybookMarkdown?: string | null;
@@ -565,28 +757,287 @@ export const extractionService = {
       modelOverride: args.modelOverride,
     };
 
-    if (args.mimeType === 'application/pdf') {
-      return extractDocument(
-        { kind: 'pdf', bytes: args.bytes, filename: args.filename },
-        baseOptions
+    // Large documents are read in overlapping page windows and reassembled.
+    // The constraint that forces this is OUTPUT, not input: a 300-page contract
+    // fits the context window and Claude's 600-page document limit comfortably,
+    // but it cannot emit its whole clause list inside one response — the tool
+    // call truncates mid-JSON and surfaces as a Zod failure.
+    //
+    // Windowing needs a page-addressable source. Page-marked text is the cheap
+    // path (~4x fewer input tokens, and the markers carry absolute page numbers
+    // so citations need no correction); a scan with no text layer falls back to
+    // slicing the PDF itself. A docx has no pages to slice, so it goes whole and
+    // relies on the raised output ceiling.
+    const { thresholdPages, windowPages, overlapPages, concurrency, allowPartial } =
+      config.claude.windowing;
+    const pageCount = args.source.pageCount ?? 0;
+    const canWindow =
+      pageCount > thresholdPages &&
+      ((args.source.pageMarked && args.source.pages.length > 0) ||
+        (args.source.kind === 'pdf' && !!args.source.bytes));
+
+    if (canWindow) {
+      const windowSource: WindowSource =
+        args.source.pageMarked && args.source.pages.length > 0
+          ? { kind: 'text', pages: args.source.pages }
+          : { kind: 'pdf', bytes: args.source.bytes!, pageCount };
+
+      const { extraction, stats, failedRanges } = await extractDocumentWindowed({
+        filename: args.filename,
+        documentType: args.documentType,
+        source: windowSource,
+        extractOptions: baseOptions,
+        windowPages,
+        overlapPages,
+        concurrency,
+        allowPartial,
+      });
+
+      if (failedRanges.length > 0) {
+        console.warn(
+          `[extraction] ${args.filename} → PARTIAL: ${stats.windowsFailed}/` +
+            `${stats.windowsPlanned} windows failed; fact sheet has gaps`
+        );
+      }
+      return extraction;
+    }
+
+    if (pageCount > thresholdPages) {
+      console.warn(
+        `[extraction] ${args.filename} → ${pageCount}p exceeds the ${thresholdPages}p ` +
+          `window threshold but is not page-addressable (kind=${args.source.kind}, ` +
+          `pageMarked=${args.source.pageMarked}); reading whole. Watch for output truncation.`
       );
     }
-    if (
-      args.mimeType ===
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      args.filename.toLowerCase().endsWith('.docx')
-    ) {
-      const { value } = await mammoth.extractRawText({ buffer: args.bytes });
+
+    // Anchor quoting needs parsed page text to resolve locators against, so a
+    // scan (no text layer) keeps the verbatim-quote contract.
+    const anchorMode = config.claude.anchorQuoting && args.source.pages.length > 0;
+
+    if (args.source.kind === 'pdf') {
       return extractDocument(
-        { kind: 'text', text: value, filename: args.filename },
-        baseOptions
+        { kind: 'pdf', bytes: args.source.bytes!, filename: args.filename },
+        { ...baseOptions, pageCount: args.source.pageCount, anchorMode }
       );
     }
-    const text = args.bytes.toString('utf8');
-    return extractDocument(
-      { kind: 'text', text, filename: args.filename },
-      baseOptions
+
+    const extraction = await extractDocument(
+      {
+        kind: 'text',
+        text: args.source.text ?? '',
+        filename: args.filename,
+        pageMarked: args.source.pageMarked,
+      },
+      { ...baseOptions, pageCount: args.source.pageCount, anchorMode }
     );
+
+    if (anchorMode) {
+      const { stats } = resolveExtractionAnchors(extraction, args.source.pages);
+      console.log(
+        `[anchors] ${args.filename} → ${stats.resolved}/${stats.total} resolved, ` +
+          `${stats.fellBackToQuote} fell back to quote, ${stats.dropped} dropped, ` +
+          `${stats.pagesCorrected} page(s) corrected, ` +
+          `${stats.ambiguousAnchors} ambiguous`
+      );
+    }
+    return extraction;
+  },
+
+  /**
+   * Off-critical-path verification. Runs after the document is already COMPLETE
+   * and patches `verificationStatus` / `verificationIssues` in place.
+   *
+   * `context` is the in-memory result from the extraction that just ran — the
+   * fast path, with no re-download and no re-parse. Omit it and everything is
+   * rebuilt from Postgres + S3 instead, which is what the startup sweep uses to
+   * recover documents whose verification was interrupted by a restart.
+   *
+   * Never throws: verification is advisory, and a failure here must not touch
+   * the extraction result or trigger an extraction retry.
+   */
+  async verifyDocument(
+    documentId: string,
+    context?: {
+      pages: string[];
+      extraction: ExtractionResponse;
+      documentType: DocumentType;
+      filename: string;
+      citationIssues: CitationIssue[];
+    }
+  ): Promise<void> {
+    const release = await acquireVerifySlot();
+    const startedAt = Date.now();
+    try {
+      const resolved = context ?? (await this.rebuildVerifyContext(documentId));
+      if (!resolved) return;
+
+      const { pages, extraction, documentType, filename, citationIssues } = resolved;
+
+      let verify: VerifyResponse | null = null;
+      try {
+        verify = await verifyExtraction({
+          extraction,
+          documentType,
+          filename,
+          pages,
+        });
+      } catch (err) {
+        console.error(
+          `[verify] ${filename} → verifier failed:`,
+          err instanceof Error ? err.message : err
+        );
+      }
+
+      // Verifier unreachable: fall back to what the deterministic checks alone
+      // concluded, so the document never sits at PENDING forever.
+      const status = determineVerificationStatus(verify, citationIssues);
+      const issues = [
+        ...citationIssues.map(issueToJson),
+        ...(verify?.issues.map(verifyIssueToJson) ?? []),
+      ];
+
+      // Guard the write: the document may have been re-queued, re-extracted, or
+      // deleted while we were waiting. Only patch a row still sitting at PENDING,
+      // so a fresher extraction's status is never clobbered by a stale verify.
+      const { count } = await prisma.document.updateMany({
+        where: { id: documentId, verificationStatus: 'PENDING' },
+        data: {
+          verificationStatus: status,
+          verificationIssues: (issues.length > 0
+            ? (issues as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull),
+        },
+      });
+
+      const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+      if (count === 0) {
+        console.log(
+          `[verify] ${filename} → superseded while verifying (${seconds}s); result discarded`
+        );
+      } else {
+        console.log(
+          `[verify] ${filename} → ${status} in ${seconds}s (${issues.length} issue(s))`
+        );
+      }
+    } catch (err) {
+      console.error(
+        `[verify] ${documentId} → unexpected failure:`,
+        err instanceof Error ? err.message : err
+      );
+    } finally {
+      release();
+    }
+  },
+
+  /**
+   * Reconstruct everything verification needs from durable storage, for a
+   * document whose in-memory extraction result is gone (server restarted
+   * mid-verify). Returns null when the document is no longer verifiable.
+   */
+  async rebuildVerifyContext(documentId: string): Promise<{
+    pages: string[];
+    extraction: ExtractionResponse;
+    documentType: DocumentType;
+    filename: string;
+    citationIssues: CitationIssue[];
+  } | null> {
+    const document = await prisma.document.findUnique({
+      where: { id: documentId },
+      select: {
+        name: true,
+        s3Key: true,
+        mimeType: true,
+        documentType: true,
+        extractionS3Key: true,
+        riskScore: true,
+        riskLevel: true,
+        riskSummary: true,
+        confidenceScore: true,
+        confidenceReason: true,
+        pageCount: true,
+        language: true,
+        currency: true,
+        region: true,
+        dealValue: true,
+        effectiveDate: true,
+        governingLaw: true,
+      },
+    });
+    if (!document || !document.extractionS3Key) return null;
+    if (document.mimeType !== 'application/pdf') return null;
+
+    const [bytes, annotations, entities, factSheet] = await Promise.all([
+      s3Service.getObjectBytes(document.s3Key),
+      prisma.documentAnnotation.findMany({
+        where: { documentId, annotationType: 'CLAUSE', source: 'claude' },
+      }),
+      prisma.documentEntity.findMany({ where: { documentId, source: 'claude' } }),
+      s3Service.getObjectText(document.extractionS3Key).catch(() => ''),
+    ]);
+
+    const { pages } = await extractPdfPages(bytes).catch(() => ({ pages: [] as string[] }));
+    if (!pages.length) return null; // no text layer → nothing cheap to verify against
+
+    const extraction: ExtractionResponse = {
+      factSheet: factSheet || '',
+      documentType: document.documentType,
+      riskScore: document.riskScore ?? 0,
+      riskLevel: (document.riskLevel as 'LOW' | 'MEDIUM' | 'HIGH') ?? undefined,
+      riskSummary: document.riskSummary ?? undefined,
+      confidenceScore: document.confidenceScore ?? 85,
+      confidenceReason: document.confidenceReason ?? '',
+      parties: [],
+      effectiveDate: document.effectiveDate?.toISOString().slice(0, 10) ?? null,
+      governingLaw: document.governingLaw,
+      currency: document.currency,
+      dealValue: document.dealValue == null ? null : Number(document.dealValue),
+      pageCount: document.pageCount,
+      language: document.language,
+      region: document.region,
+      entities: entities.map((e) => ({
+        type: e.entityType,
+        text: e.text,
+        normalizedText: e.normalizedText,
+        pageNumber: e.pageNumber,
+        confidence: e.confidence ?? 0.9,
+      })),
+      clauses: annotations.map((a) => ({
+        clauseType: a.clauseType ?? 'UNKNOWN',
+        title: a.title,
+        content: a.content ?? '',
+        pageNumber: a.pageNumber,
+        riskLevel: (a.riskLevel as 'LOW' | 'MEDIUM' | 'HIGH' | null) ?? null,
+        confidence: a.confidence ?? 0.9,
+      })),
+      relationships: [],
+    };
+
+    return {
+      pages,
+      extraction,
+      documentType: (document.documentType as DocumentType) ?? 'GENERIC',
+      filename: document.name,
+      citationIssues: validateCitations(extraction, pages),
+    };
+  },
+
+  /**
+   * Recover documents left at verificationStatus='PENDING' by a restart. Called
+   * once on boot: without it, a crash mid-verification would strand a document
+   * in PENDING permanently, since the only trigger was the in-process extraction
+   * that has since died.
+   */
+  async sweepStaleVerifications(): Promise<number> {
+    if (!isClaudeConfigured()) return 0;
+    const stale = await prisma.document.findMany({
+      where: { processingStatus: 'COMPLETE', verificationStatus: 'PENDING' },
+      select: { id: true },
+      take: 100,
+    });
+    if (stale.length === 0) return 0;
+    console.log(`[verify] resuming ${stale.length} interrupted verification(s)`);
+    for (const { id } of stale) void this.verifyDocument(id);
+    return stale.length;
   },
 
   async persistResult(
@@ -669,6 +1120,13 @@ export const extractionService = {
           title: c.title ?? null,
           content: c.content,
           pageNumber: c.pageNumber ?? null,
+          // Character offsets within the page, present when the clause was
+          // resolved from an anchor. These make a clause mechanically
+          // re-checkable later: slice the page at these offsets and the result
+          // must still equal `content`. A generated quote can only ever be
+          // fuzzy-matched after the fact; a span can be re-derived exactly.
+          startOffset: (c as { startOffset?: number | null }).startOffset ?? null,
+          endOffset: (c as { endOffset?: number | null }).endOffset ?? null,
           riskLevel: c.riskLevel ?? null,
           confidence: c.confidence,
           source: 'claude',
@@ -768,12 +1226,15 @@ export const extractionService = {
     let pageCount: number | null = null;
     try {
       const bytes = await s3Service.getObjectBytes(document.s3Key);
-      if (document.mimeType === 'application/pdf') pageCount = await readPdfPageCount(bytes);
-      const classification = await this.classify({
+      const source = await prepareSource({
         filename: document.name,
         mimeType: document.mimeType,
         bytes,
+        documentId,
+        sourceETag: await s3Service.getObjectETag(document.s3Key),
       });
+      pageCount = source.pageCount;
+      const classification = await this.classify({ filename: document.name, source });
       documentType = classification.documentType;
       confidence = classification.confidence;
     } catch {

@@ -4,7 +4,7 @@ Guidance for Claude Code (claude.ai/code) when working in this repo.
 
 ## Project Vision
 
-**DealDiligence.ai** is a Claude-native M&A deal platform. Documents uploaded to a Virtual Data Room are read end-to-end by Claude Opus 4.7 and turned into CUAD-aligned markdown fact sheets (entities, CUAD clause coverage, /10 risk score, top risks, intra-document relationships). Those fact sheets are the currency of every downstream interaction: the Kanban becomes an AI prompting workflow where tasks carry a prompt + attached documents and Claude writes risk reports for specialist review; the VDR chat answers questions from in-scope fact sheets; a debounced reconciliation pass merges entities into a deal-level knowledge graph; the project dashboard surfaces deal-level risk posture — all filtered by the caller's folder scope.
+**DealDiligence.ai** is a Claude-native M&A deal platform. Documents uploaded to a Virtual Data Room are read end-to-end by Claude — Sonnet 4.6 is the extraction baseline, Opus 4.7 for long documents — and turned into CUAD-aligned markdown fact sheets (entities, CUAD clause coverage, /10 risk score, top risks, intra-document relationships). Those fact sheets are the document-level artifact and the audit record — deterministically rendered from the structured fields, so they are a projection rather than a second source of truth. Downstream reads structured columns and library provisions, not parsed markdown: the Kanban becomes an AI prompting workflow where tasks carry a prompt + attached documents and Claude writes risk reports for specialist review; the VDR chat answers questions from in-scope fact sheets; a debounced reconciliation pass merges entities into a deal-level knowledge graph; the project dashboard surfaces deal-level risk posture — all filtered by the caller's folder scope.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full architecture diagram and rationale.
 
@@ -36,7 +36,8 @@ Same `@anthropic-ai/sdk` everywhere; client factory in `src/integrations/claude/
 
 | Stage | Model |
 |---|---|
-| Document extraction (per doc, one-time) | `claude-opus-4-7` |
+| Document extraction, ≤60pp (per doc, one-time) | `claude-sonnet-4-6` — the **baseline**; all CUAD eval numbers are measured here |
+| Document extraction, >60pp | `claude-opus-4-7` |
 | Kanban AI risk report | `claude-opus-4-7` (default) |
 | VDR chat | `claude-haiku-4-5` |
 | Cross-document reconciliation | `claude-sonnet-4-6` |
@@ -45,7 +46,13 @@ Prompt caching: the ~4k-token extraction system prompt (CUAD schema + risk rubri
 
 ### Retrieval
 
-`src/integrations/retrieval/` defines a `Retriever` interface. Default `stuffRetriever` returns all in-scope fact sheets — no embeddings. When scale demands, swap in `PgVectorRetriever` or a provider (Voyage / Isaacus / OpenAI) behind the same interface.
+`src/integrations/retrieval/` defines a `Retriever` interface. **`defaultRetriever` is what callers use.**
+
+It navigates the diligence checklist (`libraryTocRetriever`): route the question to the relevant checklist items, then return only the provisions behind them, plus a coverage summary naming any OPEN items so answers can surface gaps. Retrieval granularity is the **provision**, not the document — a change-of-control question needs six provisions from four contracts, not four whole fact sheets.
+
+`stuffRetriever` is no longer the default. It remains correct for an explicit document pin (the caller has already chosen the scope, so it is honoured in full) and as the fallback when a project has no library evidence yet. In that fallback role it is **capped** at `RETRIEVAL_STUFF_MAX_DOCS` (default 12) and logs when it truncates — an unbounded sweep is millions of tokens per turn on a real VDR, and a silently truncated answer that presents itself as complete is worse than a bounded one that says so.
+
+The choice is made on data, not config: if the library returns nothing, retrieval degrades to bounded stuffing automatically, so a project ingested before the library existed still answers.
 
 ---
 

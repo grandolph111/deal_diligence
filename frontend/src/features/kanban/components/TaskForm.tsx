@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDown, X, Check, Sparkles } from 'lucide-react';
+import { useProjectReadiness } from '../../../api/hooks/useProjectReadiness';
+import { AiReadinessNotice } from '../../../components/ai/AiReadinessNotice';
 import { composePrompt } from '../utils/promptSections';
 import type {
   Priority,
@@ -9,6 +11,8 @@ import type {
 } from '../../../types/api';
 
 interface TaskFormProps {
+  /** Enables the AI-readiness notice on the objective field. */
+  projectId?: string;
   initialStatus?: TaskStatus;
   members?: ProjectMember[];
   onSubmit: (data: CreateTaskDto) => Promise<void>;
@@ -17,12 +21,14 @@ interface TaskFormProps {
 }
 
 export function TaskForm({
+  projectId,
   initialStatus = 'TODO',
   members = [],
   onSubmit,
   onCancel,
   isSubmitting,
 }: TaskFormProps) {
+  const { readiness } = useProjectReadiness(projectId);
   const [title, setTitle] = useState('');
   const [objective, setObjective] = useState('');
   const [priority, setPriority] = useState<Priority>('MEDIUM');
@@ -117,6 +123,7 @@ export function TaskForm({
           placeholder="e.g. Identify all change-of-control triggers and assess acquirer risk across attached documents."
           rows={3}
         />
+        <AiReadinessNotice readiness={readiness} />
         <p
           style={{
             fontSize: 'var(--text-xs)',

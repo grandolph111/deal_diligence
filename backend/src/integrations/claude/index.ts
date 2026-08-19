@@ -9,6 +9,26 @@ export { runChat, type ChatTurn } from './chat';
 export { routeLibraryItems, type RouteItem } from './route';
 export { rerankProvisions, type RerankCandidate } from './rerank';
 export { adjudicateFlags, type AdjudicationInput } from './adjudicate';
+export {
+  extractDocumentWindowed,
+  type WindowSource,
+  type WindowedExtractResult,
+} from './extract-windowed';
+export {
+  consolidateExtraction,
+  applyConsolidation,
+  type ConsolidateInput,
+} from './consolidate';
+export {
+  mergeWindowExtractions,
+  type WindowExtraction,
+  type MergeStats,
+} from './merge-extraction';
+export {
+  acquire as acquireClaudeBudget,
+  estimateInputTokens,
+  rateLimiterStats,
+} from './rate-limiter';
 export { usageMeter } from './usage-meter';
 export { analyzeLibraryGaps } from './lint';
 export { reconcileGraph } from './reconcile';
@@ -47,5 +67,7 @@ export {
   type BriefResponse,
   type BriefSynthesis,
   type Playbook,
+  consolidateResponseSchema,
+  type ConsolidateResponse,
 } from './schema';
 export { renderPlaybookBlock, buildExtractionPrompt } from './prompts/extraction';

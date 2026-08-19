@@ -6,11 +6,22 @@
  * This replaces JSON-in-text parsing: Claude cannot emit extra prose, tokens
  * match the Zod schema by construction, and schema drift surfaces as Zod
  * validation errors at a single clear boundary.
+ *
+ * Two cross-cutting concerns live here because every caller needs them:
+ *
+ *   1. **Admission control** — each call reserves its estimated token cost from
+ *      a process-wide budget (`rate-limiter.ts`) before sending. Capping
+ *      concurrent *documents* cannot bound token draw; capping tokens can.
+ *   2. **Streaming for large outputs** — the SDK requires streaming above
+ *      ~16k `max_tokens` or the request dies on an HTTP timeout. Extraction of
+ *      a dense contract routinely exceeds that, so we stream by default when
+ *      the ceiling is high and collect the final message.
  */
 
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { usageMeter } from './usage-meter';
+import { acquire, pauseAll, syncFromHeaders } from './rate-limiter';
 import type Anthropic from '@anthropic-ai/sdk';
 import type AnthropicBedrock from '@anthropic-ai/bedrock-sdk';
 
@@ -53,19 +64,30 @@ export interface RunToolUseOptions<T> {
   toolDescription: string;
   toolSchema: z.ZodTypeAny;
   thinkingBudget?: number;
+  /**
+   * Estimated input tokens, for admission control. Callers that know their
+   * payload size (page count, character count) should pass it — see
+   * `estimateInputTokens`. Omitted means "small", which is fine for chat-sized
+   * calls and wrong for a 40-page PDF window.
+   */
+  estimatedInputTokens?: number;
+  /**
+   * Forecast output tokens for admission control. Defaults to half of
+   * `maxTokens` — see AcquireRequest.expectedOutputTokens for why reserving the
+   * full ceiling would throttle concurrency below what the operator configured.
+   */
+  expectedOutputTokens?: number;
+  /**
+   * Force streaming on/off. Default: stream when `maxTokens` exceeds the
+   * non-streaming safe ceiling.
+   */
+  stream?: boolean;
 }
 
 /**
- * Anthropic enforces a per-minute input-token rate limit. When we blow past it
- * (typical on a brief rebuild where mergeEntities + detectAnomalies + per-scope
- * briefs all run in sequence), the SDK throws a 429. The response's
- * `retry-after` header — or in its absence, a sensible default — tells us how
- * long to wait before the bucket refills. We honor it and retry once, which
- * turns "you did too much in this minute" from a failure into a pause.
- *
- * Throws RateLimitExceededAfterRetryError if still 429 after the wait, so the
- * caller (reconciliation) can flag the batch as "too large for current limits"
- * rather than silently failing.
+ * Thrown when a call is still rate-limited after exhausting retries. Callers
+ * that batch work (reconciliation) catch this to shrink the batch rather than
+ * treating it as a hard failure.
  */
 export class RateLimitExceededAfterRetryError extends Error {
   constructor(message: string, public readonly waitedMs: number) {
@@ -74,13 +96,41 @@ export class RateLimitExceededAfterRetryError extends Error {
   }
 }
 
+/** Above this `max_tokens`, the SDK wants streaming to avoid HTTP timeouts. */
+const NON_STREAMING_MAX_TOKENS = 16_384;
+
+const MAX_ATTEMPTS = Math.max(
+  1,
+  parseInt(process.env.CLAUDE_MAX_ATTEMPTS || '5', 10)
+);
 const DEFAULT_RETRY_AFTER_MS = 60_000;
-const MAX_RETRY_AFTER_MS = 90_000;
+const MAX_RETRY_AFTER_MS = 120_000;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const statusOf = (err: any): number | undefined =>
+  err?.status ?? err?.response?.status;
+
+const isRateLimit = (err: unknown): boolean => statusOf(err) === 429;
+
+/** 529 overloaded, 5xx, and bare connection errors are all worth retrying. */
+const isRetryable = (err: unknown): boolean => {
+  const status = statusOf(err);
+  if (status === undefined) {
+    // No HTTP status → connection reset / DNS / timeout. Retry.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const name = (err as any)?.name ?? '';
+    return name !== 'AbortError';
+  }
+  return status === 429 || status === 408 || status === 409 || status >= 500;
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const headersOf = (err: any) => err?.headers ?? err?.response?.headers;
 
 const parseRetryAfter = (err: unknown): number => {
-  const headers =
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (err as any)?.headers ?? (err as any)?.response?.headers;
+  const headers = headersOf(err);
   const raw =
     headers?.get?.('retry-after') ?? headers?.['retry-after'] ?? undefined;
   if (!raw) return DEFAULT_RETRY_AFTER_MS;
@@ -91,48 +141,148 @@ const parseRetryAfter = (err: unknown): number => {
   return DEFAULT_RETRY_AFTER_MS;
 };
 
-const isRateLimit = (err: unknown): boolean => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const status = (err as any)?.status ?? (err as any)?.response?.status;
-  return status === 429;
+/** Exponential backoff with full jitter, so N retrying callers don't resonate. */
+const backoffMs = (attempt: number): number => {
+  const base = Math.min(1_000 * 2 ** attempt, 30_000);
+  return Math.round(base / 2 + Math.random() * (base / 2));
 };
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/**
+ * `budget_tokens` was removed on the 4.6+ generation and returns a 400 there;
+ * adaptive thinking replaces it. Older models still require the explicit
+ * budget. Pick the right shape from the model id so a single config knob works
+ * across the routed tiers.
+ */
+const ADAPTIVE_THINKING_MODELS = [
+  'opus-4-6',
+  'opus-4-7',
+  'opus-4-8',
+  'opus-5',
+  'sonnet-4-6',
+  'sonnet-5',
+  'fable-5',
+  'mythos-5',
+];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const sendWithRateLimitRetry = async (
+const buildThinkingParam = (model: string, budget?: number): any | null => {
+  if (!budget || budget <= 0) return null;
+  const m = model.toLowerCase();
+  if (ADAPTIVE_THINKING_MODELS.some((id) => m.includes(id))) {
+    return { type: 'adaptive' };
+  }
+  return { type: 'enabled', budget_tokens: budget };
+};
+
+interface SendResult {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  message: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  headers?: any;
+}
+
+const send = async (
   client: ClaudeClient,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   req: any,
-  toolName: string
+  useStream: boolean
+): Promise<SendResult> => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Promise<any> => {
-  try {
-    return await client.messages.create(req);
-  } catch (err) {
-    if (!isRateLimit(err)) throw err;
-    const waitMs = parseRetryAfter(err);
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[claude] ${toolName} hit 429 rate limit; waiting ${Math.round(
-        waitMs / 1000
-      )}s before single retry`
-    );
-    await sleep(waitMs);
+  const anyClient = client as any;
+
+  if (!useStream) {
+    const { data, response } = await anyClient.messages.create(req).withResponse();
+    return { message: data, headers: response?.headers };
+  }
+
+  const stream = anyClient.messages.stream(req);
+  const message = await stream.finalMessage();
+  return { message, headers: stream.response?.headers };
+};
+
+/**
+ * Send with admission control and retries.
+ *
+ * The reservation is re-acquired on every attempt rather than held across them:
+ * a 429 means our model of the budget was wrong, so `pauseAll` drains the
+ * bucket and the next `acquire()` blocks until the server's `retry-after`
+ * elapses. That coordinates *all* in-flight callers through one mechanism
+ * instead of having each sleep independently against a bucket they can't see.
+ */
+const sendWithRetry = async (
+  client: ClaudeClient,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  req: any,
+  opts: {
+    toolName: string;
+    estimatedInputTokens: number;
+    expectedOutputTokens: number;
+    useStream: boolean;
+  }
+): Promise<SendResult> => {
+  let lastWaitMs = 0;
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    const reservation = await acquire({
+      inputTokens: opts.estimatedInputTokens,
+      expectedOutputTokens: opts.expectedOutputTokens,
+      label: opts.toolName,
+    });
+
     try {
-      return await client.messages.create(req);
-    } catch (retryErr) {
-      if (isRateLimit(retryErr)) {
-        throw new RateLimitExceededAfterRetryError(
-          `${toolName}: still rate-limited after ${Math.round(
-            waitMs / 1000
-          )}s wait. Input likely too large for this tier's per-minute budget.`,
-          waitMs
-        );
+      const result = await send(client, req, opts.useStream);
+      syncFromHeaders(result.headers);
+      const usage = result.message?.usage ?? {};
+      reservation.settle({
+        inputTokens:
+          (usage.input_tokens ?? 0) +
+          (usage.cache_read_input_tokens ?? 0) +
+          (usage.cache_creation_input_tokens ?? 0),
+        outputTokens: usage.output_tokens ?? 0,
+      });
+      return result;
+    } catch (err) {
+      // The call never landed — give the reserved budget back.
+      reservation.settle({ inputTokens: 0, outputTokens: 0 });
+      syncFromHeaders(headersOf(err));
+
+      const isLast = attempt === MAX_ATTEMPTS - 1;
+      if (!isRetryable(err)) throw err;
+
+      if (isLast) {
+        if (isRateLimit(err)) {
+          throw new RateLimitExceededAfterRetryError(
+            `${opts.toolName}: still rate-limited after ${MAX_ATTEMPTS} attempts ` +
+              `(last wait ${Math.round(lastWaitMs / 1000)}s). Input likely too large ` +
+              `for this tier's per-minute budget.`,
+            lastWaitMs
+          );
+        }
+        throw err;
       }
-      throw retryErr;
+
+      if (isRateLimit(err)) {
+        lastWaitMs = parseRetryAfter(err);
+        // Everyone backs off, not just this caller.
+        pauseAll(lastWaitMs, `429 on ${opts.toolName}`);
+      } else {
+        const status = statusOf(err);
+        lastWaitMs = backoffMs(attempt);
+        if (status === 529) {
+          pauseAll(lastWaitMs, `529 overloaded on ${opts.toolName}`);
+        }
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[claude] ${opts.toolName} attempt ${attempt + 1}/${MAX_ATTEMPTS} failed ` +
+            `(status=${status ?? 'connection'}); retrying in ${Math.round(lastWaitMs / 1000)}s`
+        );
+        await sleep(lastWaitMs);
+      }
     }
   }
+
+  // Unreachable: the loop either returns or throws on its last iteration.
+  throw new Error(`${opts.toolName}: exhausted retries`);
 };
 
 const sanitizeInputSchema = (schema: unknown): unknown => {
@@ -160,6 +310,9 @@ export const runToolUse = async <T>(
     toolDescription,
     toolSchema,
     thinkingBudget,
+    estimatedInputTokens,
+    expectedOutputTokens,
+    stream,
   } = options;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -188,12 +341,23 @@ export const runToolUse = async <T>(
     messages: [{ role: 'user', content: messages }],
   };
 
-  if (thinkingBudget && thinkingBudget > 0) {
-    req.thinking = { type: 'enabled', budget_tokens: thinkingBudget };
-  }
+  const thinking = buildThinkingParam(model, thinkingBudget);
+  if (thinking) req.thinking = thinking;
+
+  const useStream = stream ?? maxTokens > NON_STREAMING_MAX_TOKENS;
+
+  // Fall back to a system-prompt-sized estimate when the caller gave none.
+  const estimated =
+    estimatedInputTokens ??
+    Math.ceil((systemPrompt.length + JSON.stringify(messages).length) / 3);
 
   const startedAt = Date.now();
-  const response = await sendWithRateLimitRetry(client, req, toolName);
+  const { message: response } = await sendWithRetry(client, req, {
+    toolName,
+    estimatedInputTokens: estimated,
+    expectedOutputTokens: expectedOutputTokens ?? Math.ceil(maxTokens / 2),
+    useStream,
+  });
   const durationMs = Date.now() - startedAt;
 
   const content = response.content as ContentBlock[];
@@ -216,7 +380,7 @@ export const runToolUse = async <T>(
       `in=${usage.inputTokens ?? '?'} out=${usage.outputTokens ?? '?'} ` +
       `cache_read=${usage.cacheReadInputTokens ?? 0} ` +
       `cache_write=${usage.cacheCreationInputTokens ?? 0} ` +
-      `duration=${durationMs}ms`
+      `stream=${useStream} duration=${durationMs}ms`
   );
 
   const toolBlock = content.find(

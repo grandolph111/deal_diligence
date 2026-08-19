@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { projectsController } from './projects.controller';
 import { dashboardController } from './dashboard.controller';
+import { readinessController } from './readiness.controller';
 import playbookRoutes from './playbook.routes';
 import briefRoutes from './brief.routes';
 import { requireAuth } from '../../middleware/auth';
@@ -31,6 +32,10 @@ router.get('/:id', projectsController.getProject);
 
 // GET /api/v1/projects/:id/dashboard - Risk-analysis dashboard (folder-scoped)
 router.get('/:id/dashboard', dashboardController.getDashboard);
+
+// Whether AI chat / Kanban reports can answer yet. Polled by the frontend
+// while a deal is still ingesting.
+router.get('/:id/readiness', readinessController.getReadiness);
 
 // Playbook + Brief sub-routers
 router.use('/:id/playbook', playbookRoutes);
