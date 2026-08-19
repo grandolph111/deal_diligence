@@ -30,15 +30,26 @@ const verdictSchema = z.object({
 });
 
 const SYSTEM = `You are a STRICT senior M&A contract reviewer auditing an AI's clause tagging against a known-incomplete answer key. For each quoted passage from a real contract, decide whether the quote GENUINELY establishes the stated clause type.
-- present=true ONLY if the quoted operative language unambiguously creates that provision.
-- present=false if the quote is about a DIFFERENT topic (a mis-tag), is merely a definition/recital with no operative effect, or only tangentially relates.
-Be strict and skeptical — err toward present=false when the quote does not clearly establish the clause. Return a verdict for every item.`;
+- present=true ONLY if the quoted operative language unambiguously CREATES that exact provision.
+- present=false otherwise. In particular, present=false when the quote:
+  * states the OPPOSITE / a disclaimer — e.g. "there are NO third-party beneficiaries" is NOT a third-party-beneficiary clause; "binding upon successors and assigns" PERMITS assignment and is NOT anti-assignment; a clause LIMITING liability is NOT uncapped liability.
+  * merely DEFINES a term (e.g. '"Change of Control" means…') with no operative trigger in the quote.
+  * ACKNOWLEDGES existing ownership/rights rather than transferring them (not an IP assignment).
+  * is a DIFFERENT but adjacent provision — indemnification tagged as uncapped liability, no-solicit of EMPLOYEES tagged as customers, event-triggered termination tagged as termination-for-convenience, a party setting ITS OWN price tagged as a price restriction.
+Be strict and skeptical — when in doubt, present=false. Return a verdict for every item.`;
 
-async function adjudicate(client: ReturnType<typeof getClaudeClient>, batch: FP[]): Promise<Array<{ index: number; present: boolean }>> {
+// Clause-judgment is nuanced reasoning, NOT the bottom (chat/Haiku) tier — a spot-check
+// vs a careful human read showed Haiku over-credits badly (calls a clause's own inverse
+// "present"). Default the judge to the reconciliation tier (Sonnet).
+type Tier = 'chat' | 'reconciliation' | 'report' | 'extraction';
+const JUDGE_TIER = (process.env.JUDGE_TIER as Tier) || 'reconciliation';
+const ESCALATE_TIER = process.env.ESCALATE_TIER as Tier | undefined; // e.g. 'report' (Opus) to confirm "present" credits
+
+async function adjudicate(client: ReturnType<typeof getClaudeClient>, batch: FP[], tier: Tier): Promise<Array<{ index: number; present: boolean }>> {
   const body = batch.map((f, i) => `#${i} — Clause type claimed: "${f.category}"\nQuoted text: "${f.quote.slice(0, 400).replace(/\s+/g, ' ')}"`).join('\n\n');
   const { input } = await runToolUse<z.infer<typeof verdictSchema>>({
     client,
-    model: getModelId('chat'), // Haiku
+    model: getModelId(tier),
     maxTokens: 2048,
     systemPrompt: SYSTEM,
     messages: [{ type: 'text', text: `Judge each item:\n\n${body}` }],
@@ -72,15 +83,33 @@ async function main() {
 
   usageMeter.reset();
   const client = getClaudeClient();
+  console.log(`Judge tier: ${JUDGE_TIER}${ESCALATE_TIER ? ` (escalate "present" credits -> ${ESCALATE_TIER})` : ''}\n`);
   const verdicts: boolean[] = new Array(fps.length).fill(false);
   const reasons: string[] = new Array(fps.length).fill('');
   for (let i = 0; i < fps.length; i += BATCH) {
     const batch = fps.slice(i, i + BATCH);
     try {
-      const vs = await adjudicate(client, batch);
+      const vs = await adjudicate(client, batch, JUDGE_TIER);
       for (const v of vs) if (v.index >= 0 && v.index < batch.length) { verdicts[i + v.index] = v.present; reasons[i + v.index] = v.reason; }
       process.stdout.write(`  adjudicated ${Math.min(i + BATCH, fps.length)}/${fps.length}\r`);
     } catch (e) { console.log(`\n  batch ${i} error:`, e instanceof Error ? e.message : e); }
+  }
+
+  // Escalation: only the "present" credits can inflate precision, so re-confirm just those
+  // with a stronger tier. A verdict survives as a real credit only if BOTH tiers agree.
+  let overturned = 0;
+  if (ESCALATE_TIER) {
+    const presentIdx = fps.map((_, i) => i).filter((i) => verdicts[i]);
+    console.log(`\n  escalating ${presentIdx.length} "present" credits to ${ESCALATE_TIER}…`);
+    for (let j = 0; j < presentIdx.length; j += BATCH) {
+      const idxs = presentIdx.slice(j, j + BATCH);
+      const batch = idxs.map((i) => fps[i]);
+      try {
+        const vs = await adjudicate(client, batch, ESCALATE_TIER);
+        for (const v of vs) if (v.index >= 0 && v.index < idxs.length && !v.present) { verdicts[idxs[v.index]] = false; overturned++; }
+      } catch (e) { console.log(`\n  escalation batch ${j} error:`, e instanceof Error ? e.message : e); }
+    }
+    console.log(`  ${ESCALATE_TIER} overturned ${overturned} of ${presentIdx.length} credits back to mis-tags.`);
   }
 
   const realErrors = verdicts.filter((v) => !v).length;    // mis-tags (our error)
@@ -105,7 +134,7 @@ async function main() {
   console.log(`    -> real clauses CUAD missed (sparsity): ${sparsity} (${(sparsity / fps.length * 100).toFixed(0)}%)`);
   console.log(`    -> genuine mis-tags (our error):        ${realErrors} (${(realErrors / fps.length * 100).toFixed(0)}%)`);
   console.log(`  ADJUSTED precision:   ${(adjPrecision * 100).toFixed(1)}%  (crediting real-clause sparsity)`);
-  console.log(`\n  spend: $${spend.totalUsd.toFixed(3)} (Haiku adjudication)`);
+  console.log(`\n  spend: $${spend.totalUsd.toFixed(3)} (judge: ${JUDGE_TIER})`);
   console.log(`  caveat: judge is an LLM (Haiku), not human — a strict estimate, not ground truth.`);
   await prisma.$disconnect();
 }
