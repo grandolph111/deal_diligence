@@ -73,11 +73,12 @@ async function main() {
   usageMeter.reset();
   const client = getClaudeClient();
   const verdicts: boolean[] = new Array(fps.length).fill(false);
+  const reasons: string[] = new Array(fps.length).fill('');
   for (let i = 0; i < fps.length; i += BATCH) {
     const batch = fps.slice(i, i + BATCH);
     try {
       const vs = await adjudicate(client, batch);
-      for (const v of vs) if (v.index >= 0 && v.index < batch.length) verdicts[i + v.index] = v.present;
+      for (const v of vs) if (v.index >= 0 && v.index < batch.length) { verdicts[i + v.index] = v.present; reasons[i + v.index] = v.reason; }
       process.stdout.write(`  adjudicated ${Math.min(i + BATCH, fps.length)}/${fps.length}\r`);
     } catch (e) { console.log(`\n  batch ${i} error:`, e instanceof Error ? e.message : e); }
   }
@@ -85,6 +86,18 @@ async function main() {
   const realErrors = verdicts.filter((v) => !v).length;    // mis-tags (our error)
   const sparsity = verdicts.filter((v) => v).length;        // real clauses CUAD missed
   const adjPrecision = (correctTotal + sparsity) / claimedTotal;
+
+  // Genuine mis-tags (our real precision errors): breakdown by category + save detail.
+  const misTags = fps.map((f, i) => ({ ...f, reason: reasons[i] })).filter((_, i) => !verdicts[i]);
+  const byCat = new Map<string, number>();
+  for (const m of misTags) byCat.set(m.category, (byCat.get(m.category) ?? 0) + 1);
+  console.log(`\n\n=== GENUINE MIS-TAGS by category (our real precision errors) ===`);
+  for (const [c, n] of [...byCat.entries()].sort((a, b) => b[1] - a[1])) console.log(`  ${String(n).padStart(3)}x  ${c}`);
+  const RESULTS = require('path').resolve(__dirname, 'eval-results');
+  require('fs').mkdirSync(RESULTS, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  require('fs').writeFileSync(require('path').join(RESULTS, `${stamp}-mistags.json`), JSON.stringify({ misTags, byCategory: [...byCat.entries()].map(([category, count]) => ({ category, count })) }, null, 2));
+  console.log(`  saved mis-tag detail to eval-results/${stamp}-mistags.json`);
   const spend = usageMeter.snapshot();
   console.log(`\n\n=== SPARSITY-ADJUSTED PRECISION (${docs.length} docs) ===`);
   console.log(`  raw precision:        ${(correctTotal / claimedTotal * 100).toFixed(1)}%  (CUAD gold treated as exhaustive)`);
