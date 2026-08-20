@@ -36,7 +36,7 @@ const RISK_RAMP: Swatch[] = [
 ];
 
 const PALETTE: Record<string, Swatch> = {
-  root: { core: '#f6e0b4', rim: '#c39b57', glow: 'rgba(199,164,108,0.30)' },
+  root: { core: '#e6d8ff', rim: '#8b6fd4', glow: 'rgba(150,116,222,0.34)' },
   workstream: { core: '#d3e0f2', rim: '#7f9bc4', glow: 'rgba(139,164,201,0.24)' },
   none: { core: '#7d8ba4', rim: '#454f63', glow: 'rgba(122,139,164,0.14)' },
   ...Object.fromEntries(RISK_RAMP.map((sw, i) => [`r${i}`, sw])),
@@ -94,14 +94,16 @@ function clusterPositions(map: DealMap): Record<string, { x: number; y: number }
   // spends half its area on the empty middle and forces `fit` to zoom out until
   // the labels stop resolving; packing rows uses the space the canvas actually
   // has, which is wide and short.
-  const cells = hubs
+  const hubCells = hubs
     .slice()
     .sort((a, b) => a.order - b.order)
     .map((hub) => {
       const docs = docsByHub.get(hub.id) ?? [];
       const disc = discFor(docs.length);
-      return { hub, docs, disc, w: Math.max(150, disc * 2 + 96), h: disc * 2 + 78 };
+      return { id: hub.id, docs, disc, w: Math.max(150, disc * 2 + 96), h: disc * 2 + 78 };
     });
+
+  const cells = hubCells;
 
   const totalArea = cells.reduce((a, c) => a + c.w * c.h, 0);
   const targetWidth = Math.sqrt(totalArea * 1.9); // canvas is roughly 2:1
@@ -118,7 +120,7 @@ function clusterPositions(map: DealMap): Record<string, { x: number; y: number }
     }
     const cx = x + c.w / 2;
     const cy = y + c.h / 2;
-    pos[c.hub.id] = { x: cx, y: cy };
+    pos[c.id] = { x: cx, y: cy };
 
     c.docs.forEach((id, j) => {
       // Phyllotaxis: even coverage of the disc without visible rows.
@@ -132,8 +134,9 @@ function clusterPositions(map: DealMap): Record<string, { x: number; y: number }
     rowHeight = Math.max(rowHeight, c.h);
   }
 
-  // Root sits at the middle of the packed field so its spokes stay short.
-  pos.root = { x: maxX / 2, y: (y + rowHeight) / 2 };
+  // Deal sits in its own band above everything, so the hierarchy reads
+  // top-down and nothing can collide with it.
+  pos.root = { x: maxX / 2, y: -170 };
 
   return pos;
 }
@@ -207,8 +210,18 @@ export function DealMapGraph({ map, loading, error, selectedId, onSelect, onRefr
         })),
         {
           // Hubs are always named; documents only on demand.
-          selector: 'node[type="WORKSTREAM"], node[type="ROOT"]',
+          selector: 'node[type="WORKSTREAM"]',
           style: { label: 'data(label)', 'font-size': '11px', 'font-weight': 700, color: '#e4ecf8' } as cytoscape.Css.Node,
+        },
+        {
+          selector: 'node[type="ROOT"]',
+          style: {
+            label: 'data(label)',
+            'font-size': '15px',
+            'font-weight': 700,
+            color: '#f0e9ff',
+            'text-margin-y': 10,
+          } as cytoscape.Css.Node,
         },
         {
           selector: 'node.hl',
@@ -293,8 +306,16 @@ export function DealMapGraph({ map, loading, error, selectedId, onSelect, onRefr
     const els: ElementDefinition[] = [];
     for (const n of map.nodes) {
       const d = degree.get(n.id) ?? 0;
+      // Three separated size bands so the hierarchy is legible at a glance:
+      // deal ≫ workstream ≫ document, with no overlap between them.
       const base =
-        n.type === 'ROOT' ? 46 : n.type === 'WORKSTREAM' ? 26 : 11 + Math.min(18, Math.sqrt(d) * 4);
+        n.type === 'ROOT'
+          ? 88
+          : n.type === 'WORKSTREAM'
+            // Bigger workstreams hold more, but never small enough to be
+            // mistaken for a document or big enough to rival the deal.
+            ? 40 + Math.min(16, Math.sqrt(n.documentCount) * 2.6)
+            : 10 + Math.min(11, Math.sqrt(d) * 2.4);
       els.push({
         data: {
           id: n.id,
