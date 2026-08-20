@@ -15,6 +15,9 @@ libraryRoutes.use(loadProjectMembership);
 // GET /library/toc — workstream → checklist item tree (the Data Room navigation)
 libraryRoutes.get('/toc', requirePermission('canAccessVDR'), libraryController.getToc);
 
+// GET /library/map — the deal map: root → workstreams → documents + peer links
+libraryRoutes.get('/map', requirePermission('canAccessVDR'), libraryController.getDealMap);
+
 // GET /library/graph — tiered base graph (workstreams → items → sources + entities)
 libraryRoutes.get('/graph', requirePermission('canAccessVDR'), libraryController.getGraph);
 

@@ -170,8 +170,7 @@ export function VDRPage() {
       // Load up to the API's max page size (100) so the list isn't silently capped
       // at the default 20. Data rooms above 100 docs need real pagination — follow-up.
       fetchDocuments({
-        workstreamId: selection?.itemId ? undefined : selection?.workstreamId,
-        itemId: selection?.itemId,
+        workstreamId: selection?.workstreamId,
         unfiled: selection?.unfiled,
         limit: 100,
       });
@@ -193,18 +192,8 @@ export function VDRPage() {
       };
     }
     const ws = toc?.workstreams.find((w) => w.id === selection?.workstreamId);
-    if (selection?.itemId) {
-      const item = ws?.items.find((i) => i.itemId === selection.itemId);
-      return {
-        scopeLabel: item?.title ?? 'Checklist item',
-        scopeDescription: ws ? `${ws.title} · documents answering this question` : null,
-      };
-    }
     if (ws) {
-      return {
-        scopeLabel: ws.title,
-        scopeDescription: 'Every document with evidence in this workstream.',
-      };
+      return { scopeLabel: ws.title, scopeDescription: null };
     }
     return { scopeLabel: 'All Documents', scopeDescription: null };
   }, [selection, toc]);

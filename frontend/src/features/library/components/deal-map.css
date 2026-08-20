@@ -1,0 +1,138 @@
+/*
+ * Deal map — the corpus as a network.
+ *
+ * Dark ground on purpose: the nodes are drawn as lit spheres with halos, and
+ * that only reads as depth against something dark. On the light app surface the
+ * same nodes flattened into a dot plot.
+ */
+
+.dmap {
+  position: relative;
+  flex: 1;
+  min-height: 420px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% 0%, #16233a 0%, #0e1728 45%, #0a1120 100%);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.04),
+    0 12px 32px -16px rgb(10 17 32 / 0.6);
+}
+
+.dmap__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.dmap__state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  color: #8394ad;
+  font-size: var(--text-sm);
+  text-align: center;
+  padding: var(--space-6);
+}
+
+/* ---- controls ---- */
+
+.dmap__controls {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: rgb(18 28 46 / 0.82);
+  border: 1px solid rgb(255 255 255 / 0.07);
+  backdrop-filter: blur(8px);
+}
+
+.dmap__controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: #9fb0c9;
+  cursor: pointer;
+  transition:
+    background-color 140ms cubic-bezier(0.2, 0, 0.2, 1),
+    color 140ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.dmap__controls button:hover {
+  background: rgb(255 255 255 / 0.08);
+  color: #e6eefb;
+}
+
+.dmap__controls button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+/* ---- legend ---- */
+
+.dmap__legend {
+  position: absolute;
+  left: var(--space-3);
+  bottom: var(--space-3);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: rgb(18 28 46 / 0.7);
+  border: 1px solid rgb(255 255 255 / 0.06);
+  backdrop-filter: blur(8px);
+  font-size: var(--text-xs);
+  color: #93a4bd;
+}
+
+.dmap__key {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.dmap__key i {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-full);
+  /* A soft bloom so the key reads like the nodes it labels. */
+  box-shadow: 0 0 0 3px rgb(255 255 255 / 0.06);
+}
+
+/* Risk is a continuous ramp, so the key shows the ramp rather than bands. */
+.dmap__key--ramp {
+  gap: var(--space-2);
+}
+
+.dmap__ramp {
+  display: inline-flex;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08);
+}
+
+.dmap__ramp i {
+  width: 8px;
+  height: 9px;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.dmap__ramp-ends {
+  color: #74849c;
+}

@@ -1,78 +1,48 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Waypoints, FolderOpen, Sparkles } from 'lucide-react';
-import { useLibraryGraph, LibraryGraph, LibraryNodeDetail, LibraryFindings } from '../features/library';
+import { ArrowLeft, Waypoints, FolderOpen } from 'lucide-react';
+import { DealMapGraph, DealMapDetail } from '../features/library';
 import { libraryService } from '../api/services/library.service';
-import type { LibraryGraphNode, LintFinding } from '../api/services/library.service';
+import type { DealMap, DealMapNode } from '../api/services/library.service';
+import { FactSheetModal } from '../features/vdr';
+import '../features/library/library.css';
+
+const EMPTY: DealMap = { nodes: [], edges: [], stats: { documents: 0, workstreams: 0 } };
 
 /**
- * Deal Map — the knowledge-library graph. Workstreams → checklist items
- * (colored by coverage) → sources + entities; click an item to expand its
- * provision evidence.
+ * Deal Map — the corpus as a network.
+ *
+ * One node per document, clustered under the single workstream it primarily
+ * belongs to, linked where documents share clause language. Clicking a document
+ * opens its fact sheet, so the map is a way into the deal rather than a picture
+ * of it.
  */
 export function LibraryGraphPage() {
   const { projectId } = useParams<{ projectId: string }>();
-  const {
-    graph,
-    loading,
-    error,
-    expandedItems,
-    expandingItemId,
-    expandError,
-    selectedNodeId,
-    selectedNode,
-    statusCounts,
-    expandItem,
-    toggleExpandItem,
-    setSelectedNodeId,
-    refresh,
-  } = useLibraryGraph(projectId || '');
 
-  const handleNodeTap = useCallback(
-    (node: LibraryGraphNode) => {
-      setSelectedNodeId(node.id);
-      // Tapping a checklist item expands its evidence (never collapses — that's
-      // the detail-panel button's job, so re-tapping to inspect doesn't hide it).
-      if (node.type === 'CHECKLIST_ITEM' && (node.evidenceCount ?? 0) > 0 && node.itemId) {
-        expandItem(node.itemId);
-      }
-    },
-    [setSelectedNodeId, expandItem]
-  );
+  const [map, setMap] = useState<DealMap>(EMPTY);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<DealMapNode | null>(null);
+  const [factSheet, setFactSheet] = useState<{ id: string; name: string } | null>(null);
 
-  // --- Findings (lint) ---
-  const [findingsOpen, setFindingsOpen] = useState(false);
-  const [findings, setFindings] = useState<LintFinding[]>([]);
-  const [lintLoading, setLintLoading] = useState(false);
-  const [lintSource, setLintSource] = useState<'llm' | 'deterministic' | null>(null);
-  const [lintHasRun, setLintHasRun] = useState(false);
-
-  const runLint = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!projectId) return;
-    setLintLoading(true);
+    setLoading(true);
+    setError(null);
     try {
-      const res = await libraryService.runLint(projectId);
-      setFindings(res.findings);
-      setLintSource(res.source);
-      setLintHasRun(true);
-    } catch {
-      setFindings([]);
-      setLintHasRun(true);
+      setMap(await libraryService.getDealMap(projectId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load the deal map');
+      setMap(EMPTY);
     } finally {
-      setLintLoading(false);
+      setLoading(false);
     }
   }, [projectId]);
 
-  // Click a finding → focus (and expand) its checklist item in the graph.
-  const handleFindingClick = useCallback(
-    (itemId: string) => {
-      const node = graph.nodes.find((n) => n.type === 'CHECKLIST_ITEM' && n.itemId === itemId);
-      if (!node) return;
-      setSelectedNodeId(node.id);
-      if ((node.evidenceCount ?? 0) > 0) expandItem(itemId);
-    },
-    [graph, setSelectedNodeId, expandItem]
-  );
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <div className="lib-page">
@@ -88,16 +58,6 @@ export function LibraryGraphPage() {
         </div>
 
         <div className="page-header-actions">
-          <button
-            className="button secondary"
-            onClick={() => {
-              setFindingsOpen(true);
-              if (!lintHasRun && !lintLoading) runLint();
-            }}
-          >
-            <Sparkles size={16} />
-            Findings
-          </button>
           <Link to={`/projects/${projectId}/vdr`} className="button secondary">
             <FolderOpen size={16} />
             Data Room
@@ -105,85 +65,40 @@ export function LibraryGraphPage() {
         </div>
       </div>
 
-      {/* Coverage summary — the diligence tracker at a glance */}
-      {!loading && !error && statusCounts.total > 0 && (
-        <div className="lib-coverage-bar">
-          <div className="lib-coverage-stat open">
-            <span className="lib-coverage-value">{statusCounts.open}</span>
-            <span className="lib-coverage-label">Open questions</span>
-          </div>
-          <div className="lib-coverage-stat covered">
-            <span className="lib-coverage-value">{statusCounts.covered}</span>
-            <span className="lib-coverage-label">Covered</span>
-          </div>
-          <div className="lib-coverage-stat flagged">
-            <span className="lib-coverage-value">{statusCounts.flagged}</span>
-            <span className="lib-coverage-label">Flagged</span>
-          </div>
-          {statusCounts.thin > 0 && (
-            <div className="lib-coverage-stat thin">
-              <span className="lib-coverage-value">{statusCounts.thin}</span>
-              <span className="lib-coverage-label">Partial</span>
-            </div>
-          )}
-          <div className="lib-coverage-track" aria-hidden>
-            {statusCounts.total > 0 && (
-              <>
-                <span
-                  className="seg covered"
-                  style={{ width: `${(statusCounts.covered / statusCounts.total) * 100}%` }}
-                />
-                <span
-                  className="seg flagged"
-                  style={{ width: `${(statusCounts.flagged / statusCounts.total) * 100}%` }}
-                />
-                <span
-                  className="seg thin"
-                  style={{ width: `${(statusCounts.thin / statusCounts.total) * 100}%` }}
-                />
-                <span
-                  className="seg open"
-                  style={{ width: `${(statusCounts.open / statusCounts.total) * 100}%` }}
-                />
-              </>
-            )}
-          </div>
-        </div>
+      {!loading && !error && map.stats.documents > 0 && (
+        <p className="lib-map-caption">
+          {map.stats.documents} documents across {map.stats.workstreams} workstreams · click a
+          document to open its fact sheet
+        </p>
       )}
 
       <div className="lib-page-content">
-        {findingsOpen && (
-          <LibraryFindings
-            findings={findings}
-            loading={lintLoading}
-            source={lintSource}
-            hasRun={lintHasRun}
-            onRun={runLint}
-            onClose={() => setFindingsOpen(false)}
-            onFindingClick={handleFindingClick}
-          />
-        )}
-
-        <LibraryGraph
-          graph={graph}
+        <DealMapGraph
+          map={map}
           loading={loading}
           error={error}
-          selectedNodeId={selectedNodeId}
-          onNodeTap={handleNodeTap}
-          onRefresh={refresh}
+          selectedId={selected?.id ?? null}
+          onSelect={setSelected}
+          onRefresh={load}
         />
-
-        {selectedNode && (
-          <LibraryNodeDetail
-            node={selectedNode}
-            expanded={!!selectedNode.itemId && expandedItems.has(selectedNode.itemId)}
-            expanding={expandingItemId === selectedNode.itemId}
-            error={expandError && expandError.itemId === selectedNode.itemId ? expandError.message : null}
-            onClose={() => setSelectedNodeId(null)}
-            onToggleExpand={toggleExpandItem}
+        {selected && (
+          <DealMapDetail
+            node={selected}
+            onClose={() => setSelected(null)}
+            onOpenFactSheet={(id, name) => setFactSheet({ id, name })}
           />
         )}
       </div>
+
+      {projectId && (
+        <FactSheetModal
+          isOpen={!!factSheet}
+          projectId={projectId}
+          documentId={factSheet?.id ?? null}
+          documentName={factSheet?.name ?? null}
+          onClose={() => setFactSheet(null)}
+        />
+      )}
     </div>
   );
 }

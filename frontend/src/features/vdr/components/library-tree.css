@@ -99,9 +99,12 @@
 
 .lib-tree__row--root,
 .lib-tree__row--unfiled,
-.lib-tree__row--item,
-.lib-tree__row--ws {
+.lib-tree__row--ws-flat {
   position: relative;
+}
+
+.lib-tree__row--ws-flat {
+  padding-left: var(--space-3);
 }
 
 .lib-tree__row--root {

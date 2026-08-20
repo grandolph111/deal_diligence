@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { X, Plus, Check, CircleAlert } from 'lucide-react';
+import { X, Plus, Check } from 'lucide-react';
 import { boardsService } from '../../../api';
 import { libraryService } from '../../../api/services/library.service';
 import type { TocWorkstream } from '../../../api/services/library.service';
@@ -64,10 +64,11 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
   const selectAll = () => setSelectedIds(new Set(workstreams.map((w) => w.id)));
   const clearAll = () => setSelectedIds(new Set());
 
-  // Distinct documents across the selection — not the sum of per-workstream
-  // counts, since a document usually has evidence in several of them.
-  const selectedWorkstreams = workstreams.filter((w) => selectedIds.has(w.id));
-  const maxReach = selectedWorkstreams.reduce((n, w) => Math.max(n, w.documentCount), 0);
+  // Each document is placed in exactly one workstream, so the selection's reach
+  // is simply the sum.
+  const reach = workstreams
+    .filter((w) => selectedIds.has(w.id))
+    .reduce((n, w) => n + w.documentCount, 0);
 
   const handleCreate = async () => {
     if (!name.trim()) {
@@ -166,8 +167,8 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
                 lineHeight: 1.6,
               }}
             >
-              Tasks on this board can attach any document with evidence in these workstreams.
-              Members see the board only if all of them are within their access.
+              Tasks on this board can attach the documents in these workstreams. Members see the
+              board only if all of them are within their access.
             </p>
             <div
               style={{
@@ -189,7 +190,6 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
               ) : (
                 workstreams.map((ws) => {
                   const checked = selectedIds.has(ws.id);
-                  const flagged = ws.items.filter((i) => i.status === 'FLAGGED').length;
                   return (
                     <label
                       key={ws.id}
@@ -210,21 +210,6 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
                         style={{ width: 'auto' }}
                       />
                       <span style={{ flex: 1, minWidth: 0 }}>{ws.title}</span>
-                      {flagged > 0 && (
-                        <span
-                          className="chip"
-                          title={`${flagged} flagged item${flagged === 1 ? '' : 's'}`}
-                          style={{
-                            background: 'var(--risk-high-bg)',
-                            color: 'var(--risk-high)',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 3,
-                          }}
-                        >
-                          <CircleAlert size={11} /> {flagged}
-                        </span>
-                      )}
                       <span
                         style={{
                           color: 'var(--text-muted)',
@@ -250,8 +235,7 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
                   marginTop: 'var(--space-2)',
                 }}
               >
-                At least {maxReach} document{maxReach === 1 ? '' : 's'} in scope — documents
-                overlap across workstreams, so the exact total is usually higher.
+                {reach} document{reach === 1 ? '' : 's'} in scope.
               </p>
             )}
           </div>

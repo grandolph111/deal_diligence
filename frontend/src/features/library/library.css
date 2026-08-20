@@ -537,3 +537,15 @@
     width: calc(100% - 1.5rem);
   }
 }
+
+/* Caption above the map — says what the network is before you read it. */
+.lib-map-caption {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+/* The map fills its page region; the detail panel floats inside it. */
+.lib-page-content {
+  position: relative;
+}

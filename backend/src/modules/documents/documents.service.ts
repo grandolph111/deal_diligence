@@ -10,7 +10,7 @@ import { extractionQueue } from '../../services/extraction-queue.service';
 import { libraryWriterService } from '../../services/library-writer.service';
 import { triageService } from '../../services/triage.service';
 import { resolveProjectScope } from '../../services/scope.service';
-import { EVIDENCE_TYPES } from '../library/library.service';
+import { EVIDENCE_TYPES, primaryWorkstreamByDocument } from '../library/library.service';
 
 export interface DocumentUploadResult {
   documentId: string;
@@ -358,6 +358,47 @@ export const documentsService = {
    * Distinct documents supplying evidence to the given workstreams / item.
    * Omitting both returns every document that has any evidence at all.
    */
+  /**
+   * Documents whose PRIMARY workstream is one of the given ones.
+   *
+   * Navigation places each document once, so the tree's counts and the list it
+   * opens have to agree; filtering on "has any evidence here" would show a
+   * contract under a branch its node does not live in.
+   */
+  /**
+   * The document ids a scope admits, or null for full access — mirrors the
+   * library's own scoping so placement and visibility stay in step.
+   */
+  async allowedDocumentIds(
+    projectId: string,
+    scope: { isFullAccess: boolean; allowedWorkstreamIds: string[] }
+  ): Promise<Set<string> | null> {
+    if (scope.isFullAccess) return null;
+    if (scope.allowedWorkstreamIds.length === 0) return new Set();
+    const rows = await prisma.libraryNode.findMany({
+      where: {
+        projectId,
+        type: { in: [...EVIDENCE_TYPES] },
+        workstreamId: { in: scope.allowedWorkstreamIds },
+        sourceDocumentId: { not: null },
+      },
+      select: { sourceDocumentId: true },
+      distinct: ['sourceDocumentId'],
+    });
+    return new Set(rows.map((r) => r.sourceDocumentId as string));
+  },
+
+  async documentIdsInWorkstreams(
+    projectId: string,
+    workstreamIds: string[],
+    allowed: Set<string> | null,
+    granted: Set<string> | null
+  ): Promise<string[]> {
+    const placement = await primaryWorkstreamByDocument(projectId, allowed, granted);
+    const wanted = new Set(workstreamIds);
+    return [...placement.entries()].filter(([, ws]) => wanted.has(ws)).map(([id]) => id);
+  },
+
   async documentIdsWithEvidence(
     projectId: string,
     filter: { workstreamIds?: string[]; itemId?: string } = {}
@@ -437,16 +478,27 @@ export const documentsService = {
       if (!scope.isFullAccess) return empty;
       idFilter = await this.documentIdsWithoutEvidence(projectId);
     } else {
-      const filterWorkstreams = workstreamId
-        ? [workstreamId]
-        : scope.isFullAccess
-          ? null
-          : scope.allowedWorkstreamIds;
-      if (filterWorkstreams || itemId) {
-        idFilter = await this.documentIdsWithEvidence(projectId, {
-          workstreamIds: filterWorkstreams ?? undefined,
-          itemId,
-        });
+      const granted = scope.isFullAccess ? null : new Set(scope.allowedWorkstreamIds);
+      if (itemId) {
+        // An explicit checklist item still means "documents with evidence here",
+        // which is the right reading for a question rather than a container.
+        idFilter = await this.documentIdsWithEvidence(projectId, { itemId });
+      } else {
+        const filterWorkstreams = workstreamId
+          ? [workstreamId]
+          : scope.isFullAccess
+            ? null
+            : scope.allowedWorkstreamIds;
+        if (filterWorkstreams) {
+          // Placement, not evidence — so the branch matches its count and the
+          // map node sits in the same place the list shows it.
+          idFilter = await this.documentIdsInWorkstreams(
+            projectId,
+            filterWorkstreams,
+            await this.allowedDocumentIds(projectId, scope),
+            granted
+          );
+        }
       }
     }
 

@@ -1,4 +1,4 @@
-import { Layers, CircleAlert } from 'lucide-react';
+import { Layers } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { libraryService } from '../../../api/services/library.service';
 import type { TocWorkstream } from '../../../api/services/library.service';
@@ -114,7 +114,6 @@ export function WorkstreamScopePicker({
       <div className="folder-scope-tree">
         {workstreams.map((ws) => {
           const checked = selectedSet.has(ws.id);
-          const flagged = ws.items.filter((i) => i.status === 'FLAGGED').length;
           return (
             <label
               key={ws.id}
@@ -130,24 +129,6 @@ export function WorkstreamScopePicker({
               />
               <Layers size={14} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
               <span style={{ flex: 1, minWidth: 0 }}>{ws.title}</span>
-              {flagged > 0 && (
-                <span
-                  title={`${flagged} flagged item${flagged === 1 ? '' : 's'}`}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 3,
-                    padding: '1px var(--space-1)',
-                    borderRadius: 'var(--radius-full)',
-                    background: 'var(--risk-high-bg)',
-                    color: 'var(--risk-high)',
-                    fontSize: 'var(--text-xs)',
-                    fontWeight: 600,
-                  }}
-                >
-                  <CircleAlert size={11} /> {flagged}
-                </span>
-              )}
               <span
                 style={{
                   color: 'var(--text-muted)',

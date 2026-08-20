@@ -54,6 +54,13 @@ export const libraryController = {
     res.json(graph);
   }),
 
+  /** GET /projects/:id/library/map — root → workstreams → documents, with peer links. */
+  getDealMap: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) throw ApiError.unauthorized('User not found');
+    const projectId = req.params.id as string;
+    res.json(await libraryService.getDealMap(projectId, req.user));
+  }),
+
   /** GET /projects/:id/library/documents/:documentId/backlinks — what else touches this doc. */
   getDocumentBacklinks: asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) throw ApiError.unauthorized('User not found');

@@ -45,27 +45,56 @@ export interface LintResult {
   source: 'llm' | 'deterministic';
 }
 
-export interface TocItem {
-  itemId: string;
-  title: string;
-  status: 'OPEN' | 'COVERED' | 'FLAGGED' | 'THIN' | 'NA' | string;
-  documentCount: number;
-  evidenceCount: number;
-}
-
 export interface TocWorkstream {
   id: string;
   title: string;
   order: number;
+  /** Documents placed here — each document is counted exactly once. */
   documentCount: number;
-  evidenceCount: number;
-  items: TocItem[];
 }
 
 export interface LibraryToc {
   workstreams: TocWorkstream[];
   unfiled: { documentCount: number };
-  totals: { documents: number; evidence: number };
+  totals: { documents: number; placed: number };
+}
+
+export type DealMapNode =
+  | { id: string; type: 'ROOT'; label: string; documentCount: number }
+  | {
+      id: string;
+      type: 'WORKSTREAM';
+      label: string;
+      workstreamId: string;
+      documentCount: number;
+      order: number;
+    }
+  | {
+      id: string;
+      type: 'DOCUMENT';
+      label: string;
+      documentId: string;
+      workstreamId: string;
+      riskScore: number | null;
+      riskLevel: string | null;
+      documentType: string | null;
+      evidenceCount: number;
+      itemCount: number;
+      analyzed: boolean;
+    };
+
+export interface DealMapEdge {
+  id: string;
+  source: string;
+  target: string;
+  type: 'CONTAINS' | 'PEER';
+  weight: number;
+}
+
+export interface DealMap {
+  nodes: DealMapNode[];
+  edges: DealMapEdge[];
+  stats: { documents: number; workstreams: number };
 }
 
 export interface DocumentBacklinks {
@@ -160,6 +189,11 @@ export const libraryService = {
     ].filter(Boolean);
     const qs = include.length > 0 ? `?include=${include.join(',')}` : '';
     return apiClient.get<LibraryGraph>(`/projects/${projectId}/library/graph${qs}`);
+  },
+
+  /** The deal as a network: root → workstreams → documents, plus peer links. */
+  async getDealMap(projectId: string): Promise<DealMap> {
+    return apiClient.get<DealMap>(`/projects/${projectId}/library/map`);
   },
 
   /** Everything in the deal that connects to one document. */

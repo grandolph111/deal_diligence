@@ -104,30 +104,19 @@ async function allowedDocIds(user: ScopeUser, projectId: string): Promise<Set<st
 const inScope = (allowed: Set<string> | null, docId: string | null): boolean =>
   allowed === null || (docId != null && allowed.has(docId));
 
-export interface TocItem {
-  itemId: string;
-  title: string;
-  status: string;
-  /** Distinct in-scope documents supplying evidence to this item. */
-  documentCount: number;
-  evidenceCount: number;
-}
-
 export interface TocWorkstream {
   id: string;
   title: string;
   order: number;
-  /** Distinct in-scope documents with evidence anywhere in this workstream. */
+  /** Documents placed here — each document is counted exactly once. */
   documentCount: number;
-  evidenceCount: number;
-  items: TocItem[];
 }
 
 export interface LibraryToc {
   workstreams: TocWorkstream[];
   /** Documents with no evidence at all — never extracted, or extraction failed. */
   unfiled: { documentCount: number };
-  totals: { documents: number; evidence: number };
+  totals: { documents: number; placed: number };
 }
 
 export interface DocumentBacklinks {
@@ -193,6 +182,167 @@ const slugify = (s: string): string =>
     .replace(/^-+|-+$/g, '')
     .slice(0, 60) || 'untitled';
 
+export type DealMapNode =
+  | { id: string; type: 'ROOT'; label: string; documentCount: number }
+  | {
+      id: string;
+      type: 'WORKSTREAM';
+      label: string;
+      workstreamId: string;
+      documentCount: number;
+      order: number;
+    }
+  | {
+      id: string;
+      type: 'DOCUMENT';
+      label: string;
+      documentId: string;
+      /** The single workstream this document is placed under. */
+      workstreamId: string;
+      riskScore: number | null;
+      riskLevel: string | null;
+      documentType: string | null;
+      evidenceCount: number;
+      /** Distinct checklist questions this document answers. */
+      itemCount: number;
+      /** False when extraction never produced evidence. */
+      analyzed: boolean;
+    };
+
+export interface DealMapEdge {
+  id: string;
+  source: string;
+  target: string;
+  type: 'CONTAINS' | 'PEER';
+  /** For PEER: how many clause types the two documents share. */
+  weight: number;
+}
+
+export interface DealMap {
+  nodes: DealMapNode[];
+  edges: DealMapEdge[];
+  stats: { documents: number; workstreams: number };
+}
+
+// Peer links are the associative trails between documents, but they are dense:
+// 98 of 100 contracts carry a governing-law clause, so linking every pair that
+// shares anything yields thousands of edges and a solid grey mat. Keeping only
+// each document's strongest few neighbours preserves the shape of the
+// relationships while staying legible.
+const PEER_LINKS_PER_DOC = 3;
+const MIN_SHARED_CLAUSES = 2;
+
+/**
+ * Undirected document↔document links, capped per document.
+ *
+ * Strength is the number of clause types two documents have in common — a
+ * rough "these two contracts are built alike" signal, which is what makes
+ * clusters legible on the map.
+ */
+function peerEdges(docs: Array<{ id: string; clauseTypes: Set<string> }>): DealMapEdge[] {
+  // Inverted index: clause type → documents carrying it.
+  const byClause = new Map<string, string[]>();
+  for (const d of docs) {
+    for (const c of d.clauseTypes) {
+      const bucket = byClause.get(c) ?? [];
+      bucket.push(d.id);
+      byClause.set(c, bucket);
+    }
+  }
+
+  const shared = new Map<string, Map<string, number>>();
+  for (const ids of byClause.values()) {
+    // A clause type shared by nearly every document says nothing about which
+    // two are alike, and costs O(n²) to expand. Skip the ubiquitous ones.
+    if (ids.length > Math.max(8, docs.length * 0.6)) continue;
+    for (let i = 0; i < ids.length; i += 1) {
+      for (let j = i + 1; j < ids.length; j += 1) {
+        const [a, b] = [ids[i], ids[j]];
+        const am = shared.get(a) ?? new Map<string, number>();
+        am.set(b, (am.get(b) ?? 0) + 1);
+        shared.set(a, am);
+        const bm = shared.get(b) ?? new Map<string, number>();
+        bm.set(a, (bm.get(a) ?? 0) + 1);
+        shared.set(b, bm);
+      }
+    }
+  }
+
+  const seen = new Set<string>();
+  const edges: DealMapEdge[] = [];
+  for (const [a, partners] of shared) {
+    const top = [...partners.entries()]
+      .filter(([, n]) => n >= MIN_SHARED_CLAUSES)
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, PEER_LINKS_PER_DOC);
+    for (const [b, weight] of top) {
+      const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edges.push({ id: `p:${key}`, source: a, target: b, type: 'PEER', weight });
+    }
+  }
+  return edges;
+}
+
+/**
+ * Where each document lives: exactly one workstream.
+ *
+ * A document supplies evidence to ~8 workstreams, but showing it in all eight
+ * made both the tree and the map read as noise — the same contract everywhere,
+ * with no sense of what it primarily is. Placement picks the workstream it
+ * contributes the most evidence to; the other relationships remain reachable
+ * through the document's backlinks and the clause comparison.
+ *
+ * `granted` restricts the candidate workstreams for a scoped caller, so every
+ * document they can reach still lands somewhere they can see.
+ */
+export async function primaryWorkstreamByDocument(
+  projectId: string,
+  allowed: Set<string> | null,
+  granted: Set<string> | null
+): Promise<Map<string, string>> {
+  const evidence = await prisma.libraryNode.findMany({
+    where: { projectId, type: { in: [...EVIDENCE_TYPES] }, sourceDocumentId: { not: null } },
+    select: { workstreamId: true, sourceDocumentId: true, riskLevel: true },
+  });
+
+  const counts = new Map<string, Map<string, { n: number; high: number }>>();
+  for (const e of evidence) {
+    const docId = e.sourceDocumentId as string;
+    if (!inScope(allowed, docId)) continue;
+    if (granted && !granted.has(e.workstreamId)) continue;
+    const byWs = counts.get(docId) ?? new Map<string, { n: number; high: number }>();
+    const cur = byWs.get(e.workstreamId) ?? { n: 0, high: 0 };
+    cur.n += 1;
+    if (e.riskLevel === 'HIGH') cur.high += 1;
+    byWs.set(e.workstreamId, cur);
+    counts.set(docId, byWs);
+  }
+
+  const order = new Map(WORKSTREAMS.map((w) => [w.id, w.order]));
+  const out = new Map<string, string>();
+  for (const [docId, byWs] of counts) {
+    let best: string | null = null;
+    let bestN = -1;
+    let bestHigh = -1;
+    for (const [ws, { n, high }] of byWs) {
+      // Most evidence wins; ties break on high-risk density, then checklist order.
+      const better =
+        n > bestN ||
+        (n === bestN && high > bestHigh) ||
+        (n === bestN && high === bestHigh && (order.get(ws) ?? 99) < (order.get(best ?? '') ?? 99));
+      if (better) {
+        best = ws;
+        bestN = n;
+        bestHigh = high;
+      }
+    }
+    if (best) out.set(docId, best);
+  }
+  return out;
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -233,97 +383,53 @@ async function sourceNodeIds(projectId: string, documentIds: string[]): Promise<
 
 export const libraryService = {
   /**
-   * The checklist tree the Data Room navigates and the board picker scopes to.
+   * The workstream tree the Data Room navigates and the board picker scopes to.
    *
-   * A document is counted under every workstream it supplies evidence to — the
-   * relationship is many-to-many (~8 workstreams per document in practice), so
-   * these counts deliberately sum to more than the document total. `unfiled`
-   * holds the remainder: documents with no evidence, which would otherwise be
-   * invisible in a tree keyed entirely on evidence.
+   * Each document is counted once, under the workstream it primarily belongs
+   * to, so the counts partition the deal rather than overlapping. `unfiled`
+   * holds documents with no evidence at all — never extracted, or extraction
+   * failed — which would otherwise vanish from a tree keyed on evidence.
    */
   async getToc(projectId: string, user: ScopeUser): Promise<LibraryToc> {
     const scope = await resolveProjectScope(user, projectId);
     const allowed = await allowedDocIds(user, projectId);
     // A restricted caller navigates only their granted workstreams. Listing the
-    // others — even with counts drawn from documents they can reach — would
-    // advertise branches the documents API then refuses with 403.
-    const grantedWorkstreams = scope.isFullAccess
-      ? null
-      : new Set(scope.allowedWorkstreamIds);
+    // others would advertise branches the documents API then refuses with 403.
+    const grantedWorkstreams = scope.isFullAccess ? null : new Set(scope.allowedWorkstreamIds);
 
-    const [items, evidence, projectDocs] = await Promise.all([
-      prisma.libraryNode.findMany({
-        where: { projectId, type: 'CHECKLIST_ITEM' },
-        select: { itemId: true, workstreamId: true, title: true, status: true },
-      }),
-      prisma.libraryNode.findMany({
-        where: { projectId, type: { in: [...EVIDENCE_TYPES] } },
-        select: { itemId: true, workstreamId: true, sourceDocumentId: true },
-      }),
+    const [placement, projectDocs] = await Promise.all([
+      primaryWorkstreamByDocument(projectId, allowed, grantedWorkstreams),
       prisma.document.findMany({ where: { projectId }, select: { id: true } }),
     ]);
 
-    const inScopeEvidence = evidence.filter((e) => inScope(allowed, e.sourceDocumentId));
-
-    // Distinct documents per item and per workstream. Sets, not counters — one
-    // document routinely contributes many provisions to the same item.
-    const docsByItem = new Map<string, Set<string>>();
-    const docsByWorkstream = new Map<string, Set<string>>();
-    const evidenceByItem = new Map<string, number>();
-    const evidenceByWorkstream = new Map<string, number>();
-    const documentsWithEvidence = new Set<string>();
-
-    for (const e of inScopeEvidence) {
-      evidenceByItem.set(e.itemId, (evidenceByItem.get(e.itemId) ?? 0) + 1);
-      evidenceByWorkstream.set(e.workstreamId, (evidenceByWorkstream.get(e.workstreamId) ?? 0) + 1);
-      if (!e.sourceDocumentId) continue;
-      documentsWithEvidence.add(e.sourceDocumentId);
-      const byItem = docsByItem.get(e.itemId) ?? new Set<string>();
-      byItem.add(e.sourceDocumentId);
-      docsByItem.set(e.itemId, byItem);
-      const byWs = docsByWorkstream.get(e.workstreamId) ?? new Set<string>();
-      byWs.add(e.sourceDocumentId);
-      docsByWorkstream.set(e.workstreamId, byWs);
-    }
-
-    const itemsByWorkstream = new Map<string, TocItem[]>();
-    for (const item of items) {
-      const bucket = itemsByWorkstream.get(item.workstreamId) ?? [];
-      bucket.push({
-        itemId: item.itemId,
-        title: item.title,
-        status: item.status ?? 'OPEN',
-        documentCount: docsByItem.get(item.itemId)?.size ?? 0,
-        evidenceCount: evidenceByItem.get(item.itemId) ?? 0,
-      });
-      itemsByWorkstream.set(item.workstreamId, bucket);
+    const docsByWorkstream = new Map<string, number>();
+    for (const ws of placement.values()) {
+      docsByWorkstream.set(ws, (docsByWorkstream.get(ws) ?? 0) + 1);
     }
 
     const workstreams: TocWorkstream[] = WORKSTREAMS.filter((ws) => {
       if (grantedWorkstreams && !grantedWorkstreams.has(ws.id)) return false;
       // The catch-all triage workstream is internal — surface it only once
       // something has actually landed there.
-      if (ws.id !== '99-to-triage') return itemsByWorkstream.has(ws.id);
-      return (docsByWorkstream.get(ws.id)?.size ?? 0) > 0;
+      if (ws.id === TRIAGE_WORKSTREAM_ID) return (docsByWorkstream.get(ws.id) ?? 0) > 0;
+      return true;
     }).map((ws) => ({
       id: ws.id,
       title: ws.title,
       order: ws.order,
-      documentCount: docsByWorkstream.get(ws.id)?.size ?? 0,
-      evidenceCount: evidenceByWorkstream.get(ws.id) ?? 0,
-      items: itemsByWorkstream.get(ws.id) ?? [],
+      documentCount: docsByWorkstream.get(ws.id) ?? 0,
     }));
 
     // Unfiled is a full-access notion: a document with no evidence belongs to no
     // workstream, so a restricted caller has no grant that could reach it.
     const visibleDocs = projectDocs.filter((d) => allowed === null || allowed.has(d.id));
     const unfiledCount =
-      allowed === null ? visibleDocs.filter((d) => !documentsWithEvidence.has(d.id)).length : 0;
+      allowed === null ? visibleDocs.filter((d) => !placement.has(d.id)).length : 0;
 
     return {
       workstreams,
       unfiled: { documentCount: unfiledCount },
-      totals: { documents: visibleDocs.length, evidence: inScopeEvidence.length },
+      totals: { documents: visibleDocs.length, placed: placement.size },
     };
   },
 
@@ -516,6 +622,169 @@ export const libraryService = {
         entities: entitiesInScope.length - entitiesShown.length,
       },
     };
+  },
+
+  /**
+   * The deal map: one node per document, clustered under its workstream.
+   *
+   * The earlier map drew the checklist itself — workstreams and their 51
+   * questions — which described the schema rather than the deal. This draws the
+   * corpus: root → 13 workstreams → every document, with documents linked to
+   * each other where they share clause language. A 100-document deal is 114
+   * nodes, which is a readable network rather than a diagram of a taxonomy.
+   *
+   * A document has evidence in ~8 workstreams but is placed under exactly one —
+   * whichever it contributes most evidence to. A node has to sit somewhere, and
+   * "where does this contract mostly live" is the honest answer; the other
+   * seven relationships are still reachable through the document's backlinks.
+   */
+  async getDealMap(projectId: string, user: ScopeUser): Promise<DealMap> {
+    const allowed = await allowedDocIds(user, projectId);
+    const scope = await resolveProjectScope(user, projectId);
+    const grantedWorkstreams = scope.isFullAccess ? null : new Set(scope.allowedWorkstreamIds);
+
+    const [project, evidence, documents] = await Promise.all([
+      prisma.project.findUnique({ where: { id: projectId }, select: { name: true } }),
+      prisma.libraryNode.findMany({
+        where: { projectId, type: { in: [...EVIDENCE_TYPES] }, sourceDocumentId: { not: null } },
+        select: { workstreamId: true, itemId: true, sourceDocumentId: true, riskLevel: true, clauseType: true },
+      }),
+      prisma.document.findMany({
+        where: { projectId },
+        select: { id: true, name: true, riskScore: true, riskLevel: true, documentType: true },
+      }),
+    ]);
+
+    const inScopeEvidence = evidence.filter((e) => inScope(allowed, e.sourceDocumentId));
+
+    // --- per-document rollup: evidence by workstream, clause types, risk ---
+    type Roll = {
+      byWorkstream: Map<string, number>;
+      highRiskByWorkstream: Map<string, number>;
+      clauseTypes: Set<string>;
+      items: Set<string>;
+      evidenceCount: number;
+    };
+    const roll = new Map<string, Roll>();
+    for (const e of inScopeEvidence) {
+      const docId = e.sourceDocumentId as string;
+      if (grantedWorkstreams && !grantedWorkstreams.has(e.workstreamId)) continue;
+      const r =
+        roll.get(docId) ??
+        ({
+          byWorkstream: new Map(),
+          highRiskByWorkstream: new Map(),
+          clauseTypes: new Set(),
+          items: new Set(),
+          evidenceCount: 0,
+        } as Roll);
+      r.byWorkstream.set(e.workstreamId, (r.byWorkstream.get(e.workstreamId) ?? 0) + 1);
+      if (e.riskLevel === 'HIGH') {
+        r.highRiskByWorkstream.set(e.workstreamId, (r.highRiskByWorkstream.get(e.workstreamId) ?? 0) + 1);
+      }
+      if (e.clauseType) r.clauseTypes.add(e.clauseType);
+      r.items.add(e.itemId);
+      r.evidenceCount += 1;
+      roll.set(docId, r);
+    }
+
+    const wsOrder = new Map(WORKSTREAMS.map((w) => [w.id, w.order]));
+
+    /** Most evidence wins; ties break on high-risk density, then checklist order. */
+    const primaryWorkstream = (r: Roll): string | null => {
+      let best: string | null = null;
+      let bestN = -1;
+      let bestHigh = -1;
+      for (const [ws, n] of r.byWorkstream) {
+        const high = r.highRiskByWorkstream.get(ws) ?? 0;
+        const better =
+          n > bestN ||
+          (n === bestN && high > bestHigh) ||
+          (n === bestN && high === bestHigh && (wsOrder.get(ws) ?? 99) < (wsOrder.get(best ?? '') ?? 99));
+        if (better) {
+          best = ws;
+          bestN = n;
+          bestHigh = high;
+        }
+      }
+      return best;
+    };
+
+    const nodes: DealMapNode[] = [];
+    const edges: DealMapEdge[] = [];
+
+    const ROOT_ID = 'root';
+    const docsByWorkstream = new Map<string, string[]>();
+    const placedDocs: Array<{ id: string; clauseTypes: Set<string> }> = [];
+
+    for (const d of documents) {
+      if (!inScope(allowed, d.id)) continue;
+      const r = roll.get(d.id);
+      const ws = r ? primaryWorkstream(r) : null;
+      // A document with no in-scope evidence has no workstream to live under;
+      // restricted callers must not see it at all, and for full-access callers
+      // it belongs in triage rather than floating unattached.
+      if (!ws) {
+        if (!scope.isFullAccess) continue;
+        const bucket = docsByWorkstream.get(TRIAGE_WORKSTREAM_ID) ?? [];
+        bucket.push(d.id);
+        docsByWorkstream.set(TRIAGE_WORKSTREAM_ID, bucket);
+      } else {
+        const bucket = docsByWorkstream.get(ws) ?? [];
+        bucket.push(d.id);
+        docsByWorkstream.set(ws, bucket);
+      }
+
+      nodes.push({
+        id: d.id,
+        type: 'DOCUMENT',
+        label: d.name,
+        documentId: d.id,
+        workstreamId: ws ?? TRIAGE_WORKSTREAM_ID,
+        riskScore: d.riskScore,
+        riskLevel: d.riskLevel,
+        documentType: d.documentType,
+        evidenceCount: r?.evidenceCount ?? 0,
+        itemCount: r?.items.size ?? 0,
+        analyzed: !!r,
+      });
+      placedDocs.push({ id: d.id, clauseTypes: r?.clauseTypes ?? new Set() });
+    }
+
+    // --- workstream hubs (only those the caller may see) ---
+    const visibleWorkstreams = WORKSTREAMS.filter((w) => {
+      if (grantedWorkstreams && !grantedWorkstreams.has(w.id)) return false;
+      if (w.id === TRIAGE_WORKSTREAM_ID) return (docsByWorkstream.get(w.id)?.length ?? 0) > 0;
+      return true;
+    });
+
+    for (const w of visibleWorkstreams) {
+      const docIds = docsByWorkstream.get(w.id) ?? [];
+      nodes.push({
+        id: `ws:${w.id}`,
+        type: 'WORKSTREAM',
+        label: w.title,
+        workstreamId: w.id,
+        documentCount: docIds.length,
+        order: w.order,
+      });
+      edges.push({ id: `c:${ROOT_ID}->ws:${w.id}`, source: ROOT_ID, target: `ws:${w.id}`, type: 'CONTAINS', weight: 1 });
+      for (const docId of docIds) {
+        edges.push({ id: `c:ws:${w.id}->${docId}`, source: `ws:${w.id}`, target: docId, type: 'CONTAINS', weight: 1 });
+      }
+    }
+
+    nodes.push({
+      id: ROOT_ID,
+      type: 'ROOT',
+      label: project?.name ?? 'Deal',
+      documentCount: placedDocs.length,
+    });
+
+    // --- document ↔ document links, from shared clause language ---
+    edges.push(...peerEdges(placedDocs));
+
+    return { nodes, edges, stats: { documents: placedDocs.length, workstreams: visibleWorkstreams.length } };
   },
 
   /**
