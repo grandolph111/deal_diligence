@@ -1,4 +1,4 @@
-import { X, FileText, Layers, Gauge } from 'lucide-react';
+import { X, FileText, Layers, Gauge, FolderOpen } from 'lucide-react';
 import type { DealMapNode } from '../../../api/services/library.service';
 import './deal-map-detail.css';
 
@@ -7,6 +7,8 @@ interface Props {
   onClose: () => void;
   /** Open the document's extracted fact sheet. */
   onOpenFactSheet: (documentId: string, documentName: string) => void;
+  /** Open the data room, scoped to this node. `null` = all documents. */
+  onOpenDataRoom: (workstreamId: string | null) => void;
 }
 
 /**
@@ -16,7 +18,7 @@ interface Props {
  * dot. A map you can only look at is a picture; the point is to get from a
  * node to the document it stands for in one click.
  */
-export function DealMapDetail({ node, onClose, onOpenFactSheet }: Props) {
+export function DealMapDetail({ node, onClose, onOpenFactSheet, onOpenDataRoom }: Props) {
   return (
     <aside className="dmd">
       <div className="dmd__head">
@@ -73,14 +75,32 @@ export function DealMapDetail({ node, onClose, onOpenFactSheet }: Props) {
       )}
 
       {node.type === 'WORKSTREAM' && (
-        <p className="dmd__note">
-          {node.documentCount} document{node.documentCount === 1 ? '' : 's'} sit primarily in this
-          workstream.
-        </p>
+        <>
+          <p className="dmd__note">
+            {node.documentCount} document{node.documentCount === 1 ? '' : 's'}{' '}
+            {node.documentCount === 1 ? 'sits' : 'sit'} primarily in this workstream.
+          </p>
+          {node.documentCount > 0 && (
+            <button
+              className="dmd__action dmd__action--spaced"
+              onClick={() => onOpenDataRoom(node.workstreamId)}
+            >
+              <FolderOpen size={14} aria-hidden="true" /> Open in Data Room
+            </button>
+          )}
+        </>
       )}
 
       {node.type === 'ROOT' && (
-        <p className="dmd__note">{node.documentCount} documents across the deal.</p>
+        <>
+          <p className="dmd__note">{node.documentCount} documents across the deal.</p>
+          <button
+            className="dmd__action dmd__action--spaced"
+            onClick={() => onOpenDataRoom(null)}
+          >
+            <FolderOpen size={14} aria-hidden="true" /> Open in Data Room
+          </button>
+        </>
       )}
     </aside>
   );

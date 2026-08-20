@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Waypoints, FolderOpen } from 'lucide-react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Waypoints } from 'lucide-react';
 import { DealMapGraph, DealMapDetail } from '../features/library';
 import { libraryService } from '../api/services/library.service';
 import type { DealMap, DealMapNode } from '../api/services/library.service';
@@ -19,6 +19,7 @@ const EMPTY: DealMap = { nodes: [], edges: [], stats: { documents: 0, workstream
  */
 export function LibraryGraphPage() {
   const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
 
   const [map, setMap] = useState<DealMap>(EMPTY);
   const [loading, setLoading] = useState(true);
@@ -57,12 +58,6 @@ export function LibraryGraphPage() {
           <h1>Deal Map</h1>
         </div>
 
-        <div className="page-header-actions">
-          <Link to={`/projects/${projectId}/vdr`} className="button secondary">
-            <FolderOpen size={16} />
-            Data Room
-          </Link>
-        </div>
       </div>
 
       {!loading && !error && map.stats.documents > 0 && (
@@ -86,6 +81,11 @@ export function LibraryGraphPage() {
             node={selected}
             onClose={() => setSelected(null)}
             onOpenFactSheet={(id, name) => setFactSheet({ id, name })}
+            onOpenDataRoom={(workstreamId) =>
+              navigate(
+                `/projects/${projectId}/vdr${workstreamId ? `?workstream=${encodeURIComponent(workstreamId)}` : ''}`
+              )
+            }
           />
         )}
       </div>

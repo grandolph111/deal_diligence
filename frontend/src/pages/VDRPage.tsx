@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Search, MessageSquare } from 'lucide-react';
 import {
-  WorkstreamTabs,
+  LibraryTree,
   DocumentList,
   DocumentViewer,
   FactSheetModal,
@@ -15,7 +15,7 @@ import {
   useDocuments,
   useLibraryToc,
 } from '../features/vdr';
-import type { LibrarySelection } from '../features/vdr/components/WorkstreamTabs';
+import type { LibrarySelection } from '../features/vdr/components/LibraryTree';
 import { ChatPanel } from '../features/chat';
 import { membersService, apiClient, documentsService } from '../api';
 import { useAuth } from '../auth';
@@ -41,7 +41,14 @@ export function VDRPage() {
 
   // Checklist navigation. The data room is scoped by workstream / checklist
   // item; `null` means the whole deal.
-  const [selection, setSelection] = useState<LibrarySelection | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selection, setSelection] = useState<LibrarySelection | null>(() => {
+    // Deep link from the deal map: ?workstream=<id> or ?unfiled=1.
+    const ws = searchParams.get('workstream');
+    if (ws) return { workstreamId: ws };
+    if (searchParams.get('unfiled') === '1') return { unfiled: true };
+    return null;
+  });
   const {
     toc,
     loading: tocLoading,
@@ -177,9 +184,19 @@ export function VDRPage() {
     }
   }, [membersLoading, canAccessVDR, projectId, selection, fetchDocuments]);
 
-  const handleSelectScope = useCallback((next: LibrarySelection | null) => {
-    setSelection(next);
-  }, []);
+  const handleSelectScope = useCallback(
+    (next: LibrarySelection | null) => {
+      setSelection(next);
+      // Keep the scope in the URL so the view is linkable and survives reload.
+      const params = new URLSearchParams(searchParams);
+      params.delete('workstream');
+      params.delete('unfiled');
+      if (next?.workstreamId) params.set('workstream', next.workstreamId);
+      if (next?.unfiled) params.set('unfiled', '1');
+      setSearchParams(params, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
 
   // The active tab already names the scope; the list heading just echoes it.
   const scopeLabel = useMemo(() => {
@@ -463,16 +480,16 @@ export function VDRPage() {
       </div>
 
       {/* Main VDR Content */}
-      <div className="vdr-content vdr-content--tabbed">
-        {/* Workstreams partition the deal, so they read as tabs rather than a
-            sidebar filter — and the table gets the full width back. */}
-        <WorkstreamTabs
-          toc={toc}
-          loading={tocLoading}
-          error={tocError}
-          selection={selection}
-          onSelect={handleSelectScope}
-        />
+      <div className="vdr-content">
+        <aside className="vdr-sidebar">
+          <LibraryTree
+            toc={toc}
+            loading={tocLoading}
+            error={tocError}
+            selection={selection}
+            onSelect={handleSelectScope}
+          />
+        </aside>
 
         <main className="vdr-main">
 

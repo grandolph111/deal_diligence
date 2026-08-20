@@ -112,3 +112,8 @@
   line-height: 1.6;
   color: #8296b2;
 }
+
+/* An action that follows explanatory text rather than a fact list. */
+.dmd__action--spaced {
+  margin-top: var(--space-3);
+}
