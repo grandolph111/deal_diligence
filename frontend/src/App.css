@@ -299,7 +299,7 @@
   justify-content: center;
   flex: 1;
   width: 100%;
-  max-width: 520px;
+  max-width: 580px;
   padding: 64px 40px;
   animation: login-fade-in 0.8s ease both;
 }
@@ -311,8 +311,8 @@
 /* ── Paper animation ───────────────────────────────────────────────────────── */
 .login-paper {
   position: relative;
-  width: 124px;
-  margin-top: 40px;
+  flex-shrink: 0;
+  width: 112px;
   animation: login-fade-in 0.9s 0.15s ease both;
 }
 
@@ -460,8 +460,15 @@
   letter-spacing: -0.03em;
   line-height: 1.1;
   color: #fff;
-  margin-bottom: 20px;
+  margin-bottom: 0;
   animation: login-fade-in 0.9s 0.1s ease both;
+}
+
+.login-hero-head {
+  display: flex;
+  align-items: center;
+  gap: 34px;
+  margin-bottom: 20px;
 }
 
 .login-hero p {
