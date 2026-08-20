@@ -118,6 +118,12 @@ export function ProjectOverviewPage() {
 
   const { project, scope, header, riskStrip, documentsByRisk, entitySummary, recentReports } = data;
 
+  // Biggest rollups first — a long tail of one-off types tells the reader
+  // nothing, and the entities page is where the full list belongs.
+  const topEntityTypes = [...entitySummary]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 12);
+
   const displayName = projectName ?? project.name;
 
   const handleRenameProject = async (newName: string) => {
@@ -318,7 +324,7 @@ export function ProjectOverviewPage() {
       </section>
 
       {/* Entities + recent reports */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)', alignItems: 'stretch' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)', alignItems: 'start' }}>
         <section style={{ display: 'flex', flexDirection: 'column' }}>
           <h2 style={{ marginBottom: 'var(--space-4)' }}>Entity rollups</h2>
           <div className="card" style={{ padding: 'var(--space-4)', flex: 1, display: 'flex', alignItems: 'center' }}>
@@ -328,22 +334,22 @@ export function ProjectOverviewPage() {
                 <span>Entities appear after your first document is analyzed.</span>
               </div>
             ) : (
-              <ScrollList
-                total={entitySummary.length}
-                cap={10}
-                rowHeight={28}
-                noun="entity type"
-                className="scroll-list--full"
-              >
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-3)', width: '100%' }}>
-                  {entitySummary.map((e) => (
-                    <div key={e.entityType} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>{e.entityType}</span>
-                      <span style={{ fontWeight: 500 }}>{e.count}</span>
+              <div style={{ width: '100%' }}>
+                <div className="entity-rollup-grid">
+                  {topEntityTypes.map((e) => (
+                    <div key={e.entityType} className="entity-rollup-row">
+                      <span className="entity-rollup-name">{e.entityType}</span>
+                      <span className="entity-rollup-count">{e.count}</span>
                     </div>
                   ))}
                 </div>
-              </ScrollList>
+                {entitySummary.length > topEntityTypes.length && (
+                  <p className="entity-rollup-more">
+                    {entitySummary.length} types in total ·{' '}
+                    <Link to={`/projects/${projectId}/entities`}>see all entities</Link>
+                  </p>
+                )}
+              </div>
             )}
           </div>
         </section>
@@ -355,7 +361,6 @@ export function ProjectOverviewPage() {
               className="card"
               style={{
                 padding: 'var(--space-5)',
-                flex: 1,
                 display: 'flex',
                 alignItems: 'center',
                 gap: 'var(--space-3)',

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import './deal-brief-glance.css';
 import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -209,6 +210,58 @@ const extractToc = (markdown: string): TocItem[] => {
   return out;
 };
 
+interface Glance {
+  snapshot: string;
+  risks: Array<{ title: string; level: string }>;
+  anomalyCount: number;
+}
+
+/**
+ * The body of one `# Heading` section, up to the next `# `.
+ *
+ * Scanned line by line rather than with a regex: a multiline lookahead for
+ * "next heading or end" matches the end of the very first line, so the
+ * expression returns an empty body for every section.
+ */
+const sectionBody = (markdown: string, heading: string): string => {
+  const lines = markdown.split('\n');
+  const want = `# ${heading}`.toLowerCase();
+  const start = lines.findIndex((l) => l.trim().toLowerCase() === want);
+  if (start === -1) return '';
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((l) => /^#\s/.test(l));
+  return (end === -1 ? rest : rest.slice(0, end)).join('\n').trim();
+};
+
+/**
+ * Condense the brief into something scannable.
+ *
+ * The brief is a long document by design — ten sections, every party, every
+ * clause, every relationship. That is the right artifact to have, but it is the
+ * wrong first thing to read, so the page opens with the figures and the few
+ * risks that actually decide whether to keep reading.
+ */
+const buildGlance = (markdown: string): Glance => {
+  const snapshotRaw = sectionBody(markdown, 'Deal Snapshot');
+  // Two sentences is the useful part of a snapshot; the rest repeats sections.
+  const sentences = snapshotRaw.replace(/\s+/g, ' ').match(/[^.!?]+[.!?]+/g) ?? [];
+  const snapshot = sentences.slice(0, 2).join(' ').trim() || snapshotRaw;
+
+  const risks: Glance['risks'] = [];
+  for (const line of sectionBody(markdown, 'Top Risks').split('\n')) {
+    // `1. Title ([Doc p.N]) — HIGH. Rationale`
+    const m = line.match(/^\s*\d+\.\s+(.+?)\s*(?:\(\[[^\]]*\]\))?\s*—\s*(LOW|MEDIUM|HIGH)\b/i);
+    if (m) risks.push({ title: m[1].trim(), level: m[2].toUpperCase() });
+  }
+
+  const anomalies = sectionBody(markdown, 'Cross-document Anomalies');
+  const anomalyCount = anomalies && !/^_?No\b/i.test(anomalies)
+    ? anomalies.split('\n').filter((l) => /^\s*(?:[-*]|\d+\.)\s+\S/.test(l)).length
+    : 0;
+
+  return { snapshot, risks: risks.slice(0, 4), anomalyCount };
+};
+
 /** Get children as a plain string for slug/meta lookups. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const childrenToText = (children: any): string => {
@@ -302,6 +355,7 @@ export function DealBriefPage() {
   );
 
   const toc = useMemo(() => extractToc(renderedMarkdown), [renderedMarkdown]);
+  const glance = useMemo(() => buildGlance(renderedMarkdown), [renderedMarkdown]);
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
 
   // Track which section is in the viewport for TOC highlighting.
@@ -605,6 +659,33 @@ export function DealBriefPage() {
                     );
                   })}
                 </nav>
+              )}
+
+              {/* Condensed view first: the figures and the handful of risks
+                  that decide whether the full brief is worth reading. */}
+              {(glance.snapshot || glance.risks.length > 0) && (
+                <section className="brief-glance">
+                  <h2 className="brief-glance__title">At a glance</h2>
+                  {glance.snapshot && <p className="brief-glance__summary">{glance.snapshot}</p>}
+
+                  {glance.risks.length > 0 && (
+                    <ul className="brief-glance__risks">
+                      {glance.risks.map((r) => (
+                        <li key={r.title}>
+                          <span className={`brief-glance__level is-${r.level.toLowerCase()}`}>
+                            {r.level}
+                          </span>
+                          <span className="brief-glance__risk-title">{r.title}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <p className="brief-glance__more">
+                    {glance.anomalyCount > 0 && `${glance.anomalyCount} cross-document anomalies · `}
+                    Full detail in the sections below
+                  </p>
+                </section>
               )}
 
               <div className="card" style={{ padding: 'var(--space-6) var(--space-8)' }}>
