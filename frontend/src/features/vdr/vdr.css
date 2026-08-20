@@ -31,10 +31,15 @@
 }
 
 /* Page Layout */
+/* min-width:0 so a wide child (the tab strip, the document table) cannot push
+   the page past the viewport — without it the flex default of min-width:auto
+   lets content set the width, which shoved the header actions off-screen. */
 .vdr-page {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
 }
 
@@ -98,6 +103,20 @@
 /* Active checklist scope. Names what the list below is showing — a document
    appears under every workstream it has evidence in, so without this the same
    file surfacing in several places reads as duplication rather than coverage. */
+/* Column layout: without min-width the wide document table forces the whole
+   column — and so the page — wider than the viewport, which pushed the header
+   actions off-screen. The table scrolls inside .vdr-documents instead. */
+.vdr-content--tabbed {
+  flex-direction: column;
+  min-width: 0;
+}
+
+.vdr-content--tabbed > .vdr-main,
+.vdr-content--tabbed > .ws-tabs {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .vdr-scope {
   padding: var(--space-3) var(--space-6);
   border-bottom: 1px solid var(--border-primary);

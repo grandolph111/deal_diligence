@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Search, MessageSquare } from 'lucide-react';
 import {
-  LibraryTree,
+  WorkstreamTabs,
   DocumentList,
   DocumentViewer,
   FactSheetModal,
@@ -15,7 +15,7 @@ import {
   useDocuments,
   useLibraryToc,
 } from '../features/vdr';
-import type { LibrarySelection } from '../features/vdr/components/LibraryTree';
+import type { LibrarySelection } from '../features/vdr/components/WorkstreamTabs';
 import { ChatPanel } from '../features/chat';
 import { membersService, apiClient, documentsService } from '../api';
 import { useAuth } from '../auth';
@@ -181,21 +181,11 @@ export function VDRPage() {
     setSelection(next);
   }, []);
 
-  // Human-readable name for the active scope, plus a line explaining why one
-  // document can legitimately appear under several workstreams.
-  const { scopeLabel, scopeDescription } = useMemo(() => {
-    if (selection?.unfiled) {
-      return {
-        scopeLabel: 'Not yet analyzed',
-        scopeDescription:
-          'Uploaded but with no clauses extracted yet — queued, in progress, or failed.',
-      };
-    }
+  // The active tab already names the scope; the list heading just echoes it.
+  const scopeLabel = useMemo(() => {
+    if (selection?.unfiled) return 'Not yet analyzed';
     const ws = toc?.workstreams.find((w) => w.id === selection?.workstreamId);
-    if (ws) {
-      return { scopeLabel: ws.title, scopeDescription: null };
-    }
-    return { scopeLabel: 'All Documents', scopeDescription: null };
+    return ws?.title ?? 'All Documents';
   }, [selection, toc]);
 
   // Handle file upload
@@ -473,28 +463,18 @@ export function VDRPage() {
       </div>
 
       {/* Main VDR Content */}
-      <div className="vdr-content">
-        {/* Checklist Sidebar */}
-        <aside className="vdr-sidebar">
-          <LibraryTree
-            toc={toc}
-            loading={tocLoading}
-            error={tocError}
-            selection={selection}
-            onSelect={handleSelectScope}
-          />
-        </aside>
+      <div className="vdr-content vdr-content--tabbed">
+        {/* Workstreams partition the deal, so they read as tabs rather than a
+            sidebar filter — and the table gets the full width back. */}
+        <WorkstreamTabs
+          toc={toc}
+          loading={tocLoading}
+          error={tocError}
+          selection={selection}
+          onSelect={handleSelectScope}
+        />
 
-        {/* Main Content Area */}
         <main className="vdr-main">
-          {/* Active scope. Named explicitly because a document appears under
-              every workstream it has evidence in — without this the same file
-              turning up in several places reads as duplication. */}
-          {scopeDescription && (
-            <div className="vdr-scope">
-              <p className="vdr-scope__hint">{scopeDescription}</p>
-            </div>
-          )}
 
           {/* Error display */}
           {documentsError && (

@@ -136,7 +136,7 @@ function clusterPositions(map: DealMap): Record<string, { x: number; y: number }
 
   // Deal sits in its own band above everything, so the hierarchy reads
   // top-down and nothing can collide with it.
-  pos.root = { x: maxX / 2, y: -170 };
+  pos.root = { x: maxX / 2, y: -140 };
 
   return pos;
 }
@@ -217,10 +217,10 @@ export function DealMapGraph({ map, loading, error, selectedId, onSelect, onRefr
           selector: 'node[type="ROOT"]',
           style: {
             label: 'data(label)',
-            'font-size': '15px',
+            'font-size': '13px',
             'font-weight': 700,
             color: '#f0e9ff',
-            'text-margin-y': 10,
+            'text-margin-y': 8,
           } as cytoscape.Css.Node,
         },
         {
@@ -310,7 +310,9 @@ export function DealMapGraph({ map, loading, error, selectedId, onSelect, onRefr
       // deal ≫ workstream ≫ document, with no overlap between them.
       const base =
         n.type === 'ROOT'
-          ? 88
+          // Just clear of the largest workstream (56) — enough to read as the
+          // root of the hierarchy without dominating the field.
+          ? 64
           : n.type === 'WORKSTREAM'
             // Bigger workstreams hold more, but never small enough to be
             // mistaken for a document or big enough to rival the deal.
