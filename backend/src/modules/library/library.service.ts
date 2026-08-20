@@ -20,12 +20,13 @@
 import type { User } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { resolveProjectScope } from '../../services/scope.service';
+import { ApiError } from '../../utils/ApiError';
 import { playbookService } from '../../services/playbook.service';
 import {
   computeItemStatus,
   highPriorityClauseTypesFor,
 } from '../../services/library-writer.service';
-import { WORKSTREAMS, getWorkstream } from '../../integrations/library/checklist';
+import { WORKSTREAMS, getWorkstream, getItem } from '../../integrations/library/checklist';
 
 export interface GraphNode {
   id: string;
@@ -127,6 +128,107 @@ export interface LibraryToc {
   /** Documents with no evidence at all — never extracted, or extraction failed. */
   unfiled: { documentCount: number };
   totals: { documents: number; evidence: number };
+}
+
+export interface DocumentBacklinks {
+  document: { id: string; name: string };
+  /** Checklist questions this document answers, worst-risk first. */
+  checklistItems: Array<{
+    itemId: string;
+    title: string;
+    status: string;
+    workstreamId: string;
+    workstreamTitle: string;
+    evidenceCount: number;
+    highRiskCount: number;
+  }>;
+  /** Clause types present here, and how many OTHER documents to compare against. */
+  clauseTypes: Array<{ clauseType: string; peerDocumentCount: number }>;
+  relatedDocuments: Array<{
+    id: string;
+    name: string;
+    riskScore: number | null;
+    riskLevel: string | null;
+    sharedClauseTypes: string[];
+  }>;
+  entities: Array<{ id: string; title: string; mentionCount: number }>;
+  notes: Array<{ id: string; title: string; itemId: string; createdAt: string }>;
+}
+
+export interface ClauseComparison {
+  clauseType: string;
+  itemId: string | null;
+  provisions: Array<{
+    id: string;
+    documentId: string | null;
+    documentName: string;
+    title: string;
+    content: string | null;
+    riskLevel: string | null;
+    confidence: number | null;
+    pageNumber: number | null;
+    itemId: string;
+  }>;
+  stats: {
+    total: number;
+    documents: number;
+    byRisk: { HIGH: number; MEDIUM: number; LOW: number; UNSCORED: number };
+  };
+}
+
+// Backlink fan-out is unbounded in principle (a common clause type touches
+// ~90 documents). Cap the "related" lists so the panel stays a summary; the
+// comparison view is where the full set lives.
+const MAX_RELATED_DOCUMENTS = 12;
+const MAX_RELATED_ENTITIES = 15;
+const MAX_SUGGESTED_ITEMS = 8;
+
+const TRIAGE_ITEM_ID = 'unmapped-provisions';
+const TRIAGE_WORKSTREAM_ID = '99-to-triage';
+
+const slugify = (s: string): string =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'untitled';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Resolve loose document references to real document ids.
+ *
+ * Chat citations carry whatever identifier the model echoed from the prompt,
+ * which is the document NAME rather than its id (see chat.service — the
+ * `documentId` it stores is the model's string, not a row id). Rather than let
+ * that break filing, accept either form and resolve names within the project.
+ */
+async function resolveDocumentRefs(projectId: string, refs: string[]): Promise<string[]> {
+  if (refs.length === 0) return [];
+  const ids = refs.filter((r) => UUID_RE.test(r));
+  const names = refs.filter((r) => !UUID_RE.test(r));
+
+  const found = await prisma.document.findMany({
+    where: {
+      projectId,
+      OR: [
+        ...(ids.length ? [{ id: { in: ids } }] : []),
+        ...names.map((name) => ({ name: { equals: name, mode: 'insensitive' as const } })),
+      ],
+    },
+    select: { id: true },
+  });
+  return [...new Set(found.map((d) => d.id))];
+}
+
+/** SOURCE node ids for the given documents — the join target for SOURCED_FROM edges. */
+async function sourceNodeIds(projectId: string, documentIds: string[]): Promise<string[]> {
+  if (documentIds.length === 0) return [];
+  const rows = await prisma.libraryNode.findMany({
+    where: { projectId, type: 'SOURCE', sourceDocumentId: { in: documentIds } },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
 }
 
 export const libraryService = {
@@ -416,6 +518,390 @@ export const libraryService = {
     };
   },
 
+  /**
+   * Everything the deal already knows that touches one document.
+   *
+   * The library stores ~17k edges per deal and, until now, surfaced none of
+   * them as backlinks — which is where most of the value sits. A document is
+   * not an island: it answers ~14 checklist questions, shares clause types with
+   * dozens of peers, and names entities that recur across the deal. This is a
+   * pure read over edges already computed at ingest.
+   */
+  async getDocumentBacklinks(
+    projectId: string,
+    documentId: string,
+    user: ScopeUser
+  ): Promise<DocumentBacklinks> {
+    const allowed = await allowedDocIds(user, projectId);
+    if (!inScope(allowed, documentId)) {
+      throw ApiError.forbidden('You do not have access to this document');
+    }
+
+    const document = await prisma.document.findFirst({
+      where: { id: documentId, projectId },
+      select: { id: true, name: true },
+    });
+    if (!document) throw ApiError.notFound('Document not found');
+
+    const provisions = await prisma.libraryNode.findMany({
+      where: {
+        projectId,
+        type: { in: [...EVIDENCE_TYPES] },
+        sourceDocumentId: documentId,
+      },
+      select: { id: true, itemId: true, workstreamId: true, clauseType: true, riskLevel: true },
+    });
+
+    // --- checklist items this document answers ---
+    const byItem = new Map<string, { count: number; workstreamId: string; highRisk: number }>();
+    for (const p of provisions) {
+      const e = byItem.get(p.itemId) ?? { count: 0, workstreamId: p.workstreamId, highRisk: 0 };
+      e.count += 1;
+      if (p.riskLevel === 'HIGH') e.highRisk += 1;
+      byItem.set(p.itemId, e);
+    }
+    const itemNodes = await prisma.libraryNode.findMany({
+      where: { projectId, type: 'CHECKLIST_ITEM', itemId: { in: [...byItem.keys()] } },
+      select: { itemId: true, title: true, status: true },
+    });
+    const itemMeta = new Map(itemNodes.map((n) => [n.itemId, n]));
+
+    const checklistItems = [...byItem.entries()]
+      .map(([itemId, e]) => ({
+        itemId,
+        title: itemMeta.get(itemId)?.title ?? getItem(itemId)?.title ?? itemId,
+        status: itemMeta.get(itemId)?.status ?? 'OPEN',
+        workstreamId: e.workstreamId,
+        workstreamTitle: getWorkstream(e.workstreamId)?.title ?? e.workstreamId,
+        evidenceCount: e.count,
+        highRiskCount: e.highRisk,
+      }))
+      .sort((a, b) => b.highRiskCount - a.highRiskCount || b.evidenceCount - a.evidenceCount);
+
+    // --- clause types present, with how many peers each has elsewhere ---
+    const ownClauseTypes = [...new Set(provisions.map((p) => p.clauseType).filter(Boolean))] as string[];
+    const peerRows = ownClauseTypes.length
+      ? await prisma.libraryNode.findMany({
+          where: { projectId, type: 'PROVISION', clauseType: { in: ownClauseTypes } },
+          select: { clauseType: true, sourceDocumentId: true },
+        })
+      : [];
+
+    const peerDocsByClause = new Map<string, Set<string>>();
+    for (const r of peerRows) {
+      if (!r.clauseType || !r.sourceDocumentId) continue;
+      if (!inScope(allowed, r.sourceDocumentId)) continue;
+      const set = peerDocsByClause.get(r.clauseType) ?? new Set<string>();
+      set.add(r.sourceDocumentId);
+      peerDocsByClause.set(r.clauseType, set);
+    }
+
+    const clauseTypes = ownClauseTypes
+      .map((clauseType) => ({
+        clauseType,
+        // Peers are the OTHER documents carrying this clause — the comparison set.
+        peerDocumentCount: Math.max(0, (peerDocsByClause.get(clauseType)?.size ?? 1) - 1),
+      }))
+      .sort((a, b) => b.peerDocumentCount - a.peerDocumentCount);
+
+    // --- documents sharing the most clause types with this one ---
+    const sharedByDoc = new Map<string, Set<string>>();
+    for (const r of peerRows) {
+      if (!r.clauseType || !r.sourceDocumentId || r.sourceDocumentId === documentId) continue;
+      if (!inScope(allowed, r.sourceDocumentId)) continue;
+      const set = sharedByDoc.get(r.sourceDocumentId) ?? new Set<string>();
+      set.add(r.clauseType);
+      sharedByDoc.set(r.sourceDocumentId, set);
+    }
+    const topPeerIds = [...sharedByDoc.entries()]
+      .sort((a, b) => b[1].size - a[1].size)
+      .slice(0, MAX_RELATED_DOCUMENTS)
+      .map(([id]) => id);
+    const peerDocs = topPeerIds.length
+      ? await prisma.document.findMany({
+          where: { id: { in: topPeerIds } },
+          select: { id: true, name: true, riskScore: true, riskLevel: true },
+        })
+      : [];
+    const peerDocById = new Map(peerDocs.map((d) => [d.id, d]));
+    const relatedDocuments = topPeerIds.flatMap((id) => {
+      const d = peerDocById.get(id);
+      if (!d) return [];
+      return [
+        {
+          id: d.id,
+          name: d.name,
+          riskScore: d.riskScore,
+          riskLevel: d.riskLevel,
+          sharedClauseTypes: [...(sharedByDoc.get(id) ?? [])].sort(),
+        },
+      ];
+    });
+
+    // --- entities named by this document's provisions ---
+    const provIds = provisions.map((p) => p.id);
+    const mentions = provIds.length
+      ? await prisma.libraryEdge.findMany({
+          where: { projectId, edgeType: 'MENTIONS', fromNodeId: { in: provIds } },
+          select: { toNodeId: true },
+        })
+      : [];
+    const mentionCount = new Map<string, number>();
+    for (const m of mentions) mentionCount.set(m.toNodeId, (mentionCount.get(m.toNodeId) ?? 0) + 1);
+    const entityNodes = mentionCount.size
+      ? await prisma.libraryNode.findMany({
+          where: { projectId, id: { in: [...mentionCount.keys()] } },
+          select: { id: true, title: true },
+        })
+      : [];
+    const entities = entityNodes
+      .map((e) => ({ id: e.id, title: e.title, mentionCount: mentionCount.get(e.id) ?? 0 }))
+      .sort((a, b) => b.mentionCount - a.mentionCount)
+      .slice(0, MAX_RELATED_ENTITIES);
+
+    // --- notes filed against this document ---
+    const noteEdges = await prisma.libraryEdge.findMany({
+      where: { projectId, edgeType: 'SOURCED_FROM', toNodeId: { in: await sourceNodeIds(projectId, [documentId]) } },
+      select: { fromNodeId: true },
+    });
+    const notes = noteEdges.length
+      ? await prisma.libraryNode.findMany({
+          where: { projectId, type: 'NOTE', id: { in: noteEdges.map((e) => e.fromNodeId) } },
+          select: { id: true, title: true, itemId: true, createdAt: true },
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
+
+    return {
+      document,
+      checklistItems,
+      clauseTypes,
+      relatedDocuments,
+      entities,
+      notes: notes.map((n) => ({
+        id: n.id,
+        title: n.title,
+        itemId: n.itemId,
+        createdAt: n.createdAt.toISOString(),
+      })),
+    };
+  },
+
+  /**
+   * Every instance of one clause type across the deal, side by side.
+   *
+   * This is the question a reviewer actually asks — "show me all 101
+   * indemnification clauses and tell me which are outliers" — and the peer
+   * groups that answer it were already built at ingest (PEER_OF edges) but had
+   * no way to be read. Ordered worst-first, because the outlier is the point.
+   */
+  async compareClause(
+    projectId: string,
+    clauseType: string,
+    user: ScopeUser
+  ): Promise<ClauseComparison> {
+    const allowed = await allowedDocIds(user, projectId);
+
+    const rows = (
+      await prisma.libraryNode.findMany({
+        where: { projectId, type: 'PROVISION', clauseType },
+        select: {
+          id: true,
+          title: true,
+          content: true,
+          riskLevel: true,
+          confidence: true,
+          pageNumber: true,
+          itemId: true,
+          sourceDocumentId: true,
+        },
+      })
+    ).filter((r) => inScope(allowed, r.sourceDocumentId));
+
+    const docIds = [...new Set(rows.map((r) => r.sourceDocumentId).filter(Boolean))] as string[];
+    const docs = docIds.length
+      ? await prisma.document.findMany({
+          where: { id: { in: docIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const docName = new Map(docs.map((d) => [d.id, d.name]));
+
+    const provisions = rows
+      .map((r) => ({
+        id: r.id,
+        documentId: r.sourceDocumentId,
+        documentName: r.sourceDocumentId ? (docName.get(r.sourceDocumentId) ?? 'Unknown') : 'Unknown',
+        title: r.title,
+        content: r.content,
+        riskLevel: r.riskLevel,
+        confidence: r.confidence,
+        pageNumber: r.pageNumber,
+        itemId: r.itemId,
+      }))
+      .sort(
+        (a, b) =>
+          (RISK_ORDER[b.riskLevel ?? ''] ?? 0) - (RISK_ORDER[a.riskLevel ?? ''] ?? 0) ||
+          a.documentName.localeCompare(b.documentName)
+      );
+
+    const byRisk = { HIGH: 0, MEDIUM: 0, LOW: 0, UNSCORED: 0 };
+    for (const p of provisions) {
+      const key = (p.riskLevel ?? 'UNSCORED') as keyof typeof byRisk;
+      if (key in byRisk) byRisk[key] += 1;
+      else byRisk.UNSCORED += 1;
+    }
+
+    return {
+      clauseType,
+      itemId: provisions[0]?.itemId ?? null,
+      provisions,
+      stats: { total: provisions.length, documents: docIds.length, byRisk },
+    };
+  },
+
+  /**
+   * Which checklist questions a set of cited documents actually speak to.
+   *
+   * Used to pre-fill the filing target when saving an answer. Ranked by how many
+   * of the cited documents share the item, so the suggestion reflects what the
+   * answer drew on rather than everything those documents happen to mention.
+   * Suggestions only — the user confirms, because a mis-filed conclusion in a
+   * diligence record is worse than an unfiled one.
+   */
+  async suggestNoteItems(
+    projectId: string,
+    documentIds: string[],
+    user: ScopeUser
+  ): Promise<Array<{ itemId: string; title: string; workstreamTitle: string; documentCount: number }>> {
+    const allowed = await allowedDocIds(user, projectId);
+    const resolved = await resolveDocumentRefs(projectId, documentIds);
+    const inScopeDocs = resolved.filter((id) => inScope(allowed, id));
+    if (inScopeDocs.length === 0) return [];
+
+    const rows = await prisma.libraryNode.findMany({
+      where: {
+        projectId,
+        type: { in: [...EVIDENCE_TYPES] },
+        sourceDocumentId: { in: inScopeDocs },
+      },
+      select: { itemId: true, workstreamId: true, sourceDocumentId: true },
+    });
+
+    const docsByItem = new Map<string, { docs: Set<string>; workstreamId: string }>();
+    for (const r of rows) {
+      if (!r.sourceDocumentId) continue;
+      const e = docsByItem.get(r.itemId) ?? { docs: new Set<string>(), workstreamId: r.workstreamId };
+      e.docs.add(r.sourceDocumentId);
+      docsByItem.set(r.itemId, e);
+    }
+
+    const itemNodes = await prisma.libraryNode.findMany({
+      where: { projectId, type: 'CHECKLIST_ITEM', itemId: { in: [...docsByItem.keys()] } },
+      select: { itemId: true, title: true },
+    });
+    const titleByItem = new Map(itemNodes.map((n) => [n.itemId, n.title]));
+
+    return [...docsByItem.entries()]
+      .map(([itemId, e]) => ({
+        itemId,
+        title: titleByItem.get(itemId) ?? getItem(itemId)?.title ?? itemId,
+        workstreamTitle: getWorkstream(e.workstreamId)?.title ?? e.workstreamId,
+        documentCount: e.docs.size,
+      }))
+      .sort((a, b) => b.documentCount - a.documentCount || a.title.localeCompare(b.title))
+      .slice(0, MAX_SUGGESTED_ITEMS);
+  },
+
+  /**
+   * File an answer back into the library as a durable note.
+   *
+   * Without this, a good answer lives in chat scrollback and the next person to
+   * ask re-derives it from scratch. A filed note becomes a first-class library
+   * node: it appears under its checklist items, links back to the documents it
+   * cited, and shows up in the deal map. It is explicitly not evidence — a
+   * conclusion the team wrote must never quietly satisfy a diligence question
+   * that no document actually answers.
+   */
+  async createNote(
+    projectId: string,
+    user: ScopeUser,
+    input: { title: string; content: string; itemIds?: string[]; documentIds?: string[] }
+  ): Promise<{ id: string; itemId: string; workstreamId: string; slug: string }> {
+    const title = input.title.trim();
+    if (!title) throw ApiError.badRequest('A note needs a title');
+    if (!input.content.trim()) throw ApiError.badRequest('A note needs content');
+
+    const scope = await resolveProjectScope(user, projectId);
+    const allowed = await allowedDocIds(user, projectId);
+
+    // Reject unknown item slugs up front — the checklist is static config, so
+    // nothing downstream would catch a typo.
+    const requestedItems = [...new Set(input.itemIds ?? [])];
+    const unknown = requestedItems.filter((id) => !getItem(id));
+    if (unknown.length > 0) {
+      throw ApiError.badRequest(`Unknown checklist item(s): ${unknown.join(', ')}`);
+    }
+    const itemIds = requestedItems.filter(
+      (id) => scope.isFullAccess || scope.allowedWorkstreamIds.includes(getItem(id)!.workstreamId)
+    );
+    if (requestedItems.length > 0 && itemIds.length === 0) {
+      throw ApiError.forbidden('You do not have access to those checklist items');
+    }
+
+    // Unfiled notes land in triage rather than being rejected — a useful answer
+    // that doesn't map cleanly to a question is still worth keeping.
+    const primaryItemId = itemIds[0] ?? TRIAGE_ITEM_ID;
+    const workstreamId = getItem(primaryItemId)?.workstreamId ?? TRIAGE_WORKSTREAM_ID;
+
+    const documentIds = (await resolveDocumentRefs(projectId, input.documentIds ?? [])).filter(
+      (id) => inScope(allowed, id)
+    );
+
+    const slug = `note-${slugify(title)}-${Date.now().toString(36)}`;
+    const note = await prisma.libraryNode.create({
+      data: {
+        projectId,
+        type: 'NOTE',
+        workstreamId,
+        itemId: primaryItemId,
+        slug,
+        title,
+        content: input.content,
+      },
+      select: { id: true, itemId: true, workstreamId: true, slug: true },
+    });
+
+    const edges: {
+      projectId: string;
+      fromNodeId: string;
+      toNodeId: string;
+      edgeType: 'EVIDENCES' | 'SOURCED_FROM';
+    }[] = [];
+
+    // note → checklist item, for every item it answers (not just the primary).
+    const itemNodes = itemIds.length
+      ? await prisma.libraryNode.findMany({
+          where: { projectId, type: 'CHECKLIST_ITEM', itemId: { in: itemIds } },
+          select: { id: true },
+        })
+      : [];
+    for (const n of itemNodes) {
+      edges.push({ projectId, fromNodeId: note.id, toNodeId: n.id, edgeType: 'EVIDENCES' });
+    }
+
+    // note → source, so the note is reachable from the documents it cited.
+    for (const sourceNodeId of await sourceNodeIds(projectId, documentIds)) {
+      edges.push({ projectId, fromNodeId: note.id, toNodeId: sourceNodeId, edgeType: 'SOURCED_FROM' });
+    }
+
+    if (edges.length > 0) {
+      await prisma.libraryEdge.createMany({ data: edges, skipDuplicates: true });
+    }
+
+    return note;
+  },
+
   async getItemEvidence(
     projectId: string,
     itemId: string,
@@ -431,7 +917,9 @@ export const libraryService = {
 
     const provisions = (
       await prisma.libraryNode.findMany({
-        where: { projectId, itemId, type: { in: ['PROVISION', 'RISK', 'OBLIGATION'] } },
+        // NOTE included so a filed answer is visible on the map alongside the
+        // evidence it was drawn from.
+        where: { projectId, itemId, type: { in: ['PROVISION', 'RISK', 'OBLIGATION', 'NOTE'] } },
         select: {
           id: true,
           title: true,

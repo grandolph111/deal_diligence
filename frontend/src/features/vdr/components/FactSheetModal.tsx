@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { X, FileText, Loader, Download } from 'lucide-react';
+import { X, FileText, Loader, Download, Waypoints } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { documentsService } from '../../../api/services/documents.service';
+import { DocumentBacklinksPanel } from './DocumentBacklinksPanel';
+import './factsheet-tabs.css';
 
 interface FactSheetModalProps {
   isOpen: boolean;
@@ -10,6 +12,10 @@ interface FactSheetModalProps {
   documentId: string | null;
   documentName: string | null;
   onClose: () => void;
+  /** Open the peer comparison for a clause type. */
+  onCompareClause?: (clauseType: string) => void;
+  /** Jump to another document's fact sheet. */
+  onOpenDocument?: (documentId: string) => void;
 }
 
 export function FactSheetModal({
@@ -17,11 +23,14 @@ export function FactSheetModal({
   projectId,
   documentId,
   documentName,
+  onCompareClause,
+  onOpenDocument,
   onClose,
 }: FactSheetModalProps) {
   const [markdown, setMarkdown] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<'sheet' | 'links'>('sheet');
 
   useEffect(() => {
     if (!isOpen || !documentId) return;
@@ -76,10 +85,10 @@ export function FactSheetModal({
         >
           <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', margin: 0 }}>
             <FileText size={20} />
-            <span>Extraction: {documentName || 'Document'}</span>
+            <span>{documentName || 'Document'}</span>
           </h3>
           <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-            {markdown && (
+            {markdown && tab === 'sheet' && (
               <button
                 className="button ghost sm"
                 onClick={handleDownload}
@@ -95,12 +104,47 @@ export function FactSheetModal({
         </div>
 
         <div
+          className="factsheet-tabs"
+          role="tablist"
+          aria-label="Document views"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'sheet'}
+            className={`factsheet-tab${tab === 'sheet' ? ' is-active' : ''}`}
+            onClick={() => setTab('sheet')}
+          >
+            <FileText size={14} aria-hidden="true" /> Fact sheet
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'links'}
+            className={`factsheet-tab${tab === 'links' ? ' is-active' : ''}`}
+            onClick={() => setTab('links')}
+          >
+            <Waypoints size={14} aria-hidden="true" /> Connections
+          </button>
+        </div>
+
+        <div
           style={{
             padding: 'var(--space-5) var(--space-6)',
-            maxHeight: 'calc(90vh - 90px)',
+            maxHeight: 'calc(90vh - 140px)',
             overflowY: 'auto',
           }}
         >
+          {tab === 'links' && documentId && (
+            <DocumentBacklinksPanel
+              projectId={projectId}
+              documentId={documentId}
+              onCompareClause={onCompareClause}
+              onOpenDocument={onOpenDocument}
+            />
+          )}
+          {tab === 'sheet' && (
+          <>
           {loading && (
             <div
               style={{
@@ -122,6 +166,8 @@ export function FactSheetModal({
             <div className="markdown-body">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
             </div>
+          )}
+          </>
           )}
         </div>
       </div>

@@ -6,6 +6,7 @@ import {
   DocumentList,
   DocumentViewer,
   FactSheetModal,
+  ClauseComparisonModal,
   SearchPanel,
   UploadDropZone,
   UploadProgressModal,
@@ -90,6 +91,29 @@ export function VDRPage() {
   const [showViewer, setShowViewer] = useState(false);
 
   const [extractionDocument, setExtractionDocument] = useState<Document | null>(null);
+  const [comparingClause, setComparingClause] = useState<string | null>(null);
+
+  /**
+   * Follow a backlink to another document's fact sheet. The target is usually
+   * outside the loaded list (backlinks reach across the whole deal), so fetch
+   * it rather than searching what happens to be on screen.
+   */
+  const handleOpenRelatedExtraction = useCallback(
+    async (id: string) => {
+      if (!projectId) return;
+      const loaded = documents.find((d) => d.id === id);
+      if (loaded) {
+        setExtractionDocument(loaded);
+        return;
+      }
+      try {
+        setExtractionDocument(await documentsService.getDocument(projectId, id));
+      } catch {
+        // Non-fatal: the link points somewhere this user cannot reach.
+      }
+    },
+    [projectId, documents]
+  );
 
   const handleViewExtraction = useCallback((document: Document) => {
     setExtractionDocument(document);
@@ -569,6 +593,18 @@ export function VDRPage() {
           documentId={extractionDocument?.id ?? null}
           documentName={extractionDocument?.name ?? null}
           onClose={() => setExtractionDocument(null)}
+          onCompareClause={setComparingClause}
+          onOpenDocument={handleOpenRelatedExtraction}
+        />
+      )}
+
+      {/* Peer comparison — every version of one clause across the deal */}
+      {projectId && (
+        <ClauseComparisonModal
+          projectId={projectId}
+          clauseType={comparingClause}
+          onClose={() => setComparingClause(null)}
+          onOpenDocument={handleOpenRelatedExtraction}
         />
       )}
 

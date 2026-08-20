@@ -9,6 +9,7 @@ interface MessageListProps {
   loading: boolean;
   sendingMessage: boolean;
   onDocumentClick?: (documentId: string) => void;
+  onSaveAnswer?: (content: string, documentIds: string[]) => void;
 }
 
 /**
@@ -19,6 +20,7 @@ export function MessageList({
   loading,
   sendingMessage,
   onDocumentClick,
+  onSaveAnswer,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -66,6 +68,7 @@ export function MessageList({
           key={message.id}
           message={message}
           onDocumentClick={onDocumentClick}
+          onSaveAnswer={onSaveAnswer}
         />
       ))}
 

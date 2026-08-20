@@ -823,3 +823,39 @@
     width: 100%;
   }
 }
+
+/* Save-to-deal action on an assistant answer. Quiet by default — it is an
+   optional act of curation, not the primary path through the conversation. */
+.message-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.message-save {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition:
+    border-color 140ms cubic-bezier(0.2, 0, 0.2, 1),
+    background-color 140ms cubic-bezier(0.2, 0, 0.2, 1),
+    color 140ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.message-save:hover {
+  border-color: var(--color-accent);
+  background: var(--color-accent-light);
+  color: var(--text-primary);
+}
+
+.message-save:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}

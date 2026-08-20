@@ -1,8 +1,9 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { X, ArrowLeft, MessageSquare } from 'lucide-react';
 import { ConversationList } from './ConversationList';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
+import { SaveAnswerModal } from './SaveAnswerModal';
 import { SelectedDocuments } from './SelectedDocuments';
 import { useChat } from '../hooks/useChat';
 import { useProjectReadiness } from '../../../api/hooks/useProjectReadiness';
@@ -51,6 +52,23 @@ export function ChatPanel({
     removeSelectedDocument,
     clearSelectedDocuments,
   } = useChat({ projectId });
+
+  // Filing an answer into the library
+  const [saving, setSaving] = useState<{ content: string; documentIds: string[] } | null>(null);
+
+  const handleSaveAnswer = useCallback((content: string, documentIds: string[]) => {
+    setSaving({ content, documentIds });
+  }, []);
+
+  // The user's question titles the note better than the answer's opening line.
+  const lastQuestion = (() => {
+    if (!saving) return undefined;
+    const idx = messages.findIndex((m) => m.content === saving.content);
+    for (let i = idx - 1; i >= 0; i -= 1) {
+      if (messages[i].role === 'USER') return messages[i].content;
+    }
+    return undefined;
+  })();
 
   // Add initial document when provided
   useEffect(() => {
@@ -141,6 +159,7 @@ export function ChatPanel({
                 loading={loading}
                 sendingMessage={sendingMessage}
                 onDocumentClick={onDocumentClick}
+                onSaveAnswer={projectId ? handleSaveAnswer : undefined}
               />
             </div>
           ) : (
@@ -183,6 +202,18 @@ export function ChatPanel({
           </div>
         )}
       </div>
+
+      {projectId && saving && (
+        <SaveAnswerModal
+          projectId={projectId}
+          isOpen
+          content={saving.content}
+          documentIds={saving.documentIds}
+          question={lastQuestion}
+          onClose={() => setSaving(null)}
+          onSaved={() => setSaving(null)}
+        />
+      )}
     </div>
   );
 }

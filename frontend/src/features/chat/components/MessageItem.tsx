@@ -1,10 +1,12 @@
-import { User, Bot } from 'lucide-react';
+import { User, Bot, BookmarkPlus } from 'lucide-react';
 import { CitationCard } from './CitationCard';
 import type { ChatMessage, Citation } from '../../../types/api';
 
 interface MessageItemProps {
   message: ChatMessage;
   onDocumentClick?: (documentId: string) => void;
+  /** File this answer into the deal library. Omitted = feature unavailable. */
+  onSaveAnswer?: (content: string, documentIds: string[]) => void;
 }
 
 /**
@@ -21,7 +23,7 @@ function formatTime(dateString: string): string {
 /**
  * Displays a single chat message with optional citations
  */
-export function MessageItem({ message, onDocumentClick }: MessageItemProps) {
+export function MessageItem({ message, onDocumentClick, onSaveAnswer }: MessageItemProps) {
   const isUser = message.role === 'USER';
   const citations: Citation[] = message.citations
     ? (typeof message.citations === 'string'
@@ -66,6 +68,26 @@ export function MessageItem({ message, onDocumentClick }: MessageItemProps) {
                 />
               ))}
             </div>
+          </div>
+        )}
+
+        {/* An answer worth keeping shouldn't only exist in scrollback — filing
+            it makes it part of what the deal knows. */}
+        {!isUser && onSaveAnswer && message.content.trim().length > 0 && (
+          <div className="message-actions">
+            <button
+              type="button"
+              className="message-save"
+              onClick={() =>
+                onSaveAnswer(
+                  message.content,
+                  [...new Set(citations.map((c) => c.documentId).filter(Boolean))]
+                )
+              }
+              title="Save this answer to the deal library"
+            >
+              <BookmarkPlus size={12} aria-hidden="true" /> Save to deal
+            </button>
           </div>
         )}
       </div>

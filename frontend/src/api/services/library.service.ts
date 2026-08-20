@@ -68,6 +68,66 @@ export interface LibraryToc {
   totals: { documents: number; evidence: number };
 }
 
+export interface DocumentBacklinks {
+  document: { id: string; name: string };
+  checklistItems: Array<{
+    itemId: string;
+    title: string;
+    status: string;
+    workstreamId: string;
+    workstreamTitle: string;
+    evidenceCount: number;
+    highRiskCount: number;
+  }>;
+  clauseTypes: Array<{ clauseType: string; peerDocumentCount: number }>;
+  relatedDocuments: Array<{
+    id: string;
+    name: string;
+    riskScore: number | null;
+    riskLevel: string | null;
+    sharedClauseTypes: string[];
+  }>;
+  entities: Array<{ id: string; title: string; mentionCount: number }>;
+  notes: Array<{ id: string; title: string; itemId: string; createdAt: string }>;
+}
+
+export interface ClauseComparison {
+  clauseType: string;
+  itemId: string | null;
+  provisions: Array<{
+    id: string;
+    documentId: string | null;
+    documentName: string;
+    title: string;
+    content: string | null;
+    riskLevel: string | null;
+    confidence: number | null;
+    pageNumber: number | null;
+    itemId: string;
+  }>;
+  stats: {
+    total: number;
+    documents: number;
+    byRisk: { HIGH: number; MEDIUM: number; LOW: number; UNSCORED: number };
+  };
+}
+
+export interface SuggestedNoteItem {
+  itemId: string;
+  title: string;
+  workstreamTitle: string;
+  documentCount: number;
+}
+
+export interface CreateNoteInput {
+  title: string;
+  content: string;
+  /** Checklist items this answer addresses. */
+  itemIds?: string[];
+  /** Documents the answer cited. */
+  documentIds?: string[];
+}
+
 /**
  * Knowledge-library API. `getToc` is the checklist tree the Data Room
  * navigates; `getGraph` is the same skeleton drawn as a graph, with sources and
@@ -100,6 +160,37 @@ export const libraryService = {
     ].filter(Boolean);
     const qs = include.length > 0 ? `?include=${include.join(',')}` : '';
     return apiClient.get<LibraryGraph>(`/projects/${projectId}/library/graph${qs}`);
+  },
+
+  /** Everything in the deal that connects to one document. */
+  async getDocumentBacklinks(projectId: string, documentId: string): Promise<DocumentBacklinks> {
+    return apiClient.get<DocumentBacklinks>(
+      `/projects/${projectId}/library/documents/${documentId}/backlinks`
+    );
+  },
+
+  /** Every instance of one clause type across the deal, worst-risk first. */
+  async compareClause(projectId: string, clauseType: string): Promise<ClauseComparison> {
+    return apiClient.get<ClauseComparison>(
+      `/projects/${projectId}/library/clauses/${encodeURIComponent(clauseType)}/compare`
+    );
+  },
+
+  /** Checklist items the cited documents speak to — suggestions for filing. */
+  async suggestNoteItems(projectId: string, documentIds: string[]): Promise<SuggestedNoteItem[]> {
+    const res = await apiClient.post<{ items: SuggestedNoteItem[] }>(
+      `/projects/${projectId}/library/notes/suggest`,
+      { documentIds }
+    );
+    return res.items;
+  },
+
+  /** File an answer back into the library so it stops being chat scrollback. */
+  async createNote(
+    projectId: string,
+    input: CreateNoteInput
+  ): Promise<{ id: string; itemId: string; workstreamId: string; slug: string }> {
+    return apiClient.post(`/projects/${projectId}/library/notes`, input);
   },
 
   async getItemEvidence(projectId: string, itemId: string): Promise<LibraryGraph> {

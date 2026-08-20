@@ -879,6 +879,10 @@ enum LibraryNodeType {
   OBLIGATION
   ENTITY
   SOURCE
+  // A filed answer — an analysis the team chose to keep, rather than let it
+  // evaporate into chat history. Authored, not extracted, so it is deliberately
+  // NOT evidence: it never counts toward a checklist item's coverage.
+  NOTE
 }
 
 enum CoverageStatus {
