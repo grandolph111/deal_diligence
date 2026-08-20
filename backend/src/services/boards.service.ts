@@ -1,15 +1,21 @@
 /**
- * Kanban board service. Boards are project-scoped, and each board is
- * attached to one or more data-room folders. A member sees a board only
- * if ALL of the board's folders are in their allowed-folder set
- * (intersection rule). Members with full-deal access (OWNER/ADMIN or
- * empty restrictedFolders) see every board.
+ * Kanban board service. Boards are project-scoped and carved out by checklist
+ * workstream — this is how an admin hands a specialist their slice of the deal
+ * ("IP Diligence" → 04-intellectual-property).
+ *
+ * A member sees a board only if ALL of the board's workstreams are in their
+ * allowed set (intersection rule). Members with full-deal access, and boards
+ * with no scope rows at all (the auto-generated "All Documents" board), are
+ * unrestricted.
+ *
+ * Folder scoping is retained but dormant — see KanbanBoardFolder.
  */
 
 import { prisma } from '../config/database';
 import { ApiError } from '../utils/ApiError';
 import { computeScopeKey, SCOPE_FULL } from '../utils/scope-key';
 import { documentsService } from '../modules/documents/documents.service';
+import { WORKSTREAMS } from '../integrations/library/checklist';
 import type { ProjectMember } from '@prisma/client';
 
 const DEFAULT_BOARD_NAME = 'All Documents';
@@ -17,14 +23,31 @@ const DEFAULT_BOARD_NAME = 'All Documents';
 export interface CreateBoardInput {
   name: string;
   description?: string | null;
-  folderIds: string[]; // must be non-empty
+  /** Checklist workstream slugs. At least one scope (this or folderIds) required. */
+  workstreamIds?: string[];
+  /** @deprecated dormant — folder scoping is retired from the UI. */
+  folderIds?: string[];
 }
 
 export interface UpdateBoardInput {
   name?: string;
   description?: string | null;
+  workstreamIds?: string[];
+  /** @deprecated dormant. */
   folderIds?: string[];
 }
+
+const VALID_WORKSTREAM_IDS = new Set(WORKSTREAMS.map((w) => w.id));
+
+/** Reject unknown slugs early — the checklist is static config, so there is no FK to catch typos. */
+const assertValidWorkstreams = (ids: string[]): string[] => {
+  const unique = [...new Set(ids)];
+  const unknown = unique.filter((id) => !VALID_WORKSTREAM_IDS.has(id));
+  if (unknown.length > 0) {
+    throw ApiError.badRequest(`Unknown workstream(s): ${unknown.join(', ')}`);
+  }
+  return unique;
+};
 
 const resolveAccessibleFolderIds = async (
   projectId: string,
@@ -38,17 +61,34 @@ const resolveAccessibleFolderIds = async (
   return documentsService.getAccessibleFolderIds(projectId, restricted);
 };
 
+/** null = full access (OWNER/ADMIN, or a member holding no workstream restriction). */
+const resolveAccessibleWorkstreamIds = (member: ProjectMember): string[] | null => {
+  if (computeScopeKey(member) === SCOPE_FULL) return null;
+  const perms = (member.permissions ?? {}) as Record<string, unknown>;
+  const restricted = (perms.restrictedWorkstreams as string[] | undefined) ?? [];
+  if (restricted.length === 0) return null;
+  return restricted;
+};
+
 /**
- * Board is visible to a member if every folder on the board is in the
- * member's allowed-folder set (intersection rule). null accessible set = full.
+ * Board is visible to a member if every scope on the board is in the member's
+ * allowed set (intersection rule). null accessible set = full access; an
+ * unscoped board covers the whole project and is visible to anyone who can
+ * reach the project at all.
  */
 const boardVisibleTo = (
-  boardFolderIds: string[],
-  accessibleFolderIds: string[] | null
+  boardScopeIds: string[],
+  accessibleIds: string[] | null
 ): boolean => {
-  if (accessibleFolderIds == null) return true;
-  return boardFolderIds.every((f) => accessibleFolderIds.includes(f));
+  if (accessibleIds == null) return true;
+  return boardScopeIds.every((id) => accessibleIds.includes(id));
 };
+
+/** Hydrate a stored slug into the {id,title} shape the UI renders. */
+const describeWorkstream = (workstreamId: string): { id: string; title: string } => ({
+  id: workstreamId,
+  title: WORKSTREAMS.find((w) => w.id === workstreamId)?.title ?? workstreamId,
+});
 
 export const boardsService = {
   /**
@@ -67,10 +107,6 @@ export const boardsService = {
     });
 
     for (const project of projectsWithoutDefault) {
-      const folders = await prisma.folder.findMany({
-        where: { projectId: project.id },
-        select: { id: true },
-      });
       const creator = await prisma.projectMember.findFirst({
         where: { projectId: project.id, role: 'OWNER' },
         select: { userId: true },
@@ -82,12 +118,9 @@ export const boardsService = {
           projectId: project.id,
           name: DEFAULT_BOARD_NAME,
           description:
-            'Auto-generated board covering all folders in this project.',
+            'Auto-generated board covering every document in this deal.',
           isDefault: true,
           createdById: creator.userId,
-          folders: {
-            create: folders.map((f) => ({ folderId: f.id })),
-          },
         },
       });
       created += 1;
@@ -132,18 +165,13 @@ export const boardsService = {
     });
     if (existing) return existing.id;
 
-    const folders = await prisma.folder.findMany({
-      where: { projectId },
-      select: { id: true },
-    });
     const board = await prisma.kanbanBoard.create({
       data: {
         projectId,
         name: DEFAULT_BOARD_NAME,
-        description: 'Auto-generated board covering all folders.',
+        description: 'Auto-generated board covering every document in this deal.',
         isDefault: true,
         createdById: creatorUserId,
-        folders: { create: folders.map((f) => ({ folderId: f.id })) },
       },
     });
     await prisma.task.updateMany({
@@ -154,13 +182,17 @@ export const boardsService = {
   },
 
   async listForMember(projectId: string, member: ProjectMember) {
-    const accessible = await resolveAccessibleFolderIds(projectId, member);
+    const [accessibleFolders, accessibleWorkstreams] = [
+      await resolveAccessibleFolderIds(projectId, member),
+      resolveAccessibleWorkstreamIds(member),
+    ];
     const boards = await prisma.kanbanBoard.findMany({
       where: { projectId },
       include: {
         folders: {
           include: { folder: { select: { id: true, name: true } } },
         },
+        workstreams: { select: { workstreamId: true } },
         _count: { select: { tasks: true } },
       },
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
@@ -175,13 +207,19 @@ export const boardsService = {
         createdAt: b.createdAt,
         updatedAt: b.updatedAt,
         folders: b.folders.map((bf) => bf.folder),
+        workstreams: b.workstreams.map((bw) => describeWorkstream(bw.workstreamId)),
         taskCount: b._count.tasks,
       }))
-      .filter((b) =>
-        boardVisibleTo(
-          b.folders.map((f) => f.id),
-          accessible
-        )
+      .filter(
+        (b) =>
+          boardVisibleTo(
+            b.folders.map((f) => f.id),
+            accessibleFolders
+          ) &&
+          boardVisibleTo(
+            b.workstreams.map((w) => w.id),
+            accessibleWorkstreams
+          )
       );
   },
 
@@ -194,16 +232,20 @@ export const boardsService = {
             folder: { select: { id: true, name: true, parentId: true } },
           },
         },
+        workstreams: { select: { workstreamId: true } },
       },
     });
     if (!board) throw ApiError.notFound('Board not found');
 
-    const accessible = await resolveAccessibleFolderIds(projectId, member);
-    const folderIds = board.folders.map((bf) => bf.folderId);
-    if (!boardVisibleTo(folderIds, accessible)) {
-      throw ApiError.forbidden(
-        'Board covers folders outside your access scope'
-      );
+    const accessibleFolders = await resolveAccessibleFolderIds(projectId, member);
+    if (!boardVisibleTo(board.folders.map((bf) => bf.folderId), accessibleFolders)) {
+      throw ApiError.forbidden('Board covers folders outside your access scope');
+    }
+    const accessibleWorkstreams = resolveAccessibleWorkstreamIds(member);
+    if (
+      !boardVisibleTo(board.workstreams.map((bw) => bw.workstreamId), accessibleWorkstreams)
+    ) {
+      throw ApiError.forbidden('Board covers workstreams outside your access scope');
     }
 
     return {
@@ -214,6 +256,7 @@ export const boardsService = {
       createdAt: board.createdAt,
       updatedAt: board.updatedAt,
       folders: board.folders.map((bf) => bf.folder),
+      workstreams: board.workstreams.map((bw) => describeWorkstream(bw.workstreamId)),
     };
   },
 
@@ -224,16 +267,26 @@ export const boardsService = {
   ) {
     const name = data.name.trim();
     if (!name) throw ApiError.badRequest('Board name is required');
-    if (!data.folderIds || data.folderIds.length === 0) {
-      throw ApiError.badRequest('Select at least one folder for this board');
+
+    const folderIds = data.folderIds ?? [];
+    const workstreamIds = data.workstreamIds?.length
+      ? assertValidWorkstreams(data.workstreamIds)
+      : [];
+
+    if (folderIds.length === 0 && workstreamIds.length === 0) {
+      throw ApiError.badRequest('Select at least one workstream for this board');
     }
-    // Verify every folderId belongs to the project
-    const folders = await prisma.folder.findMany({
-      where: { id: { in: data.folderIds }, projectId },
-      select: { id: true },
-    });
-    if (folders.length !== data.folderIds.length) {
-      throw ApiError.badRequest('One or more folders are not in this project');
+
+    // Verify every folderId belongs to the project (workstreams are static
+    // config, already validated above).
+    if (folderIds.length > 0) {
+      const folders = await prisma.folder.findMany({
+        where: { id: { in: folderIds }, projectId },
+        select: { id: true },
+      });
+      if (folders.length !== folderIds.length) {
+        throw ApiError.badRequest('One or more folders are not in this project');
+      }
     }
 
     const existing = await prisma.kanbanBoard.findFirst({
@@ -248,10 +301,12 @@ export const boardsService = {
         name,
         description: data.description ?? null,
         createdById: creatorUserId,
-        folders: { create: data.folderIds.map((folderId) => ({ folderId })) },
+        folders: { create: folderIds.map((folderId) => ({ folderId })) },
+        workstreams: { create: workstreamIds.map((workstreamId) => ({ workstreamId })) },
       },
       include: {
         folders: { include: { folder: { select: { id: true, name: true } } } },
+        workstreams: { select: { workstreamId: true } },
       },
     });
   },
@@ -273,22 +328,43 @@ export const boardsService = {
     if (data.name !== undefined) patch.name = data.name.trim();
     if (data.description !== undefined) patch.description = data.description;
 
-    if (data.folderIds !== undefined) {
-      if (data.folderIds.length === 0) {
-        throw ApiError.badRequest('A board must have at least one folder');
+    // A board must keep at least one scope across both axes — check the
+    // post-update state, so clearing folders while setting workstreams is fine.
+    if (data.folderIds !== undefined || data.workstreamIds !== undefined) {
+      const [currentFolders, currentWorkstreams] = await Promise.all([
+        prisma.kanbanBoardFolder.count({ where: { boardId } }),
+        prisma.kanbanBoardWorkstream.count({ where: { boardId } }),
+      ]);
+      const nextFolders = data.folderIds?.length ?? currentFolders;
+      const nextWorkstreams = data.workstreamIds?.length ?? currentWorkstreams;
+      if (nextFolders === 0 && nextWorkstreams === 0) {
+        throw ApiError.badRequest('A board must cover at least one workstream');
       }
-      const folders = await prisma.folder.findMany({
-        where: { id: { in: data.folderIds }, projectId },
-        select: { id: true },
-      });
-      if (folders.length !== data.folderIds.length) {
-        throw ApiError.badRequest(
-          'One or more folders are not in this project'
-        );
+    }
+
+    if (data.folderIds !== undefined) {
+      if (data.folderIds.length > 0) {
+        const folders = await prisma.folder.findMany({
+          where: { id: { in: data.folderIds }, projectId },
+          select: { id: true },
+        });
+        if (folders.length !== data.folderIds.length) {
+          throw ApiError.badRequest(
+            'One or more folders are not in this project'
+          );
+        }
       }
       await prisma.kanbanBoardFolder.deleteMany({ where: { boardId } });
       await prisma.kanbanBoardFolder.createMany({
         data: data.folderIds.map((folderId) => ({ boardId, folderId })),
+      });
+    }
+
+    if (data.workstreamIds !== undefined) {
+      const workstreamIds = assertValidWorkstreams(data.workstreamIds);
+      await prisma.kanbanBoardWorkstream.deleteMany({ where: { boardId } });
+      await prisma.kanbanBoardWorkstream.createMany({
+        data: workstreamIds.map((workstreamId) => ({ boardId, workstreamId })),
       });
     }
 
@@ -297,6 +373,7 @@ export const boardsService = {
       data: patch,
       include: {
         folders: { include: { folder: { select: { id: true, name: true } } } },
+        workstreams: { select: { workstreamId: true } },
       },
     });
   },
@@ -337,13 +414,17 @@ export const boardsService = {
   ): Promise<boolean> {
     const board = await prisma.kanbanBoard.findFirst({
       where: { id: boardId, projectId },
-      include: { folders: { select: { folderId: true } } },
+      include: {
+        folders: { select: { folderId: true } },
+        workstreams: { select: { workstreamId: true } },
+      },
     });
     if (!board) return false;
-    const accessible = await resolveAccessibleFolderIds(projectId, member);
-    return boardVisibleTo(
-      board.folders.map((f) => f.folderId),
-      accessible
+    const accessibleFolders = await resolveAccessibleFolderIds(projectId, member);
+    const accessibleWorkstreams = resolveAccessibleWorkstreamIds(member);
+    return (
+      boardVisibleTo(board.folders.map((f) => f.folderId), accessibleFolders) &&
+      boardVisibleTo(board.workstreams.map((w) => w.workstreamId), accessibleWorkstreams)
     );
   },
 
@@ -353,6 +434,25 @@ export const boardsService = {
       select: { folderId: true },
     });
     return rows.map((r) => r.folderId);
+  },
+
+  async boardWorkstreamIds(boardId: string): Promise<string[]> {
+    const rows = await prisma.kanbanBoardWorkstream.findMany({
+      where: { boardId },
+      select: { workstreamId: true },
+    });
+    return rows.map((r) => r.workstreamId);
+  },
+
+  /**
+   * Documents a board covers — those supplying evidence to any of its
+   * workstreams. `null` means unscoped (whole project), matching the
+   * "All Documents" default board.
+   */
+  async boardDocumentIds(boardId: string, projectId: string): Promise<string[] | null> {
+    const workstreamIds = await this.boardWorkstreamIds(boardId);
+    if (workstreamIds.length === 0) return null;
+    return documentsService.documentIdsWithEvidence(projectId, { workstreamIds });
   },
 
   /**

@@ -95,6 +95,29 @@
   flex-shrink: 0;
 }
 
+/* Active checklist scope. Names what the list below is showing — a document
+   appears under every workstream it has evidence in, so without this the same
+   file surfacing in several places reads as duplication rather than coverage. */
+.vdr-scope {
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.vdr-scope__hint {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--text-tertiary);
+}
+
+/* The sidebar holds a long checklist — let it scroll independently. */
+.vdr-sidebar > .lib-tree {
+  overflow-y: auto;
+  flex: 1;
+}
+
 /* Documents area */
 .vdr-documents {
   flex: 1;

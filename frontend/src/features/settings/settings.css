@@ -834,3 +834,11 @@
     width: 100%;
   }
 }
+
+/* A member whose only grants are pre-migration folder scopes — they can see
+   nothing until an admin grants workstreams. */
+.member-scope-chip.is-stale {
+  background: var(--color-warning-light);
+  color: var(--color-warning);
+  border-color: color-mix(in srgb, var(--color-warning) 30%, transparent);
+}

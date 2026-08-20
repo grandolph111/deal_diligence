@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ScrollList } from '../components/ScrollList';
 import { useParams, Link } from 'react-router-dom';
 import {
   AlertCircle,
@@ -270,7 +271,13 @@ export function ProjectOverviewPage() {
             <p>Upload documents to the data room to start risk analysis.</p>
           </div>
         ) : (
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <ScrollList
+            total={documentsByRisk.length}
+            cap={10}
+            rowHeight={96}
+            noun="document"
+            className="card"
+          >
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
               <thead>
                 <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left' }}>
@@ -282,7 +289,7 @@ export function ProjectOverviewPage() {
                 </tr>
               </thead>
               <tbody>
-                {documentsByRisk.slice(0, 12).map((d) => (
+                {documentsByRisk.map((d) => (
                   <tr key={d.id} style={{ borderTop: '1px solid var(--border-primary)' }}>
                     <td style={{ padding: 'var(--space-3) var(--space-4)', fontWeight: 500 }}>{d.name}</td>
                     <td style={{ padding: 'var(--space-3) var(--space-4)', color: 'var(--text-secondary)' }}>{d.documentType ?? '—'}</td>
@@ -295,13 +302,18 @@ export function ProjectOverviewPage() {
                       <ConfidencePill score={d.confidenceScore} reason={d.confidenceReason} />
                     </td>
                     <td style={{ padding: 'var(--space-3) var(--space-4)', color: 'var(--text-secondary)' }}>
-                      {d.riskSummary ?? d.extractionSummary ?? '—'}
+                      {/* Risk summaries run to a paragraph each. Unclamped, two
+                          rows fill the whole viewport and the cap stops meaning
+                          anything — open the document for the full text. */}
+                      <span className="clamp-3">
+                        {d.riskSummary ?? d.extractionSummary ?? '—'}
+                      </span>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollList>
         )}
       </section>
 
@@ -316,14 +328,22 @@ export function ProjectOverviewPage() {
                 <span>Entities appear after your first document is analyzed.</span>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-3)', width: '100%' }}>
-                {entitySummary.map((e) => (
-                  <div key={e.entityType} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>{e.entityType}</span>
-                    <span style={{ fontWeight: 500 }}>{e.count}</span>
-                  </div>
-                ))}
-              </div>
+              <ScrollList
+                total={entitySummary.length}
+                cap={10}
+                rowHeight={28}
+                noun="entity type"
+                className="scroll-list--full"
+              >
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-3)', width: '100%' }}>
+                  {entitySummary.map((e) => (
+                    <div key={e.entityType} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>{e.entityType}</span>
+                      <span style={{ fontWeight: 500 }}>{e.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </ScrollList>
             )}
           </div>
         </section>

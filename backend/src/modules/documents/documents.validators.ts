@@ -77,7 +77,13 @@ export const confirmMultipleUploadsSchema = z.object({
 });
 
 export const listDocumentsQuerySchema = z.object({
+  /** Dormant — folder navigation is retired in favour of workstreams. */
   folderId: z.string().uuid('Invalid folder ID').optional(),
+  // Checklist slugs, not UUIDs (see integrations/library/checklist.ts).
+  workstreamId: z.string().min(1).max(64).optional(),
+  itemId: z.string().min(1).max(64).optional(),
+  /** Documents with no evidence at all — never extracted, or extraction failed. */
+  unfiled: z.coerce.boolean().optional(),
   documentType: documentTypeEnum.optional(),
   status: z.enum(['PENDING', 'PROCESSING', 'COMPLETE', 'FAILED']).optional(),
   page: z.coerce.number().int().positive().default(1),

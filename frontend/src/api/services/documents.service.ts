@@ -45,7 +45,14 @@ export interface InitiateUploadInput {
 }
 
 export interface ListDocumentsParams {
+  /** @deprecated dormant — the data room navigates by workstream. */
   folderId?: string | null;
+  /** Checklist workstream slug, e.g. 04-intellectual-property. */
+  workstreamId?: string;
+  /** Checklist item slug — narrower than a workstream. */
+  itemId?: string;
+  /** Documents with no evidence yet (queued, processing, or failed). */
+  unfiled?: boolean;
   documentType?: string;
   status?: string;
   page?: number;
@@ -144,6 +151,15 @@ export const documentsService = {
 
     if (params.folderId) {
       searchParams.set('folderId', params.folderId);
+    }
+    if (params.workstreamId) {
+      searchParams.set('workstreamId', params.workstreamId);
+    }
+    if (params.itemId) {
+      searchParams.set('itemId', params.itemId);
+    }
+    if (params.unfiled) {
+      searchParams.set('unfiled', 'true');
     }
     if (params.documentType) {
       searchParams.set('documentType', params.documentType);

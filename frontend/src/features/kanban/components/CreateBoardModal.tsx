@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { X, FolderOpen, Plus, Check } from 'lucide-react';
-import { boardsService, foldersService } from '../../../api';
-import type { Folder, KanbanBoardDetail } from '../../../types/api';
+import { X, Plus, Check, CircleAlert } from 'lucide-react';
+import { boardsService } from '../../../api';
+import { libraryService } from '../../../api/services/library.service';
+import type { TocWorkstream } from '../../../api/services/library.service';
+import type { KanbanBoardDetail } from '../../../types/api';
 
 interface Props {
   projectId: string;
@@ -10,25 +12,34 @@ interface Props {
   onCreated: (board: KanbanBoardDetail) => void;
 }
 
+/**
+ * Carve a board out for a specialist.
+ *
+ * Scoping is by diligence workstream rather than folder, because that is the
+ * axis a deal is actually divided along — an IP lawyer wants every contract
+ * with IP evidence in it, not whichever files happened to be dropped in an "IP"
+ * folder. Document counts are shown per workstream so the admin can see the
+ * size of the slice they are handing over before they hand it over.
+ */
 export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Props) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set());
-  const [folders, setFolders] = useState<Folder[]>([]);
-  const [loadingFolders, setLoadingFolders] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [workstreams, setWorkstreams] = useState<TocWorkstream[]>([]);
+  const [loadingToc, setLoadingToc] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadFolders = useCallback(async () => {
+  const loadToc = useCallback(async () => {
     try {
-      setLoadingFolders(true);
-      const res = await foldersService.getFoldersFlat(projectId);
-      setFolders(res);
+      setLoadingToc(true);
+      const toc = await libraryService.getToc(projectId);
+      setWorkstreams(toc.workstreams);
     } catch (err) {
-      console.error('Failed to load folders:', err);
-      setError('Could not load folders');
+      console.error('Failed to load checklist:', err);
+      setError('Could not load the deal checklist');
     } finally {
-      setLoadingFolders(false);
+      setLoadingToc(false);
     }
   }, [projectId]);
 
@@ -36,32 +47,35 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
     if (isOpen) {
       setName('');
       setDescription('');
-      setSelectedFolderIds(new Set());
+      setSelectedIds(new Set());
       setError(null);
-      loadFolders();
+      loadToc();
     }
-  }, [isOpen, loadFolders]);
+  }, [isOpen, loadToc]);
 
-  const toggleFolder = (id: string) => {
-    setSelectedFolderIds((prev) => {
+  const toggle = (id: string) => {
+    setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
   };
 
-  const selectAll = () =>
-    setSelectedFolderIds(new Set(folders.map((f) => f.id)));
-  const clearAll = () => setSelectedFolderIds(new Set());
+  const selectAll = () => setSelectedIds(new Set(workstreams.map((w) => w.id)));
+  const clearAll = () => setSelectedIds(new Set());
+
+  // Distinct documents across the selection — not the sum of per-workstream
+  // counts, since a document usually has evidence in several of them.
+  const selectedWorkstreams = workstreams.filter((w) => selectedIds.has(w.id));
+  const maxReach = selectedWorkstreams.reduce((n, w) => Math.max(n, w.documentCount), 0);
 
   const handleCreate = async () => {
     if (!name.trim()) {
       setError('Board name is required');
       return;
     }
-    if (selectedFolderIds.size === 0) {
-      setError('Select at least one folder');
+    if (selectedIds.size === 0) {
+      setError('Select at least one workstream');
       return;
     }
     try {
@@ -70,7 +84,7 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
       const board = await boardsService.create(projectId, {
         name: name.trim(),
         description: description.trim() || null,
-        folderIds: [...selectedFolderIds],
+        workstreamIds: [...selectedIds],
       });
       onCreated(board);
       onClose();
@@ -98,7 +112,10 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
             <X size={16} />
           </button>
         </div>
-        <div className="modal-content" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+        <div
+          className="modal-content"
+          style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}
+        >
           <div className="form-group">
             <label htmlFor="board-name">Board name</label>
             <input
@@ -106,7 +123,7 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Product & Legal"
+              placeholder="e.g. IP Diligence"
               autoFocus
             />
           </div>
@@ -123,11 +140,13 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
           </div>
 
           <div className="form-group">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}
+            >
               <label>
-                Folders this board covers{' '}
+                Workstreams this board covers{' '}
                 <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>
-                  ({selectedFolderIds.size} selected)
+                  ({selectedIds.size} selected)
                 </span>
               </label>
               <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
@@ -139,9 +158,16 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
                 </button>
               </div>
             </div>
-            <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-xs)', marginTop: 'var(--space-1)' }}>
-              Tasks on this board can only attach documents from these folders.
-              Members see the board only if they have access to all of them.
+            <p
+              style={{
+                color: 'var(--text-tertiary)',
+                fontSize: 'var(--text-xs)',
+                marginTop: 'var(--space-1)',
+                lineHeight: 1.6,
+              }}
+            >
+              Tasks on this board can attach any document with evidence in these workstreams.
+              Members see the board only if all of them are within their access.
             </p>
             <div
               style={{
@@ -152,20 +178,21 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
                 overflowY: 'auto',
               }}
             >
-              {loadingFolders ? (
+              {loadingToc ? (
                 <div style={{ padding: 'var(--space-4)', color: 'var(--text-tertiary)' }}>
-                  Loading folders…
+                  Loading checklist…
                 </div>
-              ) : folders.length === 0 ? (
+              ) : workstreams.length === 0 ? (
                 <div style={{ padding: 'var(--space-4)', color: 'var(--text-tertiary)' }}>
-                  No folders yet. Create folders in the Data Room first.
+                  The checklist populates as documents are analyzed.
                 </div>
               ) : (
-                folders.map((folder) => {
-                  const checked = selectedFolderIds.has(folder.id);
+                workstreams.map((ws) => {
+                  const checked = selectedIds.has(ws.id);
+                  const flagged = ws.items.filter((i) => i.status === 'FLAGGED').length;
                   return (
                     <label
-                      key={folder.id}
+                      key={ws.id}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -179,17 +206,54 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
                       <input
                         type="checkbox"
                         checked={checked}
-                        onChange={() => toggleFolder(folder.id)}
+                        onChange={() => toggle(ws.id)}
                         style={{ width: 'auto' }}
                       />
-                      <FolderOpen size={14} style={{ color: 'var(--text-tertiary)' }} />
-                      <span style={{ flex: 1 }}>{folder.name}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>{ws.title}</span>
+                      {flagged > 0 && (
+                        <span
+                          className="chip"
+                          title={`${flagged} flagged item${flagged === 1 ? '' : 's'}`}
+                          style={{
+                            background: 'var(--risk-high-bg)',
+                            color: 'var(--risk-high)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3,
+                          }}
+                        >
+                          <CircleAlert size={11} /> {flagged}
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          color: 'var(--text-muted)',
+                          fontSize: 'var(--text-xs)',
+                          fontVariantNumeric: 'tabular-nums',
+                          minWidth: 58,
+                          textAlign: 'right',
+                        }}
+                      >
+                        {ws.documentCount} doc{ws.documentCount === 1 ? '' : 's'}
+                      </span>
                       {checked && <Check size={14} style={{ color: 'var(--color-primary)' }} />}
                     </label>
                   );
                 })
               )}
             </div>
+            {selectedIds.size > 0 && (
+              <p
+                style={{
+                  color: 'var(--text-tertiary)',
+                  fontSize: 'var(--text-xs)',
+                  marginTop: 'var(--space-2)',
+                }}
+              >
+                At least {maxReach} document{maxReach === 1 ? '' : 's'} in scope — documents
+                overlap across workstreams, so the exact total is usually higher.
+              </p>
+            )}
           </div>
 
           {error && (
@@ -199,14 +263,22 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
           )}
         </div>
 
-        <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', padding: 'var(--space-4)' }}>
+        <div
+          className="modal-actions"
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: 'var(--space-2)',
+            padding: 'var(--space-4)',
+          }}
+        >
           <button className="button secondary" onClick={onClose} disabled={saving}>
             Cancel
           </button>
           <button
             className="button primary"
             onClick={handleCreate}
-            disabled={saving || !name.trim() || selectedFolderIds.size === 0}
+            disabled={saving || !name.trim() || selectedIds.size === 0}
           >
             {saving ? 'Creating…' : 'Create Board'}
           </button>

@@ -22,7 +22,6 @@ export function LibraryGraphPage() {
     selectedNodeId,
     selectedNode,
     statusCounts,
-    truncated,
     expandItem,
     toggleExpandItem,
     setSelectedNodeId,
@@ -173,19 +172,6 @@ export function LibraryGraphPage() {
           onNodeTap={handleNodeTap}
           onRefresh={refresh}
         />
-
-        {truncated && (
-          <div className="lib-truncated-note">
-            Showing the most material nodes ·{' '}
-            {[
-              truncated.sources > 0 ? `${truncated.sources} more sources` : '',
-              truncated.entities > 0 ? `${truncated.entities} more entities` : '',
-            ]
-              .filter(Boolean)
-              .join(' · ')}{' '}
-            — expand items to drill in
-          </div>
-        )}
 
         {selectedNode && (
           <LibraryNodeDetail

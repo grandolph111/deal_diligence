@@ -1,0 +1,72 @@
+/*
+ * ScrollList — a capped, scrolling viewport with an honest count line.
+ * Navy-tinted to match the surface system in index.css.
+ */
+
+.scroll-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.scroll-list__viewport {
+  min-width: 0;
+}
+
+.scroll-list__viewport--scrolls {
+  overflow-y: auto;
+  /* A hairline inset edge signals "there is more below" before the user
+     scrolls, which a plain clipped box does not. */
+  border-block: 1px solid var(--border-primary);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-gray-300) transparent;
+}
+
+.scroll-list__viewport--scrolls:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* WebKit scrollbar — slim, recedes until the region is hovered. */
+.scroll-list__viewport--scrolls::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scroll-list__viewport--scrolls::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-list__viewport--scrolls::-webkit-scrollbar-thumb {
+  background: var(--color-gray-200);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background-color 160ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.scroll-list__viewport--scrolls:hover::-webkit-scrollbar-thumb {
+  background: var(--color-gray-300);
+  background-clip: content-box;
+}
+
+.scroll-list__count {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Rollup grids want the full width of their card. */
+.scroll-list--full,
+.scroll-list--full .scroll-list__viewport {
+  width: 100%;
+}
+
+/* Multi-line text clamp for cells inside a capped list — keeps row heights
+   uniform so the row cap corresponds to a predictable viewport. */
+.clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

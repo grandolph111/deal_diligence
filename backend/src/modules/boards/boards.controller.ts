@@ -4,16 +4,23 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/ApiError';
 import { boardsService } from '../../services/boards.service';
 
+// Workstream ids are checklist slugs (e.g. 04-intellectual-property), not
+// UUIDs; boards.service validates them against the static checklist. Either
+// axis may be supplied — the service rejects a board with neither.
 const createBoardSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(1000).nullable().optional(),
-  folderIds: z.array(z.string().uuid()).min(1),
+  workstreamIds: z.array(z.string().min(1).max(64)).optional(),
+  /** @deprecated dormant — folder scoping is retired from the UI. */
+  folderIds: z.array(z.string().uuid()).optional(),
 });
 
 const updateBoardSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(1000).nullable().optional(),
-  folderIds: z.array(z.string().uuid()).min(1).optional(),
+  workstreamIds: z.array(z.string().min(1).max(64)).optional(),
+  /** @deprecated dormant. */
+  folderIds: z.array(z.string().uuid()).optional(),
 });
 
 export const boardsController = {

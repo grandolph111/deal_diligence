@@ -5,13 +5,12 @@ import type {
   Role,
   UpdateMemberDto,
   MemberPermissions,
-  FolderTreeNode,
 } from '../../../types/api';
-import { FolderScopePicker } from './FolderScopePicker';
+import { WorkstreamScopePicker } from './WorkstreamScopePicker';
 
 interface MemberEditModalProps {
   member: ProjectMember | null;
-  folderTree: FolderTreeNode[];
+  projectId: string;
   currentUserRole: Role;
   isOpen: boolean;
   saving: boolean;
@@ -21,7 +20,7 @@ interface MemberEditModalProps {
 
 export function MemberEditModal({
   member,
-  folderTree,
+  projectId,
   currentUserRole,
   isOpen,
   saving,
@@ -32,7 +31,7 @@ export function MemberEditModal({
   const [canAccessKanban, setCanAccessKanban] = useState(true);
   const [canAccessVDR, setCanAccessVDR] = useState(false);
   const [canUploadDocs, setCanUploadDocs] = useState(false);
-  const [restrictedFolders, setRestrictedFolders] = useState<string[]>([]);
+  const [restrictedWorkstreams, setRestrictedWorkstreams] = useState<string[]>([]);
 
   useEffect(() => {
     if (member) {
@@ -40,7 +39,7 @@ export function MemberEditModal({
       setCanAccessKanban(member.permissions?.canAccessKanban ?? true);
       setCanAccessVDR(member.permissions?.canAccessVDR ?? false);
       setCanUploadDocs(member.permissions?.canUploadDocs ?? false);
-      setRestrictedFolders(member.permissions?.restrictedFolders ?? []);
+      setRestrictedWorkstreams(member.permissions?.restrictedWorkstreams ?? []);
     }
   }, [member]);
 
@@ -51,7 +50,7 @@ export function MemberEditModal({
       canAccessKanban,
       canAccessVDR,
       canUploadDocs,
-      restrictedFolders,
+      restrictedWorkstreams,
     };
 
     await onSave(member.id, { role, permissions });
@@ -200,14 +199,14 @@ export function MemberEditModal({
                   className="permission-description"
                   style={{ marginBottom: 'var(--space-2)', display: 'block' }}
                 >
-                  Pick the Data Room folders this user can see. Selections cascade to
-                  subfolders. Kanban, Chat, and the Dashboard are all limited to these
-                  folders. Leave blank to lock them out until you grant access.
+                  Pick the diligence workstreams this user can see. They get every document with
+                    evidence in those workstreams, and Kanban, Chat and the Dashboard are
+                    limited to the same scope. Leave blank to lock them out until you grant access.
                 </span>
-                <FolderScopePicker
-                  folderTree={folderTree}
-                  selectedFolderIds={restrictedFolders}
-                  onChange={setRestrictedFolders}
+                <WorkstreamScopePicker
+                  projectId={projectId}
+                  selectedWorkstreamIds={restrictedWorkstreams}
+                  onChange={setRestrictedWorkstreams}
                   disabled={saving}
                 />
               </div>

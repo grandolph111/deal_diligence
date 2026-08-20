@@ -179,16 +179,18 @@ model KanbanBoard {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  project   Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy User                @relation("BoardCreator", fields: [createdById], references: [id])
-  folders   KanbanBoardFolder[]
-  tasks     Task[]
+  project     Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy   User                    @relation("BoardCreator", fields: [createdById], references: [id])
+  folders     KanbanBoardFolder[]
+  workstreams KanbanBoardWorkstream[]
+  tasks       Task[]
 
   @@unique([projectId, name])
   @@index([projectId])
 }
 
 // N:N join: which data-room folders a board covers.
+// Dormant — folder scoping is retired from the UI in favour of workstreams.
 model KanbanBoardFolder {
   boardId  String
   folderId String
@@ -199,6 +201,21 @@ model KanbanBoardFolder {
   @@id([boardId, folderId])
   @@index([boardId])
   @@index([folderId])
+}
+
+// N:N join: which checklist workstreams a board covers. This is how an admin
+// carves a board out for a specialist ("IP Diligence" → 04-intellectual-property).
+// `workstreamId` is a checklist.ts slug, not an FK — the checklist is static
+// config, not table rows. A board with neither folders nor workstreams covers
+// the whole project (the auto-generated "All Documents" board).
+model KanbanBoardWorkstream {
+  boardId      String
+  workstreamId String
+
+  board KanbanBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@id([boardId, workstreamId])
+  @@index([boardId])
 }
 
 model Task {

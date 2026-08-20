@@ -1,4 +1,8 @@
 // Components
+export { LibraryTree } from './components/LibraryTree';
+export type { LibrarySelection } from './components/LibraryTree';
+// Folder components — dormant. Retired from data-room navigation in favour of
+// the checklist tree; kept for uploads and the legacy permission paths.
 export { FolderTree } from './components/FolderTree';
 export { DocumentList } from './components/DocumentList';
 export { Breadcrumb } from './components/Breadcrumb';
@@ -46,6 +50,7 @@ export { ClassificationDropdown } from './components/ClassificationDropdown';
 export { RelatedDocumentsPanel } from './components/RelatedDocumentsPanel';
 
 // Hooks
+export { useLibraryToc } from './hooks/useLibraryToc';
 export { useFolders } from './hooks/useFolders';
 export { useSearch } from './hooks/useSearch';
 export { useDocuments } from './hooks/useDocuments';

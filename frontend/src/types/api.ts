@@ -59,6 +59,9 @@ export interface MemberPermissions {
   canAccessVDR?: boolean;
   canUploadDocs?: boolean;
   restrictedToTags?: string[];
+  /** Checklist workstream slugs — the live scoping axis. */
+  restrictedWorkstreams?: string[];
+  /** @deprecated dormant — folder scoping is retired from the UI. */
   restrictedFolders?: string[];
 }
 
@@ -162,6 +165,9 @@ export interface KanbanBoardSummary extends Timestamps {
   name: string;
   description: string | null;
   isDefault: boolean;
+  /** Checklist workstreams the board covers. Empty = the whole deal. */
+  workstreams: Array<{ id: string; title: string }>;
+  /** @deprecated dormant — folder scoping is retired from the UI. */
   folders: Array<{ id: string; name: string }>;
   taskCount: number;
 }
@@ -171,18 +177,26 @@ export interface KanbanBoardDetail extends Timestamps {
   name: string;
   description: string | null;
   isDefault: boolean;
+  /** Checklist workstreams the board covers. Empty = the whole deal. */
+  workstreams: Array<{ id: string; title: string }>;
+  /** @deprecated dormant — folder scoping is retired from the UI. */
   folders: Array<{ id: string; name: string; parentId?: string | null }>;
 }
 
 export interface CreateBoardDto {
   name: string;
   description?: string | null;
-  folderIds: string[];
+  /** Checklist workstream slugs. At least one scope is required. */
+  workstreamIds?: string[];
+  /** @deprecated dormant — folder scoping is retired from the UI. */
+  folderIds?: string[];
 }
 
 export interface UpdateBoardDto {
   name?: string;
   description?: string | null;
+  workstreamIds?: string[];
+  /** @deprecated dormant. */
   folderIds?: string[];
 }
 

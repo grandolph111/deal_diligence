@@ -12,6 +12,9 @@ export const libraryRoutes = Router({ mergeParams: true });
 libraryRoutes.use(requireAuth);
 libraryRoutes.use(loadProjectMembership);
 
+// GET /library/toc — workstream → checklist item tree (the Data Room navigation)
+libraryRoutes.get('/toc', requirePermission('canAccessVDR'), libraryController.getToc);
+
 // GET /library/graph — tiered base graph (workstreams → items → sources + entities)
 libraryRoutes.get('/graph', requirePermission('canAccessVDR'), libraryController.getGraph);
 

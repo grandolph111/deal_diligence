@@ -7,6 +7,8 @@ export { DangerZone } from './components/DangerZone';
 export { MemberList } from './components/MemberList';
 export { MemberRow } from './components/MemberRow';
 export { MemberEditModal } from './components/MemberEditModal';
+export { WorkstreamScopePicker } from './components/WorkstreamScopePicker';
+/** @deprecated dormant — folder scoping is retired from the UI. */
 export { FolderScopePicker } from './components/FolderScopePicker';
 export { InvitationList } from './components/InvitationList';
 export { InvitationRow } from './components/InvitationRow';

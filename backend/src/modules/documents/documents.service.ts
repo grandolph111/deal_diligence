@@ -10,6 +10,7 @@ import { extractionQueue } from '../../services/extraction-queue.service';
 import { libraryWriterService } from '../../services/library-writer.service';
 import { triageService } from '../../services/triage.service';
 import { resolveProjectScope } from '../../services/scope.service';
+import { EVIDENCE_TYPES } from '../library/library.service';
 
 export interface DocumentUploadResult {
   documentId: string;
@@ -354,14 +355,56 @@ export const documentsService = {
   },
 
   /**
-   * List documents accessible to a user (respecting folder permissions)
+   * Distinct documents supplying evidence to the given workstreams / item.
+   * Omitting both returns every document that has any evidence at all.
+   */
+  async documentIdsWithEvidence(
+    projectId: string,
+    filter: { workstreamIds?: string[]; itemId?: string } = {}
+  ): Promise<string[]> {
+    const rows = await prisma.libraryNode.findMany({
+      where: {
+        projectId,
+        type: { in: [...EVIDENCE_TYPES] },
+        sourceDocumentId: { not: null },
+        ...(filter.workstreamIds ? { workstreamId: { in: filter.workstreamIds } } : {}),
+        ...(filter.itemId ? { itemId: filter.itemId } : {}),
+      },
+      select: { sourceDocumentId: true },
+      distinct: ['sourceDocumentId'],
+    });
+    return rows.map((r) => r.sourceDocumentId as string);
+  },
+
+  /**
+   * Documents carrying no evidence — queued, still processing, or failed
+   * extraction. These belong to no workstream, so the tree would drop them
+   * entirely without an explicit bucket.
+   */
+  async documentIdsWithoutEvidence(projectId: string): Promise<string[]> {
+    const [all, withEvidence] = await Promise.all([
+      prisma.document.findMany({ where: { projectId }, select: { id: true } }),
+      this.documentIdsWithEvidence(projectId),
+    ]);
+    const filed = new Set(withEvidence);
+    return all.map((d) => d.id).filter((id) => !filed.has(id));
+  },
+
+  /**
+   * List documents accessible to a user, scoped and filtered by checklist
+   * workstream.
+   *
+   * A document is reachable through every workstream it supplies evidence to,
+   * so `workstreamId`/`itemId` are filters over the evidence graph rather than
+   * a column on Document. `unfiled` selects the complement: documents carrying
+   * no evidence at all, which no workstream filter could ever surface.
    */
   async listAccessibleDocuments(
     projectId: string,
     userId: string,
     query: ListDocumentsQuery
   ) {
-    const { folderId, documentType, status, page, limit } = query;
+    const { workstreamId, itemId, unfiled, documentType, status, page, limit } = query;
     const skip = (page - 1) * limit;
 
     const user = await prisma.user.findUnique({
@@ -372,37 +415,51 @@ export const documentsService = {
 
     const scope = await resolveProjectScope(user, projectId);
 
-    // Build where clause
-    const where: {
-      projectId: string;
-      folderId?: string | null | { in: string[] };
-      documentType?: string;
-      processingStatus?: DocumentStatus;
-    } = {
-      projectId,
+    const empty = {
+      documents: [] as never[],
+      pagination: { page, limit, total: 0, totalPages: 0 },
     };
 
-    if (scope.isFullAccess) {
-      if (folderId !== undefined) {
-        where.folderId = folderId === 'null' ? null : folderId;
-      }
+    // Zero-grant SMEs and non-members see nothing.
+    if (!scope.isFullAccess && scope.allowedWorkstreamIds.length === 0) return empty;
+
+    if (!scope.isFullAccess && workstreamId && !scope.allowedWorkstreamIds.includes(workstreamId)) {
+      throw ApiError.forbidden('You do not have access to this workstream');
+    }
+
+    // Narrow to an explicit id set whenever scope or filters constrain which
+    // documents qualify; null means "no id constraint".
+    let idFilter: string[] | null = null;
+
+    if (unfiled) {
+      // Unfiled is a full-access notion — a document with no evidence sits in
+      // no workstream, so no grant can reach it.
+      if (!scope.isFullAccess) return empty;
+      idFilter = await this.documentIdsWithoutEvidence(projectId);
     } else {
-      // Zero-grant SMEs and non-members see nothing.
-      if (scope.allowedFolderIds.length === 0) {
-        return {
-          documents: [],
-          pagination: { page, limit, total: 0, totalPages: 0 },
-        };
-      }
-      if (folderId && folderId !== 'null') {
-        if (!scope.allowedFolderIds.includes(folderId)) {
-          throw ApiError.forbidden('You do not have access to this folder');
-        }
-        where.folderId = folderId;
-      } else {
-        where.folderId = { in: scope.allowedFolderIds };
+      const filterWorkstreams = workstreamId
+        ? [workstreamId]
+        : scope.isFullAccess
+          ? null
+          : scope.allowedWorkstreamIds;
+      if (filterWorkstreams || itemId) {
+        idFilter = await this.documentIdsWithEvidence(projectId, {
+          workstreamIds: filterWorkstreams ?? undefined,
+          itemId,
+        });
       }
     }
+
+    if (idFilter !== null && idFilter.length === 0) return empty;
+
+    const where: {
+      projectId: string;
+      id?: { in: string[] };
+      documentType?: string;
+      processingStatus?: DocumentStatus;
+    } = { projectId };
+
+    if (idFilter !== null) where.id = { in: idFilter };
 
     if (documentType) {
       where.documentType = documentType;

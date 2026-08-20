@@ -36,6 +36,9 @@ const EDGE_STYLE: Record<string, { color: string; dashed?: boolean }> = {
 
 const ACCENT = '#0f766e'; // teal selection highlight
 
+// Below this, 10px node labels stop resolving on screen.
+const MIN_READABLE_ZOOM = 0.7;
+
 const nodeColor = (n: LibraryGraphNode): string => {
   if (n.type === 'CHECKLIST_ITEM') return STATUS_COLOR[n.status ?? 'OPEN'] ?? STATUS_COLOR.OPEN;
   if (n.type === 'PROVISION' || n.type === 'RISK' || n.type === 'OBLIGATION')
@@ -78,6 +81,68 @@ interface LibraryGraphProps {
   onRefresh: () => void;
 }
 
+/**
+ * Grid-of-clusters positions for the base tree: each workstream hub sits in its
+ * own cell with its checklist items ringed around it.
+ *
+ * Neither stock layout serves this shape. A force layout ignores the hierarchy
+ * and settles into a blob; `breadthfirst` honours it but packs every node of a
+ * depth into one row, so 51 items become an unreadable line. A single large ring
+ * of hubs was the next attempt and fails for a subtler reason: the hubs are wide
+ * text pills, so thirteen of them force a circle big enough that `fit` zooms the
+ * labels below legibility, and the middle of the circle goes to waste. A grid
+ * spends the canvas evenly and keeps each workstream's items visibly its own.
+ */
+function clusterPositions(
+  nodes: LibraryGraphNode[],
+  edges: LibraryGraphData['edges']
+): Record<string, { x: number; y: number }> {
+  const hubs = nodes.filter((n) => n.type === 'WORKSTREAM');
+  if (hubs.length === 0) return {};
+
+  // workstream node id → its checklist items, via CONTAINS edges.
+  const childrenByHub = new Map<string, string[]>();
+  const hubIds = new Set(hubs.map((h) => h.id));
+  for (const e of edges) {
+    if (e.type !== 'CONTAINS' || !hubIds.has(e.source)) continue;
+    const bucket = childrenByHub.get(e.source) ?? [];
+    bucket.push(e.target);
+    childrenByHub.set(e.source, bucket);
+  }
+
+  // Favour a wide grid — the canvas is far wider than it is tall.
+  const cols = Math.max(1, Math.ceil(Math.sqrt(hubs.length * 1.8)));
+  const CELL_W = 250;
+  const CELL_H = 215;
+  const ITEM_RADIUS = 80;
+
+  const positions: Record<string, { x: number; y: number }> = {};
+  hubs.forEach((hub, i) => {
+    const cx = (i % cols) * CELL_W;
+    const cy = Math.floor(i / cols) * CELL_H;
+    positions[hub.id] = { x: cx, y: cy };
+
+    const children = childrenByHub.get(hub.id) ?? [];
+    children.forEach((childId, j) => {
+      // Start at -90° so the first item sits above the hub, and skip the
+      // horizontal band the hub's own text pill occupies.
+      const angle = -Math.PI / 2 + (j / Math.max(1, children.length)) * 2 * Math.PI;
+      // Ellipse, not a circle: the pill is wider than it is tall, so items need
+      // more horizontal clearance than vertical.
+      positions[childId] = {
+        x: cx + Math.cos(angle) * ITEM_RADIUS * 1.15,
+        y: cy + Math.sin(angle) * ITEM_RADIUS * 0.82,
+      };
+    });
+  });
+
+  return positions;
+}
+
+/**
+ * Expanded evidence hangs off a single item and has no tree shape of its own,
+ * so place it with a local force pass against locked neighbours.
+ */
 const COSE = {
   name: 'cose',
   animate: true,
@@ -122,13 +187,13 @@ export function LibraryGraph({
             shape: 'data(shape)' as cytoscape.Css.PropertyValueNode<string>,
             label: 'data(label)',
             color: '#0f172a',
-            'font-size': '9px',
+            'font-size': '10px',
             'font-weight': 500,
             'text-valign': 'bottom',
             'text-halign': 'center',
             'text-margin-y': 4,
-            width: 'mapData(size, 6, 20, 18, 58)',
-            height: 'mapData(size, 6, 20, 18, 58)',
+            width: 'mapData(size, 6, 20, 15, 34)',
+            height: 'mapData(size, 6, 20, 15, 34)',
             'text-wrap': 'ellipsis',
             'text-max-width': '90px',
             'border-width': 2,
@@ -138,8 +203,35 @@ export function LibraryGraph({
           } as cytoscape.Css.Node,
         },
         {
+          // Hubs are labelled pills: size the node to its text rather than
+          // clipping "Regulatory & Compliance" down to "gulatory &".
           selector: 'node[type="WORKSTREAM"]',
-          style: { color: '#ffffff', 'font-size': '11px', 'font-weight': 700, 'text-valign': 'center', 'text-margin-y': 0 } as cytoscape.Css.Node,
+          style: {
+            color: '#ffffff',
+            'font-size': '10px',
+            'font-weight': 700,
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'text-margin-y': 0,
+            'text-wrap': 'wrap',
+            'text-max-width': '96px',
+            width: 'label',
+            height: 'label',
+            padding: '9px',
+          } as cytoscape.Css.Node,
+        },
+        // Leaf tiers carry no label at rest. Expanding one item can add dozens
+        // of provisions; captioning every one turns the canvas into overlapping
+        // text long before it runs out of room. The label returns on hover or
+        // selection, and the detail panel names whatever is selected anyway.
+        {
+          selector:
+            'node[type="CHECKLIST_ITEM"], node[type="PROVISION"], node[type="RISK"], node[type="OBLIGATION"], node[type="ENTITY"], node[type="SOURCE"]',
+          style: { label: '' } as cytoscape.Css.Node,
+        },
+        {
+          selector: 'node.hover, node:selected',
+          style: { label: 'data(label)', 'font-size': '10px', 'z-index': 99 } as cytoscape.Css.Node,
         },
         {
           selector: 'node:selected',
@@ -168,7 +260,7 @@ export function LibraryGraph({
           style: { 'line-style': 'dashed' } as cytoscape.Css.Edge,
         },
       ],
-      layout: COSE,
+      layout: { name: 'preset' },
       minZoom: 0.1,
       maxZoom: 3,
       wheelSensitivity: 0.3,
@@ -227,7 +319,7 @@ export function LibraryGraph({
     for (const n of graph.nodes) {
       const data = {
         id: n.id,
-        label: truncate(n.label),
+        label: n.type === 'WORKSTREAM' ? n.label : truncate(n.label),
         color: nodeColor(n),
         shape: nodeShape(n.type),
         size: nodeSize(n),
@@ -264,7 +356,21 @@ export function LibraryGraph({
       // existing arrangement and place only the new nodes, so expand/collapse
       // doesn't shove the whole map around.
       if (isInitial) {
-        cy.layout(COSE).run();
+        const positions = clusterPositions(graph.nodes, graph.edges);
+        cy.layout({
+          name: 'preset',
+          positions: (n: NodeSingular) => positions[n.id()] ?? { x: 0, y: 0 },
+          fit: true,
+          padding: 46,
+          animate: false,
+        } as cytoscape.LayoutOptions).run();
+        // Fitting a 64-node ring into a short viewport can drive zoom low
+        // enough that labels stop being legible. Below that floor, prefer a
+        // readable map the user pans over a complete one they cannot read.
+        if (cy.zoom() < MIN_READABLE_ZOOM) {
+          cy.zoom(MIN_READABLE_ZOOM);
+          cy.center();
+        }
       } else {
         existingNodes.lock();
         const layout = cy.layout({ ...COSE, randomize: false } as cytoscape.LayoutOptions);
@@ -310,6 +416,8 @@ export function LibraryGraph({
   // containerRef null on mount, so the graph never initialized.)
   const showEmpty = !loading && !error && graph.nodes.length === 0;
   const showGraphChrome = !loading && !error && graph.nodes.length > 0;
+  // Node types currently on the canvas — drives which legend rows are shown.
+  const present = new Set(graph.nodes.map((n) => n.type));
 
   return (
     <div className="lib-graph">
@@ -360,6 +468,9 @@ export function LibraryGraph({
 
       {showGraphChrome && (
       <div className="lib-graph-legend">
+        <p className="lib-legend-caption">
+          Workstreams and checklist items · click an item to reveal its evidence
+        </p>
         <div className="lib-legend-group">
           <span className="lib-legend-title">Checklist items</span>
           {(['OPEN', 'COVERED', 'FLAGGED'] as const).map((s) => (
@@ -369,20 +480,30 @@ export function LibraryGraph({
             </span>
           ))}
         </div>
+        {/* Only name node types actually on screen. The base view is the
+            checklist skeleton; sources, entities and provisions arrive as items
+            are expanded, and legending them before they exist just asks the
+            reader to hunt for shapes that are not there. */}
         <div className="lib-legend-group">
           <span className="lib-legend-title">Nodes</span>
           <span className="lib-legend-item">
             <span className="lib-legend-dot square" style={{ background: TYPE_COLOR.WORKSTREAM }} /> Workstream
           </span>
-          <span className="lib-legend-item">
-            <span className="lib-legend-dot square" style={{ background: TYPE_COLOR.SOURCE }} /> Source
-          </span>
-          <span className="lib-legend-item">
-            <span className="lib-legend-dot" style={{ background: TYPE_COLOR.ENTITY }} /> Entity
-          </span>
-          <span className="lib-legend-item">
-            <span className="lib-legend-dot diamond" style={{ background: RISK_COLOR.HIGH }} /> Provision
-          </span>
+          {present.has('SOURCE') && (
+            <span className="lib-legend-item">
+              <span className="lib-legend-dot square" style={{ background: TYPE_COLOR.SOURCE }} /> Source
+            </span>
+          )}
+          {present.has('ENTITY') && (
+            <span className="lib-legend-item">
+              <span className="lib-legend-dot" style={{ background: TYPE_COLOR.ENTITY }} /> Entity
+            </span>
+          )}
+          {(present.has('PROVISION') || present.has('RISK') || present.has('OBLIGATION')) && (
+            <span className="lib-legend-item">
+              <span className="lib-legend-dot diamond" style={{ background: RISK_COLOR.HIGH }} /> Provision
+            </span>
+          )}
         </div>
       </div>
       )}

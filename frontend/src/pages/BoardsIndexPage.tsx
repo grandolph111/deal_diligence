@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Kanban, FolderOpen, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Plus, Kanban, Layers, CheckCircle2 } from 'lucide-react';
 import { apiClient, boardsService, membersService } from '../api';
 import { useAuth } from '../auth';
 import { CreateBoardModal } from '../features/kanban/components/CreateBoardModal';
@@ -49,7 +49,14 @@ export function BoardsIndexPage() {
     fetchRole();
   }, [authLoading, fetchBoards, fetchRole]);
 
-  const canCreate = currentUserRole === 'OWNER' || currentUserRole === 'ADMIN';
+  // Platform admins are not necessarily ProjectMembers, so the members list
+  // alone under-reports who may create a board. The API already grants them a
+  // synthetic OWNER membership (middleware/permissions.ts), so gating purely on
+  // `currentUserRole` hid the button from people the backend would have allowed.
+  const isPlatformAdmin =
+    user?.platformRole === 'SUPER_ADMIN' || user?.platformRole === 'CUSTOMER_ADMIN';
+  const canCreate =
+    isPlatformAdmin || currentUserRole === 'OWNER' || currentUserRole === 'ADMIN';
 
   if (authLoading || loading) {
     return (
@@ -85,9 +92,9 @@ export function BoardsIndexPage() {
       <div>
         <h1 style={{ margin: 0 }}>Kanban Boards</h1>
         <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--space-2)', maxWidth: 720 }}>
-          Each board is scoped to specific data-room folders. Members see only the boards whose
-          folders are entirely within their access. Tasks on a board can only attach documents from
-          its folders.
+          Each board covers one or more diligence workstreams — the way a deal is split between
+          specialists. Members see only the boards whose workstreams are entirely within their
+          access, and tasks can attach any document with evidence in those workstreams.
         </p>
       </div>
 
@@ -103,8 +110,8 @@ export function BoardsIndexPage() {
           <h3>No boards accessible</h3>
           <p>
             {canCreate
-              ? 'Create a board to start organizing Kanban work by folder scope.'
-              : 'Ask an admin to create a board covering the folders you work on.'}
+              ? 'Create a board to hand a specialist their slice of the deal.'
+              : 'Ask an admin to create a board covering the workstreams you work on.'}
           </p>
           {canCreate && (
             <button className="button primary" onClick={() => setShowCreate(true)}>
@@ -185,13 +192,16 @@ export function BoardsIndexPage() {
               )}
 
               <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'center' }}>
-                <span
-                  className="chip"
-                  title={board.folders.map((f) => f.name).join(', ')}
-                >
-                  <FolderOpen size={11} /> {board.folders.length} folder
-                  {board.folders.length === 1 ? '' : 's'}
-                </span>
+                {board.workstreams && board.workstreams.length > 0 ? (
+                  <span className="chip" title={board.workstreams.map((w) => w.title).join(', ')}>
+                    <Layers size={11} /> {board.workstreams.length} workstream
+                    {board.workstreams.length === 1 ? '' : 's'}
+                  </span>
+                ) : (
+                  <span className="chip" title="Covers every document in the deal">
+                    <Layers size={11} /> Whole deal
+                  </span>
+                )}
                 <span className="chip">
                   {board.taskCount} task{board.taskCount === 1 ? '' : 's'}
                 </span>

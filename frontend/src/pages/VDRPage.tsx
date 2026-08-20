@@ -1,13 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Search, MessageSquare } from 'lucide-react';
 import {
-  FolderTree,
+  LibraryTree,
   DocumentList,
-  Breadcrumb,
-  CreateFolderModal,
-  RenameFolderModal,
-  DeleteFolderModal,
   DocumentViewer,
   FactSheetModal,
   SearchPanel,
@@ -16,46 +12,15 @@ import {
   MoveDocumentModal,
   useFolders,
   useDocuments,
+  useLibraryToc,
 } from '../features/vdr';
+import type { LibrarySelection } from '../features/vdr/components/LibraryTree';
 import { ChatPanel } from '../features/chat';
 import { membersService, apiClient, documentsService } from '../api';
 import { useAuth } from '../auth';
-import type { ProjectMember, Document, FolderTreeNode } from '../types/api';
+import type { ProjectMember, Document } from '../types/api';
 import '../features/vdr/vdr.css';
 import '../features/chat/chat.css';
-
-/**
- * Find a folder by ID in the tree
- */
-function findFolderInTree(
-  folders: FolderTreeNode[],
-  folderId: string
-): FolderTreeNode | null {
-  for (const folder of folders) {
-    if (folder.id === folderId) {
-      return folder;
-    }
-    if (folder.children) {
-      const found = findFolderInTree(folder.children, folderId);
-      if (found) return found;
-    }
-  }
-  return null;
-}
-
-interface RenameFolderState {
-  isOpen: boolean;
-  folderId: string | null;
-  currentName: string;
-}
-
-interface DeleteFolderState {
-  isOpen: boolean;
-  folderId: string | null;
-  folderName: string;
-  hasChildren: boolean;
-  documentCount: number;
-}
 
 interface MoveDocumentState {
   isOpen: boolean;
@@ -73,19 +38,23 @@ export function VDRPage() {
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
 
-  // Folder state
+  // Checklist navigation. The data room is scoped by workstream / checklist
+  // item; `null` means the whole deal.
+  const [selection, setSelection] = useState<LibrarySelection | null>(null);
+  const {
+    toc,
+    loading: tocLoading,
+    error: tocError,
+    refresh: refreshToc,
+  } = useLibraryToc({ projectId: projectId ?? '', autoFetch: false });
+
+  // Folder state — dormant. Folders are retired from navigation but remain the
+  // physical home for uploads and the legacy permission paths.
   const {
     folderTree,
     loading: foldersLoading,
-    error: foldersError,
     selectedFolderId,
-    folderPath,
-    documentCounts,
-    setSelectedFolderId,
     fetchFolders,
-    createFolder,
-    renameFolder,
-    deleteFolder,
   } = useFolders({ projectId, autoFetch: false });
 
   // Document state
@@ -108,23 +77,7 @@ export function VDRPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
 
   // Modal states
-  const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
-  const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null);
   const [showUploadProgress, setShowUploadProgress] = useState(false);
-
-  const [renameFolderState, setRenameFolderState] = useState<RenameFolderState>({
-    isOpen: false,
-    folderId: null,
-    currentName: '',
-  });
-
-  const [deleteFolderState, setDeleteFolderState] = useState<DeleteFolderState>({
-    isOpen: false,
-    folderId: null,
-    folderName: '',
-    hasChildren: false,
-    documentCount: 0,
-  });
 
   const [moveDocumentState, setMoveDocumentState] = useState<MoveDocumentState>({
     isOpen: false,
@@ -158,12 +111,6 @@ export function VDRPage() {
   const canUpload =
     isAdmin || currentUserMember?.permissions?.canUploadDocs === true;
 
-  // Get selected folder name for display
-  const selectedFolder = selectedFolderId
-    ? findFolderInTree(folderTree, selectedFolderId)
-    : null;
-  const selectedFolderName = selectedFolder?.name;
-
   // Fetch members
   useEffect(() => {
     if (authLoading || !apiClient.isReady() || !projectId) {
@@ -185,101 +132,58 @@ export function VDRPage() {
     fetchMembers();
   }, [projectId, authLoading]);
 
-  // Fetch folders after members are loaded (to check permissions)
+  // Fetch the checklist + folders after members are loaded (to check permissions)
   useEffect(() => {
     if (!membersLoading && canAccessVDR && projectId) {
+      refreshToc();
       fetchFolders();
     }
-  }, [membersLoading, canAccessVDR, projectId, fetchFolders]);
+  }, [membersLoading, canAccessVDR, projectId, refreshToc, fetchFolders]);
 
-  // Fetch documents when folder changes
+  // Fetch documents when the checklist scope changes
   useEffect(() => {
     if (!membersLoading && canAccessVDR && projectId) {
       // Load up to the API's max page size (100) so the list isn't silently capped
       // at the default 20. Data rooms above 100 docs need real pagination — follow-up.
-      fetchDocuments({ folderId: selectedFolderId, limit: 100 });
-    }
-  }, [membersLoading, canAccessVDR, projectId, selectedFolderId, fetchDocuments]);
-
-  // Handle folder selection
-  const handleSelectFolder = useCallback((folderId: string | null) => {
-    setSelectedFolderId(folderId);
-  }, [setSelectedFolderId]);
-
-  // Handle create folder
-  const handleOpenCreateFolder = useCallback((parentId: string | null) => {
-    setCreateFolderParentId(parentId);
-    setShowCreateFolderModal(true);
-  }, []);
-
-  const handleCreateFolder = useCallback(
-    async (name: string, isViewOnly: boolean) => {
-      await createFolder({
-        name,
-        parentId: createFolderParentId,
-        isViewOnly,
+      fetchDocuments({
+        workstreamId: selection?.itemId ? undefined : selection?.workstreamId,
+        itemId: selection?.itemId,
+        unfiled: selection?.unfiled,
+        limit: 100,
       });
-    },
-    [createFolder, createFolderParentId]
-  );
-
-  // Handle rename folder
-  const handleOpenRenameFolder = useCallback((folderId: string, currentName: string) => {
-    setRenameFolderState({
-      isOpen: true,
-      folderId,
-      currentName,
-    });
-  }, []);
-
-  const handleCloseRenameFolder = useCallback(() => {
-    setRenameFolderState({
-      isOpen: false,
-      folderId: null,
-      currentName: '',
-    });
-  }, []);
-
-  const handleRenameFolder = useCallback(
-    async (newName: string) => {
-      if (renameFolderState.folderId) {
-        await renameFolder(renameFolderState.folderId, newName);
-      }
-    },
-    [renameFolder, renameFolderState.folderId]
-  );
-
-  // Handle delete folder
-  const handleOpenDeleteFolder = useCallback((
-    folderId: string,
-    folderName: string,
-    hasChildren: boolean,
-    documentCount: number
-  ) => {
-    setDeleteFolderState({
-      isOpen: true,
-      folderId,
-      folderName,
-      hasChildren,
-      documentCount,
-    });
-  }, []);
-
-  const handleCloseDeleteFolder = useCallback(() => {
-    setDeleteFolderState({
-      isOpen: false,
-      folderId: null,
-      folderName: '',
-      hasChildren: false,
-      documentCount: 0,
-    });
-  }, []);
-
-  const handleDeleteFolder = useCallback(async () => {
-    if (deleteFolderState.folderId) {
-      await deleteFolder(deleteFolderState.folderId);
     }
-  }, [deleteFolder, deleteFolderState.folderId]);
+  }, [membersLoading, canAccessVDR, projectId, selection, fetchDocuments]);
+
+  const handleSelectScope = useCallback((next: LibrarySelection | null) => {
+    setSelection(next);
+  }, []);
+
+  // Human-readable name for the active scope, plus a line explaining why one
+  // document can legitimately appear under several workstreams.
+  const { scopeLabel, scopeDescription } = useMemo(() => {
+    if (selection?.unfiled) {
+      return {
+        scopeLabel: 'Not yet analyzed',
+        scopeDescription:
+          'Uploaded but with no clauses extracted yet — queued, in progress, or failed.',
+      };
+    }
+    const ws = toc?.workstreams.find((w) => w.id === selection?.workstreamId);
+    if (selection?.itemId) {
+      const item = ws?.items.find((i) => i.itemId === selection.itemId);
+      return {
+        scopeLabel: item?.title ?? 'Checklist item',
+        scopeDescription: ws ? `${ws.title} · documents answering this question` : null,
+      };
+    }
+    if (ws) {
+      return {
+        scopeLabel: ws.title,
+        scopeDescription: 'Every document with evidence in this workstream.',
+      };
+    }
+    return { scopeLabel: 'All Documents', scopeDescription: null };
+  }, [selection, toc]);
 
   // Handle file upload
   const handleFilesSelected = useCallback(
@@ -444,36 +348,47 @@ export function VDRPage() {
     setShowChatPanel(true);
   }, []);
 
-  // Handle document click from chat citations
-  const handleChatDocumentClick = useCallback((documentId: string) => {
-    // Close chat panel
-    setShowChatPanel(false);
-
-    // Find the document to get its folder
-    const doc = documents.find((d) => d.id === documentId);
-    if (doc) {
-      // Navigate to the folder
-      if (doc.folderId !== selectedFolderId) {
-        handleSelectFolder(doc.folderId);
+  /**
+   * Open a document by id, wherever it lives.
+   *
+   * Citations and search results routinely point outside the active checklist
+   * scope, and a document has no single home to navigate to any more. So fetch
+   * it directly rather than trying to move the tree to it — the viewer works
+   * off the document itself, not the current scope.
+   */
+  const openDocumentById = useCallback(
+    async (documentId: string) => {
+      const loaded = documents.find((d) => d.id === documentId);
+      if (loaded) {
+        handleDocumentClick(loaded);
+        return;
       }
-      // Open the document viewer
-      handleDocumentClick(doc);
-    }
-  }, [documents, selectedFolderId, handleSelectFolder, handleDocumentClick]);
+      if (!projectId) return;
+      try {
+        handleDocumentClick(await documentsService.getDocument(projectId, documentId));
+      } catch {
+        // Non-fatal: the citation points at something this user cannot reach.
+      }
+    },
+    [documents, projectId, handleDocumentClick]
+  );
+
+  // Handle document click from chat citations
+  const handleChatDocumentClick = useCallback(
+    (documentId: string) => {
+      setShowChatPanel(false);
+      void openDocumentById(documentId);
+    },
+    [openDocumentById]
+  );
 
   // Handle document click from search results
-  const handleSearchDocumentClick = useCallback((documentId: string, folderId: string | null) => {
-    // Navigate to the folder containing the document
-    if (folderId !== selectedFolderId) {
-      handleSelectFolder(folderId);
-    }
-
-    // Find and open the document
-    const doc = documents.find((d) => d.id === documentId);
-    if (doc) {
-      handleDocumentClick(doc);
-    }
-  }, [selectedFolderId, documents, handleSelectFolder, handleDocumentClick]);
+  const handleSearchDocumentClick = useCallback(
+    (documentId: string) => {
+      void openDocumentById(documentId);
+    },
+    [openDocumentById]
+  );
 
   // Handle document update from viewer (e.g., when processing completes)
   const handleDocumentUpdate = useCallback((updatedDoc: Document) => {
@@ -511,11 +426,6 @@ export function VDRPage() {
     );
   }
 
-  // Get parent folder name for create modal
-  const createFolderParentName = createFolderParentId
-    ? findFolderInTree(folderTree, createFolderParentId)?.name
-    : undefined;
-
   return (
     <div className="vdr-page">
       {/* Page Header */}
@@ -551,35 +461,27 @@ export function VDRPage() {
 
       {/* Main VDR Content */}
       <div className="vdr-content">
-        {/* Folder Sidebar */}
+        {/* Checklist Sidebar */}
         <aside className="vdr-sidebar">
-          {foldersError ? (
-            <div className="error-container">
-              <p>{foldersError}</p>
-              <button className="button small primary" onClick={fetchFolders}>
-                Retry
-              </button>
-            </div>
-          ) : (
-            <FolderTree
-              folders={folderTree}
-              selectedFolderId={selectedFolderId}
-              onSelectFolder={handleSelectFolder}
-              onCreateFolder={isAdmin ? handleOpenCreateFolder : undefined}
-              onRenameFolder={isAdmin ? handleOpenRenameFolder : undefined}
-              onDeleteFolder={isAdmin ? handleOpenDeleteFolder : undefined}
-              isAdmin={isAdmin}
-              documentCounts={documentCounts}
-            />
-          )}
+          <LibraryTree
+            toc={toc}
+            loading={tocLoading}
+            error={tocError}
+            selection={selection}
+            onSelect={handleSelectScope}
+          />
         </aside>
 
         {/* Main Content Area */}
         <main className="vdr-main">
-          {/* Breadcrumb Navigation */}
-          <div className="vdr-breadcrumb">
-            <Breadcrumb path={folderPath} onNavigate={handleSelectFolder} />
-          </div>
+          {/* Active scope. Named explicitly because a document appears under
+              every workstream it has evidence in — without this the same file
+              turning up in several places reads as duplication. */}
+          {scopeDescription && (
+            <div className="vdr-scope">
+              <p className="vdr-scope__hint">{scopeDescription}</p>
+            </div>
+          )}
 
           {/* Error display */}
           {documentsError && (
@@ -618,37 +520,11 @@ export function VDRPage() {
               onViewExtraction={handleViewExtraction}
               isAdmin={isAdmin}
               canUpload={canUpload}
-              selectedFolderName={selectedFolderName}
+              selectedFolderName={scopeLabel}
             />
           </div>
         </main>
       </div>
-
-      {/* Create Folder Modal */}
-      <CreateFolderModal
-        isOpen={showCreateFolderModal}
-        onClose={() => setShowCreateFolderModal(false)}
-        onSubmit={handleCreateFolder}
-        parentFolderName={createFolderParentName}
-      />
-
-      {/* Rename Folder Modal */}
-      <RenameFolderModal
-        isOpen={renameFolderState.isOpen}
-        onClose={handleCloseRenameFolder}
-        onSubmit={handleRenameFolder}
-        currentName={renameFolderState.currentName}
-      />
-
-      {/* Delete Folder Modal */}
-      <DeleteFolderModal
-        isOpen={deleteFolderState.isOpen}
-        onClose={handleCloseDeleteFolder}
-        onConfirm={handleDeleteFolder}
-        folderName={deleteFolderState.folderName}
-        hasChildren={deleteFolderState.hasChildren}
-        documentCount={deleteFolderState.documentCount}
-      />
 
       {/* Move Document Modal */}
       {moveDocumentState.document && (
@@ -675,7 +551,7 @@ export function VDRPage() {
         <DocumentViewer
           document={viewerDocument}
           pdfUrl={viewerPdfUrl}
-          isViewOnly={viewerDocument.isViewOnly || selectedFolder?.isViewOnly}
+          isViewOnly={viewerDocument.isViewOnly}
           projectId={projectId}
           onClose={handleCloseViewer}
           onDownload={handleDocumentDownload}

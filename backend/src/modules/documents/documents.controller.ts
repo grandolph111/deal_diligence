@@ -17,10 +17,17 @@ export const documentsController = {
    * List documents in a project
    */
   listDocuments: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) throw ApiError.unauthorized('User not found');
     const projectId = req.params.id as string;
     const query = listDocumentsQuerySchema.parse(req.query);
 
-    const result = await documentsService.listDocuments(projectId, query);
+    // Must be the scoped variant: requirePermission('canAccessVDR') gates the
+    // VDR flag only, it does not filter by the caller's workstream grants.
+    const result = await documentsService.listAccessibleDocuments(
+      projectId,
+      req.user.id,
+      query
+    );
 
     res.json(result);
   }),

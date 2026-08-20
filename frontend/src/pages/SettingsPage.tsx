@@ -10,9 +10,9 @@ import {
   useInvitations,
 } from '../features/settings';
 import { PlaybookTab } from '../features/settings/components/PlaybookTab';
-import { apiClient, foldersService } from '../api';
+import { apiClient } from '../api';
 import { useAuth } from '../auth';
-import type { Role, FolderTreeNode } from '../types/api';
+import type { Role } from '../types/api';
 import '../features/settings/settings.css';
 
 type TabType = 'general' | 'team' | 'playbook';
@@ -57,7 +57,6 @@ export function SettingsPage() {
 
   // Local state
   const [initialized, setInitialized] = useState(false);
-  const [folderTree, setFolderTree] = useState<FolderTreeNode[]>([]);
 
   // Get current user's role. Platform-level Super Admin and the company's
   // Customer Admin get synthetic OWNER access even without a ProjectMember row.
@@ -80,13 +79,7 @@ export function SettingsPage() {
     if (!projectId || authLoading || !apiClient.isReady()) return;
 
     try {
-      const [, , , tree] = await Promise.all([
-        fetchProject(),
-        fetchMembers(),
-        fetchInvitations(),
-        foldersService.getFolderTree(projectId).catch(() => [] as FolderTreeNode[]),
-      ]);
-      setFolderTree(tree);
+      await Promise.all([fetchProject(), fetchMembers(), fetchInvitations()]);
     } catch (err) {
       // Error handled in hooks
     } finally {
@@ -201,7 +194,7 @@ export function SettingsPage() {
         <TeamTab
           members={members}
           invitations={invitations}
-          folderTree={folderTree}
+          projectId={projectId!}
           currentUserId={currentUserId}
           currentUserRole={currentUserRole}
           membersLoading={membersLoading}

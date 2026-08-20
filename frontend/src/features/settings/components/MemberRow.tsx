@@ -60,17 +60,36 @@ export function MemberRow({
       <span className={`member-role ${member.role.toLowerCase()}`}>
         {member.role}
       </span>
-      {member.role !== 'OWNER' && member.role !== 'ADMIN' &&
-        (member.permissions?.restrictedFolders?.length ?? 0) > 0 && (
-          <span
-            className="member-scope-chip"
-            title={`Restricted to ${member.permissions?.restrictedFolders?.length} folder(s)`}
-          >
-            <FolderLock size={12} />
-            {member.permissions?.restrictedFolders?.length} folder
-            {(member.permissions?.restrictedFolders?.length ?? 0) === 1 ? '' : 's'}
-          </span>
-        )}
+      {member.role !== 'OWNER' && member.role !== 'ADMIN' && (() => {
+        const workstreams = member.permissions?.restrictedWorkstreams?.length ?? 0;
+        const legacyFolders = member.permissions?.restrictedFolders?.length ?? 0;
+        if (workstreams > 0) {
+          return (
+            <span
+              className="member-scope-chip"
+              title={`Restricted to ${workstreams} workstream(s)`}
+            >
+              <FolderLock size={12} />
+              {workstreams} workstream{workstreams === 1 ? '' : 's'}
+            </span>
+          );
+        }
+        // A member carrying only pre-migration folder grants can no longer see
+        // anything: folder grants do not translate to workstreams, and nothing
+        // infers them. Say so here rather than letting it read as a bug.
+        if (legacyFolders > 0) {
+          return (
+            <span
+              className="member-scope-chip is-stale"
+              title="This member's access was granted by folder, which is no longer used for scoping. Re-grant workstreams to restore their access."
+            >
+              <FolderLock size={12} />
+              Needs re-grant
+            </span>
+          );
+        }
+        return null;
+      })()}
       {canModify && !isCurrentUser && (
         <div className="member-actions">
           <button

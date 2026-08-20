@@ -10,6 +10,9 @@ export const inviteMemberSchema = z.object({
       canAccessVDR: z.boolean().default(true),
       canUploadDocs: z.boolean().default(true),
       restrictedToTags: z.array(z.string()).optional(),
+      // Checklist workstream slugs — the live scoping axis.
+      restrictedWorkstreams: z.array(z.string()).optional(),
+      /** @deprecated dormant — folder scoping is retired from the UI. */
       restrictedFolders: z.array(z.string()).optional(),
     })
     .optional(),
@@ -23,6 +26,9 @@ export const updateMemberSchema = z.object({
       canAccessVDR: z.boolean().optional(),
       canUploadDocs: z.boolean().optional(),
       restrictedToTags: z.array(z.string()).optional(),
+      // Checklist workstream slugs — the live scoping axis.
+      restrictedWorkstreams: z.array(z.string()).optional(),
+      /** @deprecated dormant — folder scoping is retired from the UI. */
       restrictedFolders: z.array(z.string()).optional(),
     })
     .optional(),
