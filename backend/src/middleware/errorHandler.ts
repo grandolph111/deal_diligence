@@ -63,8 +63,11 @@ export const errorHandler = (
     code = 'VALIDATION_ERROR';
   }
 
-  // Log error server-side only (never expose stack to client)
-  if (config.isDev) {
+  // Log server-side ALWAYS — the rule is "never expose the stack to the client",
+  // not "never record it". Gating this on isDev meant a production deployment
+  // would swallow every error silently, leaving nothing to debug from.
+  // 4xx are the caller's problem and stay quiet unless they are surprising.
+  if (statusCode >= 500 || config.isDev) {
     console.error('Error:', {
       message: err.message,
       stack: err.stack,

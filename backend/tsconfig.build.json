@@ -1,7 +1,13 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+    // The base config uses rootDir "." so tests type-check alongside src, which
+    // emits to dist/src/. `npm start` points at dist/server.js, so the compiled
+    // output has never been runnable — which is why production falls back to
+    // ts-node-dev. Rooting the build at src/ puts the entrypoint where the
+    // start script expects it.
+    "rootDir": "./src"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "tests"]
