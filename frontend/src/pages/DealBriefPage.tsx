@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import './deal-memo.css';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, Diamond, FileText, Scale, Calendar } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Diamond, FileText, Scale, Workflow, BookOpen, BarChart3 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { apiClient, briefService } from '../api';
+import { apiClient, briefService, dashboardService } from '../api';
+import { libraryService, type DealMap } from '../api/services/library.service';
+import type { DashboardResponse } from '../api/services/dashboard.service';
 import { useAuth } from '../auth';
 import type { DealBrief } from '../types/api';
 
@@ -14,106 +16,42 @@ import type { DealBrief } from '../types/api';
 
 interface BriefMeta {
   project?: string;
-  last_updated?: string;
-  doc_count?: string | number;
   portfolio_risk?: string | number;
-  scope?: string;
+  doc_count?: string | number;
   [key: string]: string | number | undefined;
 }
 
-interface ParsedBrief {
-  meta: BriefMeta;
-  body: string;
-}
-
-const parseBriefMarkdown = (raw: string | null | undefined): ParsedBrief => {
+const parseBriefMarkdown = (raw: string | null | undefined): { meta: BriefMeta; body: string } => {
   if (!raw) return { meta: {}, body: '' };
   let remaining = raw.trim();
   const meta: BriefMeta = {};
-  const fmMatch = remaining.match(/^---\s*\n([\s\S]*?)\n---\s*/);
-  if (fmMatch) {
-    for (const line of fmMatch[1].split('\n')) {
+  const fm = remaining.match(/^---\s*\n([\s\S]*?)\n---\s*/);
+  if (fm) {
+    for (const line of fm[1].split('\n')) {
       const m = line.match(/^\s*([a-z_][a-z0-9_]*)\s*:\s*(.*?)\s*$/i);
       if (m) meta[m[1]] = m[2];
     }
-    remaining = remaining.slice(fmMatch[0].length);
+    remaining = remaining.slice(fm[0].length);
   }
-  remaining = remaining.replace(/<!--[\s\S]*?-->/g, '');
-  remaining = remaining.replace(/\n{3,}/g, '\n\n').trim();
+  remaining = remaining.replace(/<!--[\s\S]*?-->/g, '').replace(/\n{3,}/g, '\n\n').trim();
   return { meta, body: remaining };
 };
 
-/** Body of one `# Heading` section, up to the next `# `. */
 const sectionBody = (markdown: string, heading: string): string => {
   const lines = markdown.split('\n');
-  const want = `# ${heading}`.toLowerCase();
-  const start = lines.findIndex((l) => l.trim().toLowerCase() === want);
+  const start = lines.findIndex((l) => l.trim().toLowerCase() === `# ${heading}`.toLowerCase());
   if (start === -1) return '';
   const rest = lines.slice(start + 1);
   const end = rest.findIndex((l) => /^#\s/.test(l));
   return (end === -1 ? rest : rest.slice(0, end)).join('\n').trim();
 };
 
-interface Risk {
-  title: string;
-  level: 'HIGH' | 'MEDIUM' | 'LOW';
-  source: string | null;
-  rationale: string;
-}
-
-/** Parse the Top Risks section into structured, ranked entries. */
-const parseRisks = (body: string): Risk[] => {
-  const out: Risk[] = [];
-  // Each risk starts with `N. ` and may wrap; split on leading enumerator.
-  const blocks = body.split(/\n(?=\s*\d+\.\s)/);
-  for (const block of blocks) {
-    const flat = block.replace(/\s+/g, ' ').trim();
-    const m = flat.match(
-      /^\d+\.\s+(.+?)\s*(?:\(\[([^\]]*)\]\))?\s*—\s*(HIGH|MEDIUM|LOW)\b\.?\s*(.*)$/i
-    );
-    if (!m) continue;
-    const rawSource = (m[2] ?? '').trim();
-    // Strip a trailing `p.N` page ref and the .pdf extension for a clean label.
-    const source = rawSource
-      ? rawSource.replace(/\s*p\.\d+.*$/i, '').replace(/\.pdf$/i, '').trim()
-      : null;
-    out.push({
-      title: m[1].trim(),
-      level: m[3].toUpperCase() as Risk['level'],
-      source,
-      rationale: m[4].trim(),
-    });
-  }
-  return out;
-};
-
-interface KeyDate {
-  date: string;
-  label: string;
-}
-
-const parseDates = (body: string, limit: number): KeyDate[] => {
-  const out: KeyDate[] = [];
-  for (const line of body.split('\n')) {
-    // `- 2018-11-20: Effective date — filename.pdf`
-    const m = line.match(/^[-*]\s*(\d{4}-\d{2}-\d{2})\s*:\s*(.+?)\s*—\s*(.+?)\s*$/);
-    if (!m) continue;
-    const doc = m[3].replace(/\.pdf$/i, '').trim();
-    out.push({ date: m[1], label: `${m[2].trim()} · ${doc}` });
-    if (out.length >= limit) break;
-  }
-  return out;
-};
-
-const countPartyHeadings = (body: string): number =>
-  (body.match(/^##\s+/gm) ?? []).length;
-
 const countListItems = (body: string): number =>
   body && !/^_?No\b/i.test(body.trim())
     ? body.split('\n').filter((l) => /^\s*(?:[-*]|\d+\.)\s+\S/.test(l)).length
     : 0;
 
-const toInt = (v: string | number | undefined): number | null => {
+const toInt = (v: string | number | undefined | null): number | null => {
   if (v == null) return null;
   const n = typeof v === 'number' ? v : Number.parseInt(String(v), 10);
   return Number.isFinite(n) ? n : null;
@@ -121,6 +59,7 @@ const toInt = (v: string | number | undefined): number | null => {
 
 const riskBand = (score: number): 'high' | 'medium' | 'low' =>
   score >= 7 ? 'high' : score >= 4 ? 'medium' : 'low';
+const chipRisk = (score: number) => `risk-${riskBand(score) === 'medium' ? 'med' : riskBand(score)}`;
 
 const prettyDate = (raw: string): string => {
   const d = new Date(raw);
@@ -128,32 +67,82 @@ const prettyDate = (raw: string): string => {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
+const cleanDocName = (name: string): string => name.replace(/\.pdf$/i, '').replace(/_/g, ' ');
+
 /* ---------------------------------------------------------------- */
-/* Section rail                                                      */
+/* Workflow (workstream) rollup from the deal map                    */
+/* ---------------------------------------------------------------- */
+
+interface WorkflowRow {
+  id: string;
+  title: string;
+  docCount: number;
+  highCount: number;
+  meanRisk: number | null;
+}
+
+const buildWorkflows = (map: DealMap | null): { rows: WorkflowRow[]; maxDocs: number } => {
+  if (!map) return { rows: [], maxDocs: 0 };
+  const docsByWs = new Map<string, { risks: number[]; high: number }>();
+  for (const n of map.nodes) {
+    if (n.type !== 'DOCUMENT') continue;
+    const entry = docsByWs.get(n.workstreamId) ?? { risks: [], high: 0 };
+    if (n.riskScore != null) entry.risks.push(n.riskScore);
+    if ((n.riskScore ?? 0) >= 7 || n.riskLevel === 'HIGH') entry.high += 1;
+    docsByWs.set(n.workstreamId, entry);
+  }
+  const rows: WorkflowRow[] = [];
+  for (const n of map.nodes) {
+    if (n.type !== 'WORKSTREAM') continue;
+    const agg = docsByWs.get(n.workstreamId) ?? { risks: [], high: 0 };
+    if (n.documentCount === 0) continue;
+    rows.push({
+      id: n.workstreamId,
+      title: n.label,
+      docCount: n.documentCount,
+      highCount: agg.high,
+      meanRisk: agg.risks.length ? agg.risks.reduce((a, b) => a + b, 0) / agg.risks.length : null,
+    });
+  }
+  // Most risk first: high-risk docs, then mean risk, then volume.
+  rows.sort(
+    (a, b) =>
+      b.highCount - a.highCount ||
+      (b.meanRisk ?? 0) - (a.meanRisk ?? 0) ||
+      b.docCount - a.docCount
+  );
+  const maxDocs = rows.reduce((m, r) => Math.max(m, r.docCount), 0);
+  return { rows: rows.slice(0, 8), maxDocs };
+};
+
 /* ---------------------------------------------------------------- */
 
 interface RailItem { id: string; label: string; }
-
-/* ---------------------------------------------------------------- */
 
 export function DealBriefPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const { isLoading: authLoading } = useAuth();
   const [brief, setBrief] = useState<DealBrief | null>(null);
+  const [dash, setDash] = useState<DashboardResponse | null>(null);
+  const [dealMap, setDealMap] = useState<DealMap | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  const fetchBrief = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     if (!projectId) return;
     try {
       setLoading(true);
       setError(null);
-      setBrief(await briefService.get(projectId));
+      const b = await briefService.get(projectId);
+      setBrief(b);
+      // Supplementary data — best-effort; the memo still renders without it.
+      dashboardService.getProjectDashboard(projectId).then(setDash).catch(() => undefined);
+      libraryService.getDealMap(projectId).then(setDealMap).catch(() => undefined);
     } catch (err) {
       console.error('Failed to load brief:', err);
-      setError('Failed to load deal brief');
+      setError('Failed to load deal memorandum');
     } finally {
       setLoading(false);
     }
@@ -161,8 +150,8 @@ export function DealBriefPage() {
 
   useEffect(() => {
     if (authLoading || !apiClient.isReady()) return;
-    fetchBrief();
-  }, [authLoading, fetchBrief]);
+    fetchAll();
+  }, [authLoading, fetchAll]);
 
   const handleRebuild = async () => {
     if (!projectId) return;
@@ -170,7 +159,7 @@ export function DealBriefPage() {
       setRebuilding(true);
       setError(null);
       await briefService.rebuild(projectId);
-      await fetchBrief();
+      await fetchAll();
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : 'Rebuild failed — check server logs.');
     } finally {
@@ -178,34 +167,25 @@ export function DealBriefPage() {
     }
   };
 
-  const { meta, body } = useMemo(
-    () => parseBriefMarkdown(brief?.markdown ?? null),
-    [brief?.markdown]
-  );
-
-  const memo = useMemo(() => {
-    const overview = sectionBody(body, 'Deal Snapshot');
-    const risks = parseRisks(sectionBody(body, 'Top Risks')).slice(0, 6);
-    const dates = parseDates(sectionBody(body, 'Key Dates'), 6);
-    const partyCount = countPartyHeadings(sectionBody(body, 'Parties'));
-    const anomalyCount = countListItems(sectionBody(body, 'Cross-document Anomalies'));
-    return { overview, risks, dates, partyCount, anomalyCount };
-  }, [body]);
+  const { meta, body } = useMemo(() => parseBriefMarkdown(brief?.markdown ?? null), [brief?.markdown]);
+  const overview = useMemo(() => sectionBody(body, 'Deal Snapshot'), [body]);
+  const anomalyCount = useMemo(() => countListItems(sectionBody(body, 'Cross-document Anomalies')), [body]);
 
   const portfolioRisk = toInt(meta.portfolio_risk);
   const docCount = toInt(meta.doc_count);
+  const topDocs = useMemo(() => (dash?.documentsByRisk ?? []).slice(0, 5), [dash]);
+  const { rows: workflows, maxDocs } = useMemo(() => buildWorkflows(dealMap), [dealMap]);
 
   const rail: RailItem[] = useMemo(() => {
     const items: RailItem[] = [];
-    if (memo.overview) items.push({ id: 'overview', label: 'Deal Overview' });
+    if (overview) items.push({ id: 'overview', label: 'Deal Overview' });
     if (portfolioRisk != null) items.push({ id: 'posture', label: 'Risk Posture' });
-    if (memo.risks.length) items.push({ id: 'key-risks', label: 'Key Risks' });
-    if (memo.dates.length) items.push({ id: 'key-dates', label: 'Key Dates' });
+    if (topDocs.length) items.push({ id: 'critical-docs', label: 'Critical Documents' });
+    if (workflows.length) items.push({ id: 'workflows', label: 'Workflows by Risk' });
     items.push({ id: 'glance', label: 'At a Glance' });
     return items;
-  }, [memo, portfolioRisk]);
+  }, [overview, portfolioRisk, topDocs, workflows]);
 
-  // Scroll-spy for the rail.
   useEffect(() => {
     if (rail.length === 0) return;
     const observer = new IntersectionObserver(
@@ -215,7 +195,7 @@ export function DealBriefPage() {
           .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
         if (visible[0]?.target?.id) setActiveId(visible[0].target.id);
       },
-      { rootMargin: '-90px 0px -65% 0px', threshold: 0.01 }
+      { rootMargin: '-90px 0px -70% 0px', threshold: 0.01 }
     );
     rail.forEach(({ id }) => {
       const el = document.getElementById(id);
@@ -233,9 +213,11 @@ export function DealBriefPage() {
     );
   }
 
-  const dealName = meta.project || 'Deal Memorandum';
+  const dealName = meta.project || brief?.scopeLabel || 'Deal Memorandum';
   const scopeWord = brief?.scopeKey === 'full' ? 'Full access' : brief?.scopeLabel || 'Scoped access';
-  const updated = brief?.updatedAt || meta.last_updated;
+  const updated = brief?.updatedAt;
+  const railIcon = (id: string) =>
+    id === 'critical-docs' ? FileText : id === 'workflows' ? Workflow : id === 'posture' ? Scale : id === 'glance' ? BarChart3 : BookOpen;
 
   return (
     <div className="memo-page">
@@ -244,11 +226,7 @@ export function DealBriefPage() {
           <ArrowLeft size={14} /> Overview
         </Link>
         <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-          {brief && (
-            <span className={brief.scopeKey === 'full' ? 'chip primary' : 'chip accent'}>
-              {brief.scopeLabel}
-            </span>
-          )}
+          {brief && <span className={brief.scopeKey === 'full' ? 'chip primary' : 'chip accent'}>{brief.scopeLabel}</span>}
           <button className="button secondary sm" onClick={handleRebuild} disabled={rebuilding}>
             <RefreshCw size={14} className={rebuilding ? 'loading-spinner' : ''} />
             {rebuilding ? 'Rebuilding…' : 'Rebuild now'}
@@ -260,227 +238,50 @@ export function DealBriefPage() {
 
       {!brief?.markdown ? (
         <div className="empty-state">
-          <h3>No deal brief yet</h3>
+          <h3>No deal memorandum yet</h3>
           <p>Upload documents to the Data Room. Once extraction completes, the memorandum is generated automatically.</p>
           <Link className="button primary" to={`/projects/${projectId}/vdr`}>Go to Data Room</Link>
         </div>
       ) : (
         <>
-          {/* Full-width header band */}
+          {/* Full-width header */}
           <header className="memo-header">
-            <div className="memo-header__inner">
-              <div>
-                <div className="memo-eyebrow">Deal Memorandum · {scopeWord}</div>
-                <h1 className="memo-header__title">{dealName}</h1>
-              </div>
-              <div className="memo-header__meta">
-                {portfolioRisk != null && (
-                  <div className="memo-stat">
-                    <span className="memo-stat__label">Portfolio risk</span>
-                    <span className="memo-riskbadge">
-                      <span className="memo-riskbadge__score">{portfolioRisk}<span>/10</span></span>
-                      <span className={`chip risk-${riskBand(portfolioRisk) === 'medium' ? 'med' : riskBand(portfolioRisk)}`}>
-                        {riskBand(portfolioRisk).toUpperCase()}
-                      </span>
-                    </span>
-                  </div>
-                )}
-                {docCount != null && (
-                  <div className="memo-stat">
-                    <span className="memo-stat__label">Documents</span>
-                    <span className="memo-stat__value">{docCount}</span>
-                  </div>
-                )}
-                {updated && (
-                  <div className="memo-stat">
-                    <span className="memo-stat__label">Updated</span>
-                    <span className="memo-stat__value" style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>
-                      {prettyDate(updated)}
-                    </span>
-                  </div>
-                )}
-              </div>
+            <div className="memo-header__lead">
+              <div className="memo-eyebrow">Deal Memorandum · {scopeWord}</div>
+              <h1 className="memo-header__title">{dealName}</h1>
+            </div>
+            <div className="memo-header__meta">
+              {portfolioRisk != null && (
+                <div className="memo-stat">
+                  <span className="memo-stat__label">Portfolio risk</span>
+                  <span className="memo-riskbadge">
+                    <span className="memo-riskbadge__score">{portfolioRisk}<span>/10</span></span>
+                    <span className={`chip ${chipRisk(portfolioRisk)}`}>{riskBand(portfolioRisk).toUpperCase()}</span>
+                  </span>
+                </div>
+              )}
+              {docCount != null && (
+                <div className="memo-stat">
+                  <span className="memo-stat__label">Documents</span>
+                  <span className="memo-stat__value">{docCount}</span>
+                </div>
+              )}
+              {updated && (
+                <div className="memo-stat">
+                  <span className="memo-stat__label">Updated</span>
+                  <span className="memo-stat__value memo-stat__value--sm">{prettyDate(updated)}</span>
+                </div>
+              )}
             </div>
           </header>
 
-          {/* Paper (left) + rail (right) */}
+          {/* Left rail + document */}
           <div className="memo-layout">
-            <div className="memo-doc">
-            {/* ── Page 1 ── */}
-            <article className="memo-sheet memo-sheet--first">
-              <div className="memo-sheet__body">
-              <div className="memo-letterhead">
-                <span className="memo-wordmark">
-                  <span className="memo-wordmark__mark"><Diamond size={16} fill="currentColor" /></span>
-                  DealDiligence
-                </span>
-                <span className="memo-confidential">Confidential · Privileged</span>
-              </div>
-
-              <div className="memo-recap">
-                <span className="memo-eyebrow">Memorandum</span>
-                <p className="memo-doc-title">
-                  <span className="memo-recap__re">Re:</span> {dealName}
-                </p>
-                <p className="memo-doc-subtitle">
-                  {scopeWord}{docCount != null ? ` · ${docCount} documents` : ''}{updated ? ` · Prepared ${prettyDate(updated)}` : ''}
-                </p>
-              </div>
-
-              {memo.overview && (
-                <section id="overview" className="memo-section">
-                  <div className="memo-section__head">
-                    <span className="memo-section__num">01</span>
-                    <h3 className="memo-section__title">Deal Overview</h3>
-                    <span className="memo-section__rule" />
-                  </div>
-                  <div className="memo-prose">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{memo.overview}</ReactMarkdown>
-                  </div>
-                </section>
-              )}
-
-              {portfolioRisk != null && (
-                <section id="posture" className="memo-section">
-                  <div className="memo-section__head">
-                    <span className="memo-section__num">02</span>
-                    <h3 className="memo-section__title">Risk Posture</h3>
-                    <span className="memo-section__rule" />
-                  </div>
-                  <div className="memo-posture">
-                    <div className="memo-posture__score">{portfolioRisk}<span>/10</span></div>
-                    <div className="memo-posture__meter-wrap">
-                      <div className="memo-posture__meter">
-                        <div
-                          className={`memo-posture__fill is-${riskBand(portfolioRisk)}`}
-                          style={{ width: `${(portfolioRisk / 10) * 100}%` }}
-                        />
-                      </div>
-                      <p className="memo-posture__caption">
-                        Page-weighted mean across {docCount ?? 'all'} documents · {riskBand(portfolioRisk).toUpperCase()} ·
-                        {memo.anomalyCount > 0 ? ` ${memo.anomalyCount} cross-document anomalies flagged` : ' no cross-document anomalies'}
-                      </p>
-                    </div>
-                  </div>
-                </section>
-              )}
-              </div>
-              <footer className="memo-sheet__foot">
-                <span>DealDiligence · Confidential</span>
-                <span>Page 1 of 3</span>
-              </footer>
-            </article>
-
-            {/* ── Page 2 ── */}
-            <article className="memo-sheet">
-              <div className="memo-sheet__body">
-              <div className="memo-runhead">
-                <span>{dealName} — Diligence Memorandum</span>
-                <span>Confidential</span>
-              </div>
-
-              {memo.risks.length > 0 && (
-                <section id="key-risks" className="memo-section">
-                  <div className="memo-section__head">
-                    <span className="memo-section__num">03</span>
-                    <h3 className="memo-section__title">Key Risks</h3>
-                    <span className="memo-section__rule" />
-                  </div>
-                  <div className="memo-risks">
-                    {memo.risks.map((r, i) => (
-                      <div key={i} className={`memo-risk is-${r.level.toLowerCase()}`}>
-                        <div className="memo-risk__top">
-                          <span className="memo-risk__level">{r.level}</span>
-                          <span className="memo-risk__title">{r.title}</span>
-                        </div>
-                        {r.rationale && <p className="memo-risk__body">{r.rationale}</p>}
-                        {r.source && (
-                          <div className="memo-risk__source" title={r.source}>
-                            <FileText size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />
-                            {r.source}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-              </div>
-              <footer className="memo-sheet__foot">
-                <span>DealDiligence · Confidential</span>
-                <span>Page 2 of 3</span>
-              </footer>
-            </article>
-
-            {/* ── Page 3 ── */}
-            <article className="memo-sheet">
-              <div className="memo-sheet__body">
-              <div className="memo-runhead">
-                <span>{dealName} — Diligence Memorandum</span>
-                <span>Confidential</span>
-              </div>
-
-              {memo.dates.length > 0 && (
-                <section id="key-dates" className="memo-section">
-                  <div className="memo-section__head">
-                    <span className="memo-section__num">04</span>
-                    <h3 className="memo-section__title">Key Dates</h3>
-                    <span className="memo-section__rule" />
-                  </div>
-                  <div className="memo-dates">
-                    {memo.dates.map((d, i) => (
-                      <div key={i} className="memo-date-row">
-                        <span className="memo-date-row__date">{d.date}</span>
-                        <span className="memo-date-row__label" title={d.label}>{d.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              <section id="glance" className="memo-section">
-                <div className="memo-section__head">
-                  <span className="memo-section__num">05</span>
-                  <h3 className="memo-section__title">Portfolio at a Glance</h3>
-                  <span className="memo-section__rule" />
-                </div>
-                <div className="memo-glance">
-                  <div className="memo-glance__cell">
-                    <div className="memo-glance__value">{docCount ?? '—'}</div>
-                    <div className="memo-glance__label">Documents</div>
-                  </div>
-                  <div className="memo-glance__cell">
-                    <div className="memo-glance__value">{memo.partyCount || '—'}</div>
-                    <div className="memo-glance__label">Counterparties</div>
-                  </div>
-                  <div className="memo-glance__cell">
-                    <div className="memo-glance__value">{memo.risks.filter((r) => r.level === 'HIGH').length}</div>
-                    <div className="memo-glance__label">High risks</div>
-                  </div>
-                  <div className="memo-glance__cell">
-                    <div className="memo-glance__value">{memo.anomalyCount || '—'}</div>
-                    <div className="memo-glance__label">Anomalies</div>
-                  </div>
-                </div>
-              </section>
-
-              <p className="memo-endnote">
-                Full clause-level detail, every party, and the complete document registry are in the{' '}
-                <Link to={`/projects/${projectId}/vdr`} style={{ color: 'var(--color-primary)' }}>Data Room</Link>.
-              </p>
-              </div>
-              <footer className="memo-sheet__foot">
-                <span>DealDiligence · Confidential</span>
-                <span>Page 3 of 3</span>
-              </footer>
-            </article>
-            </div>
-
             {rail.length > 0 && (
               <nav className="memo-rail" aria-label="Memorandum sections">
-                <div className="memo-rail__label">Sections</div>
+                <div className="memo-rail__label">Contents</div>
                 {rail.map(({ id, label }) => {
-                  const Icon = id === 'key-dates' ? Calendar : id === 'posture' ? Scale : FileText;
+                  const Icon = railIcon(id);
                   return (
                     <a
                       key={id}
@@ -492,13 +293,176 @@ export function DealBriefPage() {
                         if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActiveId(id); }
                       }}
                     >
-                      <Icon size={13} style={{ flexShrink: 0, opacity: 0.7 }} />
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                      <Icon size={14} style={{ flexShrink: 0, opacity: 0.7 }} />
+                      <span className="memo-rail__text">{label}</span>
                     </a>
                   );
                 })}
               </nav>
             )}
+
+            <div className="memo-doc">
+              {/* ── Page 1 ── */}
+              <article className="memo-sheet memo-sheet--first">
+                <div className="memo-sheet__body">
+                  <div className="memo-letterhead">
+                    <span className="memo-wordmark">
+                      <span className="memo-wordmark__mark"><Diamond size={16} fill="currentColor" /></span>
+                      DealDiligence
+                    </span>
+                    <span className="memo-confidential">Confidential · Privileged</span>
+                  </div>
+
+                  <div className="memo-recap">
+                    <span className="memo-eyebrow">Memorandum</span>
+                    <p className="memo-doc-title"><span className="memo-recap__re">Re:</span> {dealName}</p>
+                    <p className="memo-doc-subtitle">
+                      {scopeWord}{docCount != null ? ` · ${docCount} documents` : ''}{updated ? ` · Prepared ${prettyDate(updated)}` : ''}
+                    </p>
+                  </div>
+
+                  {overview && (
+                    <section id="overview" className="memo-section">
+                      <div className="memo-section__head">
+                        <span className="memo-section__num">01</span>
+                        <h3 className="memo-section__title">Deal Overview</h3>
+                        <span className="memo-section__rule" />
+                      </div>
+                      <div className="memo-prose"><ReactMarkdown remarkPlugins={[remarkGfm]}>{overview}</ReactMarkdown></div>
+                    </section>
+                  )}
+
+                  {portfolioRisk != null && (
+                    <section id="posture" className="memo-section">
+                      <div className="memo-section__head">
+                        <span className="memo-section__num">02</span>
+                        <h3 className="memo-section__title">Risk Posture</h3>
+                        <span className="memo-section__rule" />
+                      </div>
+                      <div className="memo-posture">
+                        <div className="memo-posture__score">{portfolioRisk}<span>/10</span></div>
+                        <div className="memo-posture__meter-wrap">
+                          <div className="memo-posture__meter">
+                            <div className={`memo-posture__fill is-${riskBand(portfolioRisk)}`} style={{ width: `${(portfolioRisk / 10) * 100}%` }} />
+                          </div>
+                          <p className="memo-posture__caption">
+                            Page-weighted mean across {docCount ?? 'all'} documents · {riskBand(portfolioRisk).toUpperCase()}
+                            {anomalyCount > 0 ? ` · ${anomalyCount} cross-document anomalies flagged` : ''}
+                          </p>
+                        </div>
+                      </div>
+                    </section>
+                  )}
+
+                  {topDocs.length > 0 && (
+                    <section id="critical-docs" className="memo-section">
+                      <div className="memo-section__head">
+                        <span className="memo-section__num">03</span>
+                        <h3 className="memo-section__title">Most Critical Documents</h3>
+                        <span className="memo-section__rule" />
+                      </div>
+                      <ol className="memo-doclist">
+                        {topDocs.map((d, i) => (
+                          <li key={d.id} className="memo-doc-item">
+                            <span className="memo-doc-item__rank">{String(i + 1).padStart(2, '0')}</span>
+                            <div className="memo-doc-item__main">
+                              <div className="memo-doc-item__head">
+                                <span className="memo-doc-item__name" title={cleanDocName(d.name)}>{cleanDocName(d.name)}</span>
+                                {d.riskScore != null && (
+                                  <span className={`chip ${chipRisk(d.riskScore)} memo-doc-item__risk`}>{d.riskScore}/10</span>
+                                )}
+                              </div>
+                              {(d.riskSummary || d.extractionSummary) && (
+                                <p className="memo-doc-item__summary">{d.riskSummary ?? d.extractionSummary}</p>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ol>
+                    </section>
+                  )}
+                </div>
+                <footer className="memo-sheet__foot">
+                  <span>DealDiligence · Confidential</span>
+                  <span>Page 1 of 2</span>
+                </footer>
+              </article>
+
+              {/* ── Page 2 ── */}
+              <article className="memo-sheet">
+                <div className="memo-sheet__body">
+                  <div className="memo-runhead">
+                    <span>{dealName} — Diligence Memorandum</span>
+                    <span>Confidential</span>
+                  </div>
+
+                  {workflows.length > 0 && (
+                    <section id="workflows" className="memo-section">
+                      <div className="memo-section__head">
+                        <span className="memo-section__num">04</span>
+                        <h3 className="memo-section__title">Workflows by Risk</h3>
+                        <span className="memo-section__rule" />
+                      </div>
+                      <p className="memo-section__note">
+                        Diligence workstreams ranked by concentration of high-risk documents. Bar length shows how the {docCount ?? ''} documents distribute across workflows.
+                      </p>
+                      <div className="memo-flow">
+                        {workflows.map((w) => (
+                          <div key={w.id} className="memo-flow-row">
+                            <span className="memo-flow-row__title" title={w.title}>{w.title}</span>
+                            <div className="memo-flow-row__track">
+                              <div
+                                className={`memo-flow-row__bar is-${w.meanRisk != null ? riskBand(w.meanRisk) : 'low'}`}
+                                style={{ width: `${maxDocs ? Math.max((w.docCount / maxDocs) * 100, 4) : 0}%` }}
+                              />
+                            </div>
+                            <span className="memo-flow-row__count">{w.docCount}</span>
+                            <span className={`memo-flow-row__high${w.highCount > 0 ? ' has-high' : ''}`}>
+                              {w.highCount > 0 ? `${w.highCount} high` : '—'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  <section id="glance" className="memo-section">
+                    <div className="memo-section__head">
+                      <span className="memo-section__num">05</span>
+                      <h3 className="memo-section__title">Portfolio at a Glance</h3>
+                      <span className="memo-section__rule" />
+                    </div>
+                    <div className="memo-glance">
+                      <div className="memo-glance__cell">
+                        <div className="memo-glance__value">{docCount ?? '—'}</div>
+                        <div className="memo-glance__label">Documents</div>
+                      </div>
+                      <div className="memo-glance__cell">
+                        <div className="memo-glance__value">{dash?.riskStrip.highRiskDocuments ?? '—'}</div>
+                        <div className="memo-glance__label">High-risk docs</div>
+                      </div>
+                      <div className="memo-glance__cell">
+                        <div className="memo-glance__value">{dealMap?.stats.workstreams || workflows.length || '—'}</div>
+                        <div className="memo-glance__label">Workflows</div>
+                      </div>
+                      <div className="memo-glance__cell">
+                        <div className="memo-glance__value">{anomalyCount || '—'}</div>
+                        <div className="memo-glance__label">Anomalies</div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <p className="memo-endnote">
+                    Full clause-level detail, every party, and the complete document registry are in the{' '}
+                    <Link to={`/projects/${projectId}/vdr`} style={{ color: 'var(--color-primary)' }}>Data Room</Link>.
+                  </p>
+                </div>
+                <footer className="memo-sheet__foot">
+                  <span>DealDiligence · Confidential</span>
+                  <span>Page 2 of 2</span>
+                </footer>
+              </article>
+            </div>
           </div>
         </>
       )}

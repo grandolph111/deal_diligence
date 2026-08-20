@@ -126,6 +126,9 @@ export function ProjectOverviewPage() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 12);
 
+  // Documents by risk: the 20 highest-risk, shown 5 at a time (scroll for the rest).
+  const topDocsByRisk = documentsByRisk.slice(0, 20);
+
   const displayName = projectName ?? project.name;
 
   const handleRenameProject = async (newName: string) => {
@@ -262,25 +265,26 @@ export function ProjectOverviewPage() {
           </div>
         ) : (
           <ScrollList
-            total={documentsByRisk.length}
-            cap={10}
-            rowHeight={96}
+            total={topDocsByRisk.length}
+            cap={5}
+            rowHeight={92}
             noun="document"
-            className="card"
+            showCount={false}
+            className="card ov-doclist"
           >
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
+            <table className="ov-doc-table">
               <thead>
-                <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left' }}>
-                  <th style={{ padding: 'var(--space-3) var(--space-4)' }}>Document</th>
-                  <th style={{ padding: 'var(--space-3) var(--space-4)' }}>Type</th>
-                  <th style={{ padding: 'var(--space-3) var(--space-4)' }}>Risk</th>
-                  <th style={{ padding: 'var(--space-3) var(--space-4)' }}>Confidence</th>
-                  <th style={{ padding: 'var(--space-3) var(--space-4)' }}>Summary</th>
+                <tr>
+                  <th>Document</th>
+                  <th>Type</th>
+                  <th>Risk</th>
+                  <th>Confidence</th>
+                  <th>Summary</th>
                 </tr>
               </thead>
               <tbody>
-                {documentsByRisk.map((d) => (
-                  <tr key={d.id} style={{ borderTop: '1px solid var(--border-primary)' }}>
+                {topDocsByRisk.map((d) => (
+                  <tr key={d.id}>
                     <td style={{ padding: 'var(--space-3) var(--space-4)', fontWeight: 500 }}>{d.name}</td>
                     <td style={{ padding: 'var(--space-3) var(--space-4)', color: 'var(--text-secondary)' }}>{d.documentType ?? '—'}</td>
                     <td style={{ padding: 'var(--space-3) var(--space-4)' }}>

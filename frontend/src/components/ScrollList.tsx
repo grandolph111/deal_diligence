@@ -12,6 +12,8 @@ interface ScrollListProps {
   rowHeight?: number;
   /** Singular noun for the count line, e.g. "document". */
   noun?: string;
+  /** Show the "showing N of M" line below the box. Default true. */
+  showCount?: boolean;
   className?: string;
   children: ReactNode;
 }
@@ -31,6 +33,7 @@ export function ScrollList({
   cap = 10,
   rowHeight = 40,
   noun = 'item',
+  showCount = true,
   className,
   children,
 }: ScrollListProps) {
@@ -51,7 +54,7 @@ export function ScrollList({
       >
         {children}
       </div>
-      {(scrolls || withheld > 0) && (
+      {showCount && (scrolls || withheld > 0) && (
         <p className="scroll-list__count">
           {withheld > 0
             ? `Showing ${shown} of ${total} ${noun}${total === 1 ? '' : 's'}`

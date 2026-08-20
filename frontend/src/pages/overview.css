@@ -94,3 +94,34 @@
   height: 1px;
   background: var(--border-primary);
 }
+
+/* ---- documents-by-risk table (clean scrollbox, sticky header, 5-row cap) ---- */
+.ov-doclist { padding: 0; overflow: hidden; }
+.ov-doclist .scroll-list__viewport--scrolls { border-block: none; }
+
+.ov-doc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.ov-doc-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-secondary);
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-primary);
+}
+.ov-doc-table tbody td { padding: var(--space-3) var(--space-4); vertical-align: top; }
+.ov-doc-table tbody td:nth-child(1) { font-weight: 500; color: var(--text-primary); }
+.ov-doc-table tbody td:nth-child(2),
+.ov-doc-table tbody td:nth-child(5) { color: var(--text-secondary); }
+.ov-doc-table tbody tr { border-top: 1px solid var(--border-primary); }
+.ov-doc-table tbody tr:first-child { border-top: none; }
+.ov-doc-table tbody tr:hover { background: var(--bg-secondary); }
