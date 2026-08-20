@@ -1,42 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import './deal-brief-glance.css';
+import './deal-memo.css';
 import { useParams, Link } from 'react-router-dom';
-import {
-  ArrowLeft,
-  RefreshCw,
-  Edit3,
-  Save,
-  X,
-  Calendar,
-  FileText,
-  ShieldAlert,
-  BookOpen,
-  Users,
-  ListChecks,
-  TrendingUp,
-  Link2,
-  AlertTriangle,
-  Layers,
-  Gavel,
-  NotebookPen,
-  LibraryBig,
-  type LucideIcon,
-} from 'lucide-react';
+import { ArrowLeft, RefreshCw, Diamond, FileText, Scale, Calendar } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import rehypeSlug from 'rehype-slug';
-import GithubSlugger from 'github-slugger';
 import { apiClient, briefService } from '../api';
 import { useAuth } from '../auth';
 import type { DealBrief } from '../types/api';
 
-const HUMAN_SECTION_IDS = ['team-notes', 'custom-context'] as const;
-type HumanSectionId = (typeof HUMAN_SECTION_IDS)[number];
-
-const HUMAN_SECTION_LABELS: Record<HumanSectionId, string> = {
-  'team-notes': 'Deal Team Notes',
-  'custom-context': 'Custom Context',
-};
+/* ---------------------------------------------------------------- */
+/* Brief parsing                                                     */
+/* ---------------------------------------------------------------- */
 
 interface BriefMeta {
   project?: string;
@@ -52,177 +26,24 @@ interface ParsedBrief {
   body: string;
 }
 
-/**
- * Pull the YAML-ish frontmatter off the top of the brief, strip all marker
- * comments + placeholder comments, and return clean markdown ready for
- * rendering.
- */
 const parseBriefMarkdown = (raw: string | null | undefined): ParsedBrief => {
   if (!raw) return { meta: {}, body: '' };
-
   let remaining = raw.trim();
   const meta: BriefMeta = {};
-
-  // Match leading `---\n<frontmatter>\n---`
   const fmMatch = remaining.match(/^---\s*\n([\s\S]*?)\n---\s*/);
   if (fmMatch) {
-    const block = fmMatch[1];
-    for (const line of block.split('\n')) {
+    for (const line of fmMatch[1].split('\n')) {
       const m = line.match(/^\s*([a-z_][a-z0-9_]*)\s*:\s*(.*?)\s*$/i);
       if (m) meta[m[1]] = m[2];
     }
     remaining = remaining.slice(fmMatch[0].length);
   }
-
-  // Strip AI/human section markers — we don't want them rendered as text.
-  remaining = remaining.replace(
-    /<!--\s*(ai|human):(start|end):[a-z-]+\s*-->/g,
-    ''
-  );
-  // Strip remaining HTML comments (placeholder hints, content-team notes, etc.)
   remaining = remaining.replace(/<!--[\s\S]*?-->/g, '');
-  // Collapse 3+ blank lines
   remaining = remaining.replace(/\n{3,}/g, '\n\n').trim();
-
   return { meta, body: remaining };
 };
 
-const extractHumanSection = (
-  markdown: string | null,
-  id: HumanSectionId
-): string => {
-  if (!markdown) return '';
-  const re = new RegExp(
-    `<!-- human:start:${id} -->([\\s\\S]*?)<!-- human:end:${id} -->`,
-    'g'
-  );
-  const match = re.exec(markdown);
-  if (!match) return '';
-  // Strip any placeholder HTML comments inside the section.
-  return match[1].replace(/<!--[\s\S]*?-->/g, '').trim();
-};
-
-const riskChipClass = (score: number | null): string => {
-  if (score == null) return 'chip';
-  if (score >= 7) return 'chip risk-high';
-  if (score >= 4) return 'chip risk-med';
-  return 'chip risk-low';
-};
-
-const formatDate = (raw: string | undefined): string | null => {
-  if (!raw) return null;
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return raw;
-  return d.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-};
-
-/**
- * Section configuration keyed by normalized heading text.
- * - icon: shown in the rendered H1 + in the TOC.
- * - accent: CSS var color used as the left border / icon tint.
- * - aliases: alternate heading strings the backend prompt may emit.
- */
-interface SectionMeta {
-  icon: LucideIcon;
-  accent: string;
-  aliases?: readonly string[];
-}
-
-const SECTION_META: Record<string, SectionMeta> = {
-  'deal snapshot': { icon: BookOpen, accent: 'var(--color-primary)' },
-  'deal team notes': { icon: NotebookPen, accent: 'var(--color-accent)' },
-  'custom context': { icon: NotebookPen, accent: 'var(--color-accent)' },
-  'parties': { icon: Users, accent: 'var(--color-primary)' },
-  'key clauses': {
-    icon: ListChecks,
-    accent: 'var(--color-primary)',
-    aliases: ['key clauses (cross-document)'],
-  },
-  'top risks': { icon: TrendingUp, accent: 'var(--risk-high)' },
-  'key dates': { icon: Calendar, accent: 'var(--color-primary)' },
-  'cross-document anomalies': {
-    icon: AlertTriangle,
-    accent: 'var(--risk-med)',
-    aliases: ['anomalies'],
-  },
-  'document registry': { icon: LibraryBig, accent: 'var(--color-primary)' },
-  'inter-document relationships': {
-    icon: Link2,
-    accent: 'var(--color-primary)',
-    aliases: ['relationships'],
-  },
-  'risk assessment': { icon: ShieldAlert, accent: 'var(--risk-high)' },
-  'executive summary': { icon: BookOpen, accent: 'var(--color-primary)' },
-  'citations': { icon: Gavel, accent: 'var(--color-primary)' },
-  'entities': { icon: Layers, accent: 'var(--color-primary)' },
-};
-
-const DEFAULT_SECTION: SectionMeta = {
-  icon: FileText,
-  accent: 'var(--color-primary)',
-};
-
-const resolveSectionMeta = (heading: string): SectionMeta => {
-  const normalized = heading.trim().toLowerCase();
-  const direct = SECTION_META[normalized];
-  if (direct) return direct;
-  for (const meta of Object.values(SECTION_META)) {
-    if (meta.aliases?.includes(normalized)) return meta;
-  }
-  // Partial match (e.g. "Key Clauses (cross-document)" → "key clauses")
-  for (const key of Object.keys(SECTION_META)) {
-    if (normalized.startsWith(key)) return SECTION_META[key];
-  }
-  return DEFAULT_SECTION;
-};
-
-/**
- * Extract H1 headings from markdown in document order, with slugs matching
- * what rehype-slug will generate (both use the `github-slugger` algorithm,
- * so the TOC slugs always match the DOM ids — no drift).
- */
-interface TocItem {
-  slug: string;
-  text: string;
-  meta: SectionMeta;
-}
-const extractToc = (markdown: string): TocItem[] => {
-  const out: TocItem[] = [];
-  const slugger = new GithubSlugger();
-  const lines = markdown.split('\n');
-  let inFence = false;
-  for (const line of lines) {
-    if (line.startsWith('```')) {
-      inFence = !inFence;
-      continue;
-    }
-    if (inFence) continue;
-    const m = line.match(/^#\s+(.+?)\s*$/);
-    if (!m) continue;
-    const text = m[1].trim();
-    const slug = slugger.slug(text);
-    out.push({ slug, text, meta: resolveSectionMeta(text) });
-  }
-  return out;
-};
-
-interface Glance {
-  snapshot: string;
-  risks: Array<{ title: string; level: string }>;
-  anomalyCount: number;
-}
-
-/**
- * The body of one `# Heading` section, up to the next `# `.
- *
- * Scanned line by line rather than with a regex: a multiline lookahead for
- * "next heading or end" matches the end of the very first line, so the
- * expression returns an empty body for every section.
- */
+/** Body of one `# Heading` section, up to the next `# `. */
 const sectionBody = (markdown: string, heading: string): string => {
   const lines = markdown.split('\n');
   const want = `# ${heading}`.toLowerCase();
@@ -233,45 +54,87 @@ const sectionBody = (markdown: string, heading: string): string => {
   return (end === -1 ? rest : rest.slice(0, end)).join('\n').trim();
 };
 
-/**
- * Condense the brief into something scannable.
- *
- * The brief is a long document by design — ten sections, every party, every
- * clause, every relationship. That is the right artifact to have, but it is the
- * wrong first thing to read, so the page opens with the figures and the few
- * risks that actually decide whether to keep reading.
- */
-const buildGlance = (markdown: string): Glance => {
-  const snapshotRaw = sectionBody(markdown, 'Deal Snapshot');
-  // Two sentences is the useful part of a snapshot; the rest repeats sections.
-  const sentences = snapshotRaw.replace(/\s+/g, ' ').match(/[^.!?]+[.!?]+/g) ?? [];
-  const snapshot = sentences.slice(0, 2).join(' ').trim() || snapshotRaw;
+interface Risk {
+  title: string;
+  level: 'HIGH' | 'MEDIUM' | 'LOW';
+  source: string | null;
+  rationale: string;
+}
 
-  const risks: Glance['risks'] = [];
-  for (const line of sectionBody(markdown, 'Top Risks').split('\n')) {
-    // `1. Title ([Doc p.N]) — HIGH. Rationale`
-    const m = line.match(/^\s*\d+\.\s+(.+?)\s*(?:\(\[[^\]]*\]\))?\s*—\s*(LOW|MEDIUM|HIGH)\b/i);
-    if (m) risks.push({ title: m[1].trim(), level: m[2].toUpperCase() });
+/** Parse the Top Risks section into structured, ranked entries. */
+const parseRisks = (body: string): Risk[] => {
+  const out: Risk[] = [];
+  // Each risk starts with `N. ` and may wrap; split on leading enumerator.
+  const blocks = body.split(/\n(?=\s*\d+\.\s)/);
+  for (const block of blocks) {
+    const flat = block.replace(/\s+/g, ' ').trim();
+    const m = flat.match(
+      /^\d+\.\s+(.+?)\s*(?:\(\[([^\]]*)\]\))?\s*—\s*(HIGH|MEDIUM|LOW)\b\.?\s*(.*)$/i
+    );
+    if (!m) continue;
+    const rawSource = (m[2] ?? '').trim();
+    // Strip a trailing `p.N` page ref and the .pdf extension for a clean label.
+    const source = rawSource
+      ? rawSource.replace(/\s*p\.\d+.*$/i, '').replace(/\.pdf$/i, '').trim()
+      : null;
+    out.push({
+      title: m[1].trim(),
+      level: m[3].toUpperCase() as Risk['level'],
+      source,
+      rationale: m[4].trim(),
+    });
   }
+  return out;
+};
 
-  const anomalies = sectionBody(markdown, 'Cross-document Anomalies');
-  const anomalyCount = anomalies && !/^_?No\b/i.test(anomalies)
-    ? anomalies.split('\n').filter((l) => /^\s*(?:[-*]|\d+\.)\s+\S/.test(l)).length
+interface KeyDate {
+  date: string;
+  label: string;
+}
+
+const parseDates = (body: string, limit: number): KeyDate[] => {
+  const out: KeyDate[] = [];
+  for (const line of body.split('\n')) {
+    // `- 2018-11-20: Effective date — filename.pdf`
+    const m = line.match(/^[-*]\s*(\d{4}-\d{2}-\d{2})\s*:\s*(.+?)\s*—\s*(.+?)\s*$/);
+    if (!m) continue;
+    const doc = m[3].replace(/\.pdf$/i, '').trim();
+    out.push({ date: m[1], label: `${m[2].trim()} · ${doc}` });
+    if (out.length >= limit) break;
+  }
+  return out;
+};
+
+const countPartyHeadings = (body: string): number =>
+  (body.match(/^##\s+/gm) ?? []).length;
+
+const countListItems = (body: string): number =>
+  body && !/^_?No\b/i.test(body.trim())
+    ? body.split('\n').filter((l) => /^\s*(?:[-*]|\d+\.)\s+\S/.test(l)).length
     : 0;
 
-  return { snapshot, risks: risks.slice(0, 4), anomalyCount };
+const toInt = (v: string | number | undefined): number | null => {
+  if (v == null) return null;
+  const n = typeof v === 'number' ? v : Number.parseInt(String(v), 10);
+  return Number.isFinite(n) ? n : null;
 };
 
-/** Get children as a plain string for slug/meta lookups. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const childrenToText = (children: any): string => {
-  if (typeof children === 'string') return children;
-  if (Array.isArray(children)) return children.map(childrenToText).join('');
-  if (children && typeof children === 'object' && 'props' in children) {
-    return childrenToText((children as { props: { children: unknown } }).props.children);
-  }
-  return '';
+const riskBand = (score: number): 'high' | 'medium' | 'low' =>
+  score >= 7 ? 'high' : score >= 4 ? 'medium' : 'low';
+
+const prettyDate = (raw: string): string => {
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
+
+/* ---------------------------------------------------------------- */
+/* Section rail                                                      */
+/* ---------------------------------------------------------------- */
+
+interface RailItem { id: string; label: string; }
+
+/* ---------------------------------------------------------------- */
 
 export function DealBriefPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -280,17 +143,14 @@ export function DealBriefPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
-  const [editing, setEditing] = useState<HumanSectionId | null>(null);
-  const [editDraft, setEditDraft] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   const fetchBrief = useCallback(async () => {
     if (!projectId) return;
     try {
       setLoading(true);
       setError(null);
-      const res = await briefService.get(projectId);
-      setBrief(res);
+      setBrief(await briefService.get(projectId));
     } catch (err) {
       console.error('Failed to load brief:', err);
       setError('Failed to load deal brief');
@@ -312,157 +172,74 @@ export function DealBriefPage() {
       await briefService.rebuild(projectId);
       await fetchBrief();
     } catch (err) {
-      console.error('Rebuild failed:', err);
-      const message =
-        err instanceof Error && err.message
-          ? err.message
-          : 'Rebuild failed — check server logs.';
-      setError(message);
+      setError(err instanceof Error && err.message ? err.message : 'Rebuild failed — check server logs.');
     } finally {
       setRebuilding(false);
     }
   };
 
-  const startEdit = (id: HumanSectionId) => {
-    setEditing(id);
-    setEditDraft(extractHumanSection(brief?.markdown ?? null, id));
-  };
-
-  const cancelEdit = () => {
-    setEditing(null);
-    setEditDraft('');
-  };
-
-  const handleSave = async () => {
-    if (!projectId || !editing) return;
-    try {
-      setSaving(true);
-      await briefService.saveHumanSection(projectId, editing, editDraft);
-      await fetchBrief();
-      setEditing(null);
-      setEditDraft('');
-    } catch (err) {
-      console.error('Save failed:', err);
-      setError('Failed to save section.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const { meta, body: renderedMarkdown } = useMemo(
+  const { meta, body } = useMemo(
     () => parseBriefMarkdown(brief?.markdown ?? null),
     [brief?.markdown]
   );
 
-  const toc = useMemo(() => extractToc(renderedMarkdown), [renderedMarkdown]);
-  const glance = useMemo(() => buildGlance(renderedMarkdown), [renderedMarkdown]);
-  const [activeSlug, setActiveSlug] = useState<string | null>(null);
+  const memo = useMemo(() => {
+    const overview = sectionBody(body, 'Deal Snapshot');
+    const risks = parseRisks(sectionBody(body, 'Top Risks')).slice(0, 6);
+    const dates = parseDates(sectionBody(body, 'Key Dates'), 6);
+    const partyCount = countPartyHeadings(sectionBody(body, 'Parties'));
+    const anomalyCount = countListItems(sectionBody(body, 'Cross-document Anomalies'));
+    return { overview, risks, dates, partyCount, anomalyCount };
+  }, [body]);
 
-  // Track which section is in the viewport for TOC highlighting.
+  const portfolioRisk = toInt(meta.portfolio_risk);
+  const docCount = toInt(meta.doc_count);
+
+  const rail: RailItem[] = useMemo(() => {
+    const items: RailItem[] = [];
+    if (memo.overview) items.push({ id: 'overview', label: 'Deal Overview' });
+    if (portfolioRisk != null) items.push({ id: 'posture', label: 'Risk Posture' });
+    if (memo.risks.length) items.push({ id: 'key-risks', label: 'Key Risks' });
+    if (memo.dates.length) items.push({ id: 'key-dates', label: 'Key Dates' });
+    items.push({ id: 'glance', label: 'At a Glance' });
+    return items;
+  }, [memo, portfolioRisk]);
+
+  // Scroll-spy for the rail.
   useEffect(() => {
-    if (toc.length === 0) return;
+    if (rail.length === 0) return;
     const observer = new IntersectionObserver(
       (entries) => {
         const visible = entries
           .filter((e) => e.isIntersecting)
           .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible[0]?.target?.id) setActiveSlug(visible[0].target.id);
+        if (visible[0]?.target?.id) setActiveId(visible[0].target.id);
       },
-      { rootMargin: '-80px 0px -60% 0px', threshold: 0.01 }
+      { rootMargin: '-90px 0px -65% 0px', threshold: 0.01 }
     );
-    toc.forEach(({ slug }) => {
-      const el = document.getElementById(slug);
+    rail.forEach(({ id }) => {
+      const el = document.getElementById(id);
       if (el) observer.observe(el);
     });
     return () => observer.disconnect();
-  }, [toc, renderedMarkdown]);
-
-  const portfolioRisk =
-    meta.portfolio_risk == null
-      ? null
-      : typeof meta.portfolio_risk === 'number'
-        ? meta.portfolio_risk
-        : Number.parseInt(String(meta.portfolio_risk), 10) || null;
-
-  const docCount =
-    meta.doc_count == null
-      ? null
-      : typeof meta.doc_count === 'number'
-        ? meta.doc_count
-        : Number.parseInt(String(meta.doc_count), 10) || null;
-
-  // Slug-aware ReactMarkdown components. IDs are assigned by rehype-slug —
-  // we just decorate each heading with its section icon + accent border.
-  const markdownComponents = useMemo(
-    () => ({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      h1: ({ children, ...props }: any) => {
-        const text = childrenToText(children);
-        const sectionMeta = resolveSectionMeta(text);
-        const Icon = sectionMeta.icon;
-        return (
-          <h1
-            {...props}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-3)',
-              scrollMarginTop: 'calc(var(--header-height, 64px) + 16px)',
-              borderBottom: `2px solid ${sectionMeta.accent}`,
-              paddingBottom: '0.4em',
-              marginTop: '2em',
-            }}
-          >
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 32,
-                height: 32,
-                borderRadius: 'var(--radius-md)',
-                background: 'var(--bg-secondary)',
-                color: sectionMeta.accent,
-                flexShrink: 0,
-              }}
-            >
-              <Icon size={18} />
-            </span>
-            <span>{children}</span>
-          </h1>
-        );
-      },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      h2: ({ children, ...props }: any) => (
-        <h2
-          {...props}
-          style={{
-            scrollMarginTop: 'calc(var(--header-height, 64px) + 16px)',
-            borderLeft: '3px solid var(--color-primary)',
-            paddingLeft: 'var(--space-3)',
-            borderBottom: 'none',
-            marginTop: '1.6em',
-          }}
-        >
-          {children}
-        </h2>
-      ),
-    }),
-    []
-  );
+  }, [rail]);
 
   if (authLoading || loading) {
     return (
       <div className="loading-container">
         <div className="loading-spinner" />
-        <p>Loading deal brief…</p>
+        <p>Loading deal memorandum…</p>
       </div>
     );
   }
 
+  const dealName = meta.project || 'Deal Memorandum';
+  const scopeWord = brief?.scopeKey === 'full' ? 'Full access' : brief?.scopeLabel || 'Scoped access';
+  const updated = brief?.updatedAt || meta.last_updated;
+
   return (
-    <div style={{ padding: 'var(--space-6) var(--space-8)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', maxWidth: 1400, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <div className="memo-page">
+      <div className="memo-topbar">
         <Link to={`/projects/${projectId}`} className="button ghost sm">
           <ArrowLeft size={14} /> Overview
         </Link>
@@ -472,16 +249,7 @@ export function DealBriefPage() {
               {brief.scopeLabel}
             </span>
           )}
-          {brief?.updatedAt && (
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
-              Last rebuilt: {new Date(brief.updatedAt).toLocaleString()}
-            </span>
-          )}
-          <button
-            className="button secondary sm"
-            onClick={handleRebuild}
-            disabled={rebuilding}
-          >
+          <button className="button secondary sm" onClick={handleRebuild} disabled={rebuilding}>
             <RefreshCw size={14} className={rebuilding ? 'loading-spinner' : ''} />
             {rebuilding ? 'Rebuilding…' : 'Rebuild now'}
           </button>
@@ -493,260 +261,246 @@ export function DealBriefPage() {
       {!brief?.markdown ? (
         <div className="empty-state">
           <h3>No deal brief yet</h3>
-          <p>
-            Upload documents to the Data Room. Once extraction completes, the brief will be
-            generated automatically.
-          </p>
-          <Link className="button primary" to={`/projects/${projectId}/vdr`}>
-            Go to Data Room
-          </Link>
+          <p>Upload documents to the Data Room. Once extraction completes, the memorandum is generated automatically.</p>
+          <Link className="button primary" to={`/projects/${projectId}/vdr`}>Go to Data Room</Link>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 'var(--space-6)' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
-            {/* Metadata header card — rendered from parsed frontmatter. */}
-            <div
-              className="card"
-              style={{
-                padding: 'var(--space-5) var(--space-6)',
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 'var(--space-4)',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
+        <>
+          {/* Full-width header band */}
+          <header className="memo-header">
+            <div className="memo-header__inner">
               <div>
-                <div
-                  style={{
-                    fontFamily: 'var(--font-display)',
-                    fontSize: 'var(--text-xl)',
-                    fontWeight: 600,
-                    letterSpacing: 'var(--tracking-tight)',
-                    lineHeight: 1.2,
-                  }}
-                >
-                  {meta.project || 'Deal Brief'}
-                </div>
-                <div
-                  style={{
-                    marginTop: 'var(--space-1)',
-                    fontSize: 'var(--text-xs)',
-                    color: 'var(--text-tertiary)',
-                    textTransform: 'uppercase',
-                    letterSpacing: 'var(--tracking-wide)',
-                  }}
-                >
-                  Deal Brief · {meta.scope || brief.scopeLabel || 'full'}
-                </div>
+                <div className="memo-eyebrow">Deal Memorandum · {scopeWord}</div>
+                <h1 className="memo-header__title">{dealName}</h1>
               </div>
-              <div style={{ display: 'flex', gap: 'var(--space-5)', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div className="memo-header__meta">
                 {portfolioRisk != null && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                    <ShieldAlert size={16} style={{ color: 'var(--text-tertiary)' }} />
-                    <div>
-                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>Portfolio risk</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', marginTop: 2 }}>
-                        <span style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-lg)', fontWeight: 600 }}>
-                          {portfolioRisk}
-                          <span style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>/10</span>
-                        </span>
-                        <span className={riskChipClass(portfolioRisk)}>
-                          {portfolioRisk >= 7 ? 'HIGH' : portfolioRisk >= 4 ? 'MEDIUM' : 'LOW'}
-                        </span>
-                      </div>
-                    </div>
+                  <div className="memo-stat">
+                    <span className="memo-stat__label">Portfolio risk</span>
+                    <span className="memo-riskbadge">
+                      <span className="memo-riskbadge__score">{portfolioRisk}<span>/10</span></span>
+                      <span className={`chip risk-${riskBand(portfolioRisk) === 'medium' ? 'med' : riskBand(portfolioRisk)}`}>
+                        {riskBand(portfolioRisk).toUpperCase()}
+                      </span>
+                    </span>
                   </div>
                 )}
                 {docCount != null && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                    <FileText size={16} style={{ color: 'var(--text-tertiary)' }} />
-                    <div>
-                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>Documents</div>
-                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-lg)', fontWeight: 600 }}>
-                        {docCount}
-                      </div>
-                    </div>
+                  <div className="memo-stat">
+                    <span className="memo-stat__label">Documents</span>
+                    <span className="memo-stat__value">{docCount}</span>
                   </div>
                 )}
-                {(brief.updatedAt || meta.last_updated) && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                    <Calendar size={16} style={{ color: 'var(--text-tertiary)' }} />
-                    <div>
-                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>Last updated</div>
-                      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>
-                        {formatDate(brief.updatedAt ?? meta.last_updated)}
-                      </div>
-                    </div>
+                {updated && (
+                  <div className="memo-stat">
+                    <span className="memo-stat__label">Updated</span>
+                    <span className="memo-stat__value" style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>
+                      {prettyDate(updated)}
+                    </span>
                   </div>
                 )}
               </div>
             </div>
+          </header>
 
-            {/* Sticky TOC + rendered brief body side-by-side */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: toc.length > 0 ? '220px 1fr' : '1fr',
-                gap: 'var(--space-5)',
-                alignItems: 'flex-start',
-              }}
-            >
-              {toc.length > 0 && (
-                <nav
-                  aria-label="Deal brief sections"
-                  style={{
-                    position: 'sticky',
-                    top: 'calc(var(--header-height, 64px) + 16px)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 2,
-                    paddingTop: 'var(--space-2)',
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 'var(--text-xs)',
-                      textTransform: 'uppercase',
-                      letterSpacing: 'var(--tracking-wide)',
-                      color: 'var(--text-tertiary)',
-                      padding: 'var(--space-2) var(--space-3)',
-                    }}
-                  >
-                    Sections
+          {/* Paper (left) + rail (right) */}
+          <div className="memo-layout">
+            <div className="memo-doc">
+            {/* ── Page 1 ── */}
+            <article className="memo-sheet memo-sheet--first">
+              <div className="memo-sheet__body">
+              <div className="memo-letterhead">
+                <span className="memo-wordmark">
+                  <span className="memo-wordmark__mark"><Diamond size={16} fill="currentColor" /></span>
+                  DealDiligence
+                </span>
+                <span className="memo-confidential">Confidential · Privileged</span>
+              </div>
+
+              <div className="memo-recap">
+                <span className="memo-eyebrow">Memorandum</span>
+                <p className="memo-doc-title">
+                  <span className="memo-recap__re">Re:</span> {dealName}
+                </p>
+                <p className="memo-doc-subtitle">
+                  {scopeWord}{docCount != null ? ` · ${docCount} documents` : ''}{updated ? ` · Prepared ${prettyDate(updated)}` : ''}
+                </p>
+              </div>
+
+              {memo.overview && (
+                <section id="overview" className="memo-section">
+                  <div className="memo-section__head">
+                    <span className="memo-section__num">01</span>
+                    <h3 className="memo-section__title">Deal Overview</h3>
+                    <span className="memo-section__rule" />
                   </div>
-                  {toc.map(({ slug, text, meta: sectionMeta }) => {
-                    const Icon = sectionMeta.icon;
-                    const isActive = slug === activeSlug;
-                    return (
-                      <a
-                        key={slug}
-                        href={`#${slug}`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          const el = document.getElementById(slug);
-                          if (el) {
-                            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                            setActiveSlug(slug);
-                          }
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 'var(--space-2)',
-                          padding: 'var(--space-2) var(--space-3)',
-                          borderRadius: 'var(--radius-sm)',
-                          borderLeft: `2px solid ${isActive ? sectionMeta.accent : 'transparent'}`,
-                          color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-                          background: isActive ? 'var(--bg-tertiary)' : 'transparent',
-                          fontSize: 'var(--text-sm)',
-                          fontWeight: isActive ? 500 : 400,
-                          textDecoration: 'none',
-                          transition: 'background-color var(--transition-base), color var(--transition-base)',
-                        }}
-                      >
-                        <Icon size={14} style={{ color: sectionMeta.accent, flexShrink: 0 }} />
-                        <span
-                          style={{
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                        >
-                          {text}
-                        </span>
-                      </a>
-                    );
-                  })}
-                </nav>
-              )}
-
-              {/* Condensed view first: the figures and the handful of risks
-                  that decide whether the full brief is worth reading. */}
-              {(glance.snapshot || glance.risks.length > 0) && (
-                <section className="brief-glance">
-                  <h2 className="brief-glance__title">At a glance</h2>
-                  {glance.snapshot && <p className="brief-glance__summary">{glance.snapshot}</p>}
-
-                  {glance.risks.length > 0 && (
-                    <ul className="brief-glance__risks">
-                      {glance.risks.map((r) => (
-                        <li key={r.title}>
-                          <span className={`brief-glance__level is-${r.level.toLowerCase()}`}>
-                            {r.level}
-                          </span>
-                          <span className="brief-glance__risk-title">{r.title}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-
-                  <p className="brief-glance__more">
-                    {glance.anomalyCount > 0 && `${glance.anomalyCount} cross-document anomalies · `}
-                    Full detail in the sections below
-                  </p>
+                  <div className="memo-prose">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{memo.overview}</ReactMarkdown>
+                  </div>
                 </section>
               )}
 
-              <div className="card" style={{ padding: 'var(--space-6) var(--space-8)' }}>
-                <div className="markdown-body">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={[rehypeSlug]}
-                    components={markdownComponents}
-                  >
-                    {renderedMarkdown}
-                  </ReactMarkdown>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <aside style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-            <h3 style={{ fontFamily: 'var(--font-display)', margin: 0 }}>Human sections</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', marginTop: 0 }}>
-              Anything you write here persists across AI rebuilds.
-            </p>
-
-            {HUMAN_SECTION_IDS.map((id) => {
-              const content = extractHumanSection(brief.markdown, id);
-              const isEditing = editing === id;
-              return (
-                <div key={id} className="card" style={{ padding: 'var(--space-4)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <h4 style={{ margin: 0 }}>{HUMAN_SECTION_LABELS[id]}</h4>
-                    {!isEditing ? (
-                      <button className="button ghost sm" onClick={() => startEdit(id)}>
-                        <Edit3 size={12} /> Edit
-                      </button>
-                    ) : (
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="button ghost sm" onClick={cancelEdit} disabled={saving}>
-                          <X size={12} /> Cancel
-                        </button>
-                        <button className="button primary sm" onClick={handleSave} disabled={saving}>
-                          <Save size={12} /> Save
-                        </button>
-                      </div>
-                    )}
+              {portfolioRisk != null && (
+                <section id="posture" className="memo-section">
+                  <div className="memo-section__head">
+                    <span className="memo-section__num">02</span>
+                    <h3 className="memo-section__title">Risk Posture</h3>
+                    <span className="memo-section__rule" />
                   </div>
-                  {isEditing ? (
-                    <textarea
-                      value={editDraft}
-                      onChange={(e) => setEditDraft(e.target.value)}
-                      rows={10}
-                      style={{ width: '100%', marginTop: 'var(--space-3)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}
-                    />
-                  ) : (
-                    <div style={{ marginTop: 'var(--space-3)', whiteSpace: 'pre-wrap', fontSize: 'var(--text-sm)', color: content ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
-                      {content || '(empty — click Edit to add notes)'}
+                  <div className="memo-posture">
+                    <div className="memo-posture__score">{portfolioRisk}<span>/10</span></div>
+                    <div className="memo-posture__meter-wrap">
+                      <div className="memo-posture__meter">
+                        <div
+                          className={`memo-posture__fill is-${riskBand(portfolioRisk)}`}
+                          style={{ width: `${(portfolioRisk / 10) * 100}%` }}
+                        />
+                      </div>
+                      <p className="memo-posture__caption">
+                        Page-weighted mean across {docCount ?? 'all'} documents · {riskBand(portfolioRisk).toUpperCase()} ·
+                        {memo.anomalyCount > 0 ? ` ${memo.anomalyCount} cross-document anomalies flagged` : ' no cross-document anomalies'}
+                      </p>
                     </div>
-                  )}
+                  </div>
+                </section>
+              )}
+              </div>
+              <footer className="memo-sheet__foot">
+                <span>DealDiligence · Confidential</span>
+                <span>Page 1 of 3</span>
+              </footer>
+            </article>
+
+            {/* ── Page 2 ── */}
+            <article className="memo-sheet">
+              <div className="memo-sheet__body">
+              <div className="memo-runhead">
+                <span>{dealName} — Diligence Memorandum</span>
+                <span>Confidential</span>
+              </div>
+
+              {memo.risks.length > 0 && (
+                <section id="key-risks" className="memo-section">
+                  <div className="memo-section__head">
+                    <span className="memo-section__num">03</span>
+                    <h3 className="memo-section__title">Key Risks</h3>
+                    <span className="memo-section__rule" />
+                  </div>
+                  <div className="memo-risks">
+                    {memo.risks.map((r, i) => (
+                      <div key={i} className={`memo-risk is-${r.level.toLowerCase()}`}>
+                        <div className="memo-risk__top">
+                          <span className="memo-risk__level">{r.level}</span>
+                          <span className="memo-risk__title">{r.title}</span>
+                        </div>
+                        {r.rationale && <p className="memo-risk__body">{r.rationale}</p>}
+                        {r.source && (
+                          <div className="memo-risk__source" title={r.source}>
+                            <FileText size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />
+                            {r.source}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+              </div>
+              <footer className="memo-sheet__foot">
+                <span>DealDiligence · Confidential</span>
+                <span>Page 2 of 3</span>
+              </footer>
+            </article>
+
+            {/* ── Page 3 ── */}
+            <article className="memo-sheet">
+              <div className="memo-sheet__body">
+              <div className="memo-runhead">
+                <span>{dealName} — Diligence Memorandum</span>
+                <span>Confidential</span>
+              </div>
+
+              {memo.dates.length > 0 && (
+                <section id="key-dates" className="memo-section">
+                  <div className="memo-section__head">
+                    <span className="memo-section__num">04</span>
+                    <h3 className="memo-section__title">Key Dates</h3>
+                    <span className="memo-section__rule" />
+                  </div>
+                  <div className="memo-dates">
+                    {memo.dates.map((d, i) => (
+                      <div key={i} className="memo-date-row">
+                        <span className="memo-date-row__date">{d.date}</span>
+                        <span className="memo-date-row__label" title={d.label}>{d.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              <section id="glance" className="memo-section">
+                <div className="memo-section__head">
+                  <span className="memo-section__num">05</span>
+                  <h3 className="memo-section__title">Portfolio at a Glance</h3>
+                  <span className="memo-section__rule" />
                 </div>
-              );
-            })}
-          </aside>
-        </div>
+                <div className="memo-glance">
+                  <div className="memo-glance__cell">
+                    <div className="memo-glance__value">{docCount ?? '—'}</div>
+                    <div className="memo-glance__label">Documents</div>
+                  </div>
+                  <div className="memo-glance__cell">
+                    <div className="memo-glance__value">{memo.partyCount || '—'}</div>
+                    <div className="memo-glance__label">Counterparties</div>
+                  </div>
+                  <div className="memo-glance__cell">
+                    <div className="memo-glance__value">{memo.risks.filter((r) => r.level === 'HIGH').length}</div>
+                    <div className="memo-glance__label">High risks</div>
+                  </div>
+                  <div className="memo-glance__cell">
+                    <div className="memo-glance__value">{memo.anomalyCount || '—'}</div>
+                    <div className="memo-glance__label">Anomalies</div>
+                  </div>
+                </div>
+              </section>
+
+              <p className="memo-endnote">
+                Full clause-level detail, every party, and the complete document registry are in the{' '}
+                <Link to={`/projects/${projectId}/vdr`} style={{ color: 'var(--color-primary)' }}>Data Room</Link>.
+              </p>
+              </div>
+              <footer className="memo-sheet__foot">
+                <span>DealDiligence · Confidential</span>
+                <span>Page 3 of 3</span>
+              </footer>
+            </article>
+            </div>
+
+            {rail.length > 0 && (
+              <nav className="memo-rail" aria-label="Memorandum sections">
+                <div className="memo-rail__label">Sections</div>
+                {rail.map(({ id, label }) => {
+                  const Icon = id === 'key-dates' ? Calendar : id === 'posture' ? Scale : FileText;
+                  return (
+                    <a
+                      key={id}
+                      href={`#${id}`}
+                      className={`memo-rail__link${activeId === id ? ' is-active' : ''}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const el = document.getElementById(id);
+                        if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActiveId(id); }
+                      }}
+                    >
+                      <Icon size={13} style={{ flexShrink: 0, opacity: 0.7 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                    </a>
+                  );
+                })}
+              </nav>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
+import './overview.css';
 import { ScrollList } from '../components/ScrollList';
 import { useParams, Link } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowLeft,
+  ArrowUpRight,
   Building2,
   CheckCircle2,
   FileText,
@@ -243,33 +245,15 @@ export function ProjectOverviewPage() {
       </div>
 
       {/* Quick actions */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-4)' }}>
-        <Link to={`/projects/${projectId}/boards`} className="card interactive" style={{ padding: 'var(--space-5)' }}>
-          <Kanban size={20} style={{ color: 'var(--color-primary)' }} />
-          <div style={{ fontWeight: 500, marginTop: 'var(--space-3)' }}>Kanban · AI workflow</div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-1)' }}>
-            Prompt the AI against attached documents. Reports land in review.
-          </p>
-        </Link>
-        <Link to={`/projects/${projectId}/vdr`} className="card interactive" style={{ padding: 'var(--space-5)' }}>
-          <FileText size={20} style={{ color: 'var(--color-primary)' }} />
-          <div style={{ fontWeight: 500, marginTop: 'var(--space-3)' }}>Data room</div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-1)' }}>
-            Upload documents. Each gets a CUAD-aligned fact sheet + risk score.
-          </p>
-        </Link>
-        <Link to={`/projects/${projectId}/entities`} className="card interactive" style={{ padding: 'var(--space-5)' }}>
-          <Building2 size={20} style={{ color: 'var(--color-primary)' }} />
-          <div style={{ fontWeight: 500, marginTop: 'var(--space-3)' }}>Entities & graph</div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-1)' }}>
-            Parties, people, jurisdictions, valuations aggregated across the deal.
-          </p>
-        </Link>
+      <div className="ov-actions">
+        <QuickAction to={`/projects/${projectId}/boards`} icon={Kanban} label="Kanban · AI workflow" accent="var(--color-primary)" />
+        <QuickAction to={`/projects/${projectId}/vdr`} icon={FileText} label="Data room" accent="var(--color-primary)" />
+        <QuickAction to={`/projects/${projectId}/entities`} icon={Building2} label="Entities & graph" accent="var(--color-accent-hover)" />
       </div>
 
       {/* Documents by risk */}
       <section>
-        <h2 style={{ marginBottom: 'var(--space-4)' }}>Documents by risk</h2>
+        <h2 className="ov-section-title">Documents by risk</h2>
         {documentsByRisk.length === 0 ? (
           <div className="empty-state">
             <FileText size={24} />
@@ -326,7 +310,7 @@ export function ProjectOverviewPage() {
       {/* Entities + recent reports */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)', alignItems: 'start' }}>
         <section style={{ display: 'flex', flexDirection: 'column' }}>
-          <h2 style={{ marginBottom: 'var(--space-4)' }}>Entity rollups</h2>
+          <h2 className="ov-section-title">Entity rollups</h2>
           <div className="card" style={{ padding: 'var(--space-4)', flex: 1, display: 'flex', alignItems: 'center' }}>
             {entitySummary.length === 0 ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', color: 'var(--text-tertiary)', width: '100%' }}>
@@ -355,7 +339,7 @@ export function ProjectOverviewPage() {
         </section>
 
         <section style={{ display: 'flex', flexDirection: 'column' }}>
-          <h2 style={{ marginBottom: 'var(--space-4)' }}>Recent AI reports</h2>
+          <h2 className="ov-section-title">Recent AI reports</h2>
           {recentReports.length === 0 ? (
             <div
               className="card"
@@ -400,6 +384,26 @@ export function ProjectOverviewPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+function QuickAction({
+  to,
+  icon: Icon,
+  label,
+  accent,
+}: {
+  to: string;
+  icon: React.ElementType;
+  label: string;
+  accent: string;
+}) {
+  return (
+    <Link to={to} className="ov-action" style={{ ['--tile-accent' as string]: accent }}>
+      <span className="ov-action__icon"><Icon size={20} /></span>
+      <span className="ov-action__label">{label}</span>
+      <span className="ov-action__go" aria-hidden="true"><ArrowUpRight size={15} /></span>
+    </Link>
   );
 }
 
