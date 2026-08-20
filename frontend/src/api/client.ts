@@ -28,6 +28,7 @@ type GetAccessTokenFn = () => Promise<string>;
 class ApiClient {
   private baseUrl: string;
   private getAccessToken: GetAccessTokenFn | null = null;
+  private onUnauthorized: (() => void) | null = null;
 
   constructor() {
     this.baseUrl = env.api.baseUrl;
@@ -38,6 +39,18 @@ class ApiClient {
    */
   setTokenGetter(fn: GetAccessTokenFn) {
     this.getAccessToken = fn;
+  }
+
+  /**
+   * Called when the server rejects our credentials.
+   *
+   * Sessions can become invalid without the client doing anything — a token
+   * expires, or the signing key rotates. Without this the app keeps a stored
+   * session it believes is valid while every request 401s, which looks like a
+   * broken app rather than a finished session.
+   */
+  setUnauthorizedHandler(fn: () => void) {
+    this.onUnauthorized = fn;
   }
 
   /**
@@ -76,6 +89,8 @@ class ApiClient {
    * Handle API response and extract data
    */
   private async handleResponse<T>(response: Response): Promise<T> {
+    if (response.status === 401) this.onUnauthorized?.();
+
     // Handle non-JSON responses (e.g., 204 No Content)
     const contentType = response.headers.get('content-type');
     if (!contentType || !contentType.includes('application/json')) {

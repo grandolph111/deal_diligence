@@ -31,7 +31,7 @@ async function main() {
     try {
       const r = await extractionService.runPipeline({
         filename: name, mimeType: 'application/pdf', bytes,
-        projectId: THROWAWAY_PROJECT, priority: 'P1',
+        projectId: THROWAWAY_PROJECT, priority: (process.env.PRIORITY as any) || 'P2',
       });
       const secs = ((Date.now() - t0) / 1000).toFixed(1);
       const ex = r.extraction;
