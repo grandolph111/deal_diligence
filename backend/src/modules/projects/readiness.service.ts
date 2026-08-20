@@ -14,7 +14,7 @@
  * partial answer with no indication it is partial is the worst outcome in
  * diligence, where the whole question is what you might have missed.
  *
- * Everything here is folder-scoped, so an SME with access to two folders sees
+ * Everything here is workstream-scoped, so a specialist granted two workstreams sees
  * readiness for the deal they can actually see, not the deal as a whole.
  */
 
@@ -84,6 +84,25 @@ const describe = (r: Omit<ProjectReadiness, 'state' | 'message'>): {
   };
 };
 
+/** Documents reachable through the caller's granted workstreams. */
+async function documentIdsInGrantedWorkstreams(
+  projectId: string,
+  workstreamIds: string[]
+): Promise<string[]> {
+  if (workstreamIds.length === 0) return [];
+  const rows = await prisma.libraryNode.findMany({
+    where: {
+      projectId,
+      type: { in: ['PROVISION', 'RISK', 'OBLIGATION'] },
+      workstreamId: { in: workstreamIds },
+      sourceDocumentId: { not: null },
+    },
+    select: { sourceDocumentId: true },
+    distinct: ['sourceDocumentId'],
+  });
+  return rows.map((r) => r.sourceDocumentId as string);
+}
+
 export const readinessService = {
   async getProjectReadiness(
     projectId: string,
@@ -97,10 +116,10 @@ export const readinessService = {
 
     const scope = await resolveProjectScope(user, projectId);
 
-    // A member with no folder grants has nothing to be ready about. This is a
+    // A member with no grants has nothing to be ready about. This is a
     // permissions state, not a processing state, and must not read as "still
     // loading" — the wait would never end.
-    if (!scope.isFullAccess && scope.allowedFolderIds.length === 0) {
+    if (!scope.isFullAccess && scope.allowedWorkstreamIds.length === 0) {
       return {
         total: 0,
         complete: 0,
@@ -112,22 +131,35 @@ export const readinessService = {
         partial: false,
         state: 'NO_ACCESS',
         message:
-          "You haven't been granted access to any folders in this deal yet. Ask your Customer Admin to share the folders you need.",
+          "You haven't been granted access to any workstreams in this deal yet. Ask your Customer Admin to share the workstreams you need.",
       };
     }
 
-    const folderFilter = scope.isFullAccess
-      ? {}
-      : { folderId: { in: scope.allowedFolderIds } };
+    // Scope on workstreams, matching the rest of the app — folder grants are
+    // dormant, so gating on them reported NO_ACCESS for every restricted member.
+    const visibleDocIds = scope.isFullAccess
+      ? null
+      : await documentIdsInGrantedWorkstreams(projectId, scope.allowedWorkstreamIds);
+
+    const docFilter = visibleDocIds === null ? {} : { id: { in: visibleDocIds } };
 
     const [grouped, evidenceCount] = await Promise.all([
       prisma.document.groupBy({
         by: ['processingStatus'],
-        where: { projectId, ...folderFilter },
+        where: { projectId, ...docFilter },
         _count: { _all: true },
       }),
       prisma.libraryNode.count({
-        where: { projectId, sourceDocumentId: { not: null } },
+        where: {
+          projectId,
+          sourceDocumentId:
+            visibleDocIds === null ? { not: null } : { in: visibleDocIds },
+          // Evidence must be scoped too — an unscoped count told a restricted
+          // member how much the whole deal knows.
+          ...(scope.isFullAccess
+            ? {}
+            : { workstreamId: { in: scope.allowedWorkstreamIds } }),
+        },
       }),
     ]);
 

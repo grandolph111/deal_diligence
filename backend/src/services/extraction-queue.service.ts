@@ -18,6 +18,12 @@ import { extractionService } from './extraction.service';
 
 const CONCURRENCY = Math.max(1, parseInt(process.env.EXTRACTION_CONCURRENCY || '8', 10));
 const POLL_MS = Math.max(1000, parseInt(process.env.EXTRACTION_POLL_MS || '5000', 10));
+// Long enough that a genuinely slow extraction (a 300-page PDF on Opus, with
+// retries) is never mistaken for an abandoned one.
+const STALE_PROCESSING_MS = Math.max(
+  10 * 60_000,
+  parseInt(process.env.EXTRACTION_STALE_MS || '2700000', 10)
+);
 
 let inFlight = 0;
 let pumping = false;
@@ -36,6 +42,28 @@ const claimNext = async (): Promise<string | null> => {
     )
     RETURNING "id"`;
   return rows[0]?.id ?? null;
+};
+
+/**
+ * Documents left PROCESSING by a crash or restart, returned to the queue.
+ *
+ * `claimNext` only ever claims PENDING, so a process that dies mid-extraction
+ * strands its document in PROCESSING with nothing able to pick it up again —
+ * permanently, and now visibly, since readiness reports such a deal as PARTIAL
+ * forever and the client polls it forever. Anything held longer than the stale
+ * window is presumed abandoned and re-queued.
+ */
+const sweepStaleProcessing = async (): Promise<number> => {
+  const cutoff = new Date(Date.now() - STALE_PROCESSING_MS);
+  const { count } = await prisma.document.updateMany({
+    where: { processingStatus: 'PROCESSING', updatedAt: { lt: cutoff } },
+    data: { processingStatus: 'PENDING' },
+  });
+  if (count > 0) {
+    // eslint-disable-next-line no-console
+    console.warn(`[queue] re-queued ${count} document(s) stuck in PROCESSING`);
+  }
+  return count;
 };
 
 const runOne = async (documentId: string): Promise<void> => {
@@ -93,6 +121,18 @@ export const extractionQueue = {
     void extractionService.sweepStaleVerifications().catch((err) => {
       console.error('[queue] verification sweep failed:', err instanceof Error ? err.message : err);
     });
+    // Recover documents stranded by a previous crash, then keep checking — a
+    // crash mid-run leaves the same state as a crash before boot.
+    const sweep = () =>
+      void sweepStaleProcessing()
+        .then((n) => {
+          if (n > 0) this.notify();
+        })
+        .catch((err) => {
+          console.error('[queue] stale sweep failed:', err instanceof Error ? err.message : err);
+        });
+    sweep();
+    setInterval(sweep, STALE_PROCESSING_MS).unref?.();
     // eslint-disable-next-line no-console
     console.log(`✓ Extraction queue started (concurrency=${CONCURRENCY}, poll=${POLL_MS}ms)`);
   },

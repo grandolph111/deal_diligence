@@ -74,17 +74,32 @@ export async function createTestUsers(mockUsers: MockUser[] = Object.values(test
   return users;
 }
 
+/** A shared tenant for test fixtures — projects cannot exist without one. */
+export async function ensureTestCompany() {
+  return prisma.company.upsert({
+    where: { id: 'test-company' },
+    update: {},
+    create: { id: 'test-company', name: 'Test Company' },
+  });
+}
+
 /**
  * Create a test project with an owner
  */
 export async function createTestProject(
   ownerId: string,
-  data: { name?: string; description?: string } = {}
+  data: { name?: string; description?: string; companyId?: string } = {}
 ) {
+  // `company` became required when platform tenancy landed; without it every
+  // project.create here threw before any assertion ran, which is what took the
+  // whole integration suite offline.
+  const companyId = data.companyId ?? (await ensureTestCompany()).id;
+
   const project = await prisma.project.create({
     data: {
       name: data.name || 'Test Project',
       description: data.description || 'A test project for testing',
+      companyId,
       members: {
         create: {
           userId: ownerId,

@@ -98,8 +98,17 @@ const mapWithConcurrency = async <T, R>(
   return results;
 };
 
-/** Below this, halving cannot meaningfully reduce the output any further. */
-const MIN_SALVAGE_PAGES = 6;
+/**
+ * Smallest window worth halving, given the overlap the halves must preserve.
+ *
+ * A fixed floor was wrong: the halves each extend `overlapPages` past the
+ * midpoint, so for a 6-page window at the default 3-page overlap both halves
+ * come out identical to the parent — the salvage pass then re-runs the exact
+ * window that just failed, twice, and calls it a retry. The window has to be
+ * more than twice the overlap for halving to actually reduce anything.
+ */
+const minSalvagePages = (overlapPages: number): number =>
+  Math.max(6, 2 * overlapPages + 2);
 
 /**
  * Split a failed window into two overlapping halves.
@@ -228,11 +237,11 @@ export const extractDocumentWindowed = async (
 
   if (firstPassFailures.length > 0) {
     const salvageable = firstPassFailures.filter(
-      (w) => w.endPage - w.startPage + 1 >= MIN_SALVAGE_PAGES
+      (w) => w.endPage - w.startPage + 1 >= minSalvagePages(args.overlapPages)
     );
     failedRanges.push(
       ...firstPassFailures
-        .filter((w) => w.endPage - w.startPage + 1 < MIN_SALVAGE_PAGES)
+        .filter((w) => w.endPage - w.startPage + 1 < minSalvagePages(args.overlapPages))
         .map((w) => ({ startPage: w.startPage, endPage: w.endPage }))
     );
 

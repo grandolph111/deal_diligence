@@ -61,7 +61,14 @@ const POLL_MS = num(process.env.CLAUDE_BATCH_POLL_MS, 60_000);
 /** Documents prepared (downloaded + parsed) concurrently before submission. */
 const PREPARE_CONCURRENCY = num(process.env.CLAUDE_BATCH_PREPARE_CONCURRENCY, 8);
 
-export const isBatchingEnabled = (): boolean =>
+export let polling = false;
+/** Poll failures tolerated before a batch is abandoned and its docs re-queued. */
+const MAX_POLL_FAILURES = Math.max(
+  2,
+  parseInt(process.env.CLAUDE_BATCH_MAX_POLL_FAILURES || '5', 10)
+);
+
+const isBatchingEnabled = (): boolean =>
   process.env.CLAUDE_BATCH_ENABLED === 'true' && !isMock();
 
 /** SQL fragment for the documents this path is willing to take. */
@@ -326,7 +333,19 @@ export const extractionBatchService = {
    */
   async poll(): Promise<void> {
     if (!isBatchingEnabled()) return;
+    // applyResults re-downloads and re-runs the pipeline per document, which for
+    // a large batch runs far longer than the poll interval. Without this guard
+    // the next tick starts processing the same batch alongside the first.
+    if (polling) return;
+    polling = true;
+    try {
+      await this.pollOnce();
+    } finally {
+      polling = false;
+    }
+  },
 
+  async pollOnce(): Promise<void> {
     const open = await prisma.extractionBatch.findMany({ where: { status: 'SUBMITTED' } });
     if (open.length === 0) return;
 
@@ -344,10 +363,29 @@ export const extractionBatchService = {
           `[batch] poll ${record.id} failed:`,
           err instanceof Error ? err.message : err
         );
+        const failures = (record.erroredCount ?? 0) + 1;
         await prisma.extractionBatch.update({
           where: { id: record.id },
-          data: { lastError: err instanceof Error ? err.message : String(err) },
+          data: {
+            lastError: err instanceof Error ? err.message : String(err),
+            erroredCount: failures,
+            // Give up after repeated failures and hand the documents back to the
+            // live queue. A batch that stops resolving (expired, 404 after the
+            // 29-day window) would otherwise leave them in BATCHED forever —
+            // exactly the stranding this design exists to prevent.
+            ...(failures >= MAX_POLL_FAILURES ? { status: 'FAILED' as const, endedAt: new Date() } : {}),
+          },
         });
+        if (failures >= MAX_POLL_FAILURES) {
+          const released = await prisma.document.updateMany({
+            where: { extractionBatchId: record.id, processingStatus: 'BATCHED' as DocumentStatus },
+            data: { processingStatus: 'PENDING' as DocumentStatus, extractionBatchId: null },
+          });
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[batch] ${record.id} abandoned after ${failures} poll failures — returned ${released.count} document(s) to the live queue`
+          );
+        }
       }
     }
   },
@@ -471,6 +509,10 @@ export const extractionBatchService = {
         sourceETag: etag,
         precomputed: { extraction, classification },
       });
+      // Same filtering the live path applies — otherwise a batched document
+      // scores differently from the identical document extracted inline.
+      extractionService.dropAbsentMarkers(pipeline, document.name);
+
       await extractionService.persistResult(
         documentId,
         pipeline,
@@ -481,6 +523,16 @@ export const extractionBatchService = {
         where: { id: documentId },
         data: { extractionBatchId: null },
       });
+
+      // Library filing, entity-graph rebuild and verification. Without these a
+      // batched document lands COMPLETE but never reaches the library, so it is
+      // invisible to chat, the deal map and the workstream tree.
+      await extractionService.afterPersist(
+        document.projectId,
+        documentId,
+        document.name,
+        pipeline
+      );
     } catch (err) {
       await extractionService.handleError(documentId, err);
     }

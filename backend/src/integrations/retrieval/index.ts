@@ -58,6 +58,11 @@ export const stuffRetriever: Retriever = {
           ? { folderId: { in: scope.folderIds } }
           : {}),
       },
+      // Deterministic and meaningful: without an order the capped slice is
+      // whatever the planner returns, so which 12 documents answer a question
+      // is unspecified and can change between identical queries. Riskiest first
+      // is the right bias when only some of the deal fits.
+      orderBy: [{ riskScore: 'desc' }, { createdAt: 'asc' }],
       select: {
         id: true,
         name: true,

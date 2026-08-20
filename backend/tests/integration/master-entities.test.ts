@@ -1,3 +1,4 @@
+import { ensureTestCompany } from '../utils/db-helpers';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import app from '../../src/app';
@@ -46,6 +47,7 @@ describe('Master Entities API - Entity Deduplication', () => {
     // Create test project
     const project = await prisma.project.create({
       data: {
+        companyId: (await ensureTestCompany()).id,
         name: 'Master Entities Test Project',
         members: {
           create: [
@@ -612,6 +614,7 @@ describe('Master Entities API - Entity Deduplication', () => {
       // Create another project the test user doesn't have access to
       const otherProject = await prisma.project.create({
         data: {
+          companyId: (await ensureTestCompany()).id,
           name: 'Other Project',
         },
       });

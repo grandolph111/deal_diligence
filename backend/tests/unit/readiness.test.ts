@@ -12,13 +12,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const findUnique = vi.fn();
 const groupBy = vi.fn();
 const nodeCount = vi.fn();
+const nodeFindMany = vi.fn();
 const resolveProjectScope = vi.fn();
 
 vi.mock('../../src/config/database', () => ({
   prisma: {
     user: { findUnique: (...a: unknown[]) => findUnique(...a) },
     document: { groupBy: (...a: unknown[]) => groupBy(...a) },
-    libraryNode: { count: (...a: unknown[]) => nodeCount(...a) },
+    libraryNode: {
+      count: (...a: unknown[]) => nodeCount(...a),
+      findMany: (...a: unknown[]) => nodeFindMany(...a),
+    },
   },
 }));
 vi.mock('../../src/services/scope.service', () => ({
@@ -38,6 +42,7 @@ beforeEach(() => {
   findUnique.mockResolvedValue({ id: 'u1', platformRole: 'USER', companyId: 'c1' });
   resolveProjectScope.mockResolvedValue({ isFullAccess: true, allowedFolderIds: [] });
   nodeCount.mockResolvedValue(0);
+  nodeFindMany.mockResolvedValue([]);
 });
 
 const read = () => readinessService.getProjectReadiness('p1', 'u1');
@@ -102,8 +107,12 @@ describe('readiness states', () => {
     expect(r.state).toBe('PROCESSING');
   });
 
-  it('NO_ACCESS for a member with no folder grants', async () => {
-    resolveProjectScope.mockResolvedValue({ isFullAccess: false, allowedFolderIds: [] });
+  it('NO_ACCESS for a member with no workstream grants', async () => {
+    resolveProjectScope.mockResolvedValue({
+      isFullAccess: false,
+      allowedFolderIds: [],
+      allowedWorkstreamIds: [],
+    });
     const r = await read();
     expect(r.state).toBe('NO_ACCESS');
     expect(r.message).toContain('Customer Admin');
@@ -111,16 +120,35 @@ describe('readiness states', () => {
     expect(groupBy).not.toHaveBeenCalled();
   });
 
-  it('scopes counts to the folders a restricted member can see', async () => {
+  it('scopes counts to the documents a restricted member can reach', async () => {
     resolveProjectScope.mockResolvedValue({
       isFullAccess: false,
-      allowedFolderIds: ['f1', 'f2'],
+      // Grants are workstreams now; gating on folders reported NO_ACCESS for
+      // every restricted member, since folder grants are dormant.
+      allowedFolderIds: [],
+      allowedWorkstreamIds: ['04-intellectual-property'],
     });
-    groupBy.mockResolvedValue(statuses({ COMPLETE: 3 }));
-    await read();
+    nodeFindMany.mockResolvedValue([
+      { sourceDocumentId: 'd1' },
+      { sourceDocumentId: 'd2' },
+    ]);
+    groupBy.mockResolvedValue(statuses({ COMPLETE: 2 }));
+
+    const r = await read();
+
+    expect(r.state).not.toBe('NO_ACCESS');
     expect(groupBy).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ folderId: { in: ['f1', 'f2'] } }),
+        where: expect.objectContaining({ id: { in: ['d1', 'd2'] } }),
+      })
+    );
+    // Evidence has to be scoped too — an unscoped count told a restricted
+    // member how much the whole deal knows.
+    expect(nodeCount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workstreamId: { in: ['04-intellectual-property'] },
+        }),
       })
     );
   });

@@ -1,3 +1,4 @@
+import { ensureTestCompany } from '../utils/db-helpers';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import app from '../../src/app';
@@ -56,6 +57,7 @@ describe('Relationships API - Knowledge Graph Phase 2C', () => {
     // Create test project
     const project = await prisma.project.create({
       data: {
+        companyId: (await ensureTestCompany()).id,
         name: 'Relationships Test Project',
         members: {
           create: [
@@ -769,6 +771,7 @@ describe('Relationships API - Knowledge Graph Phase 2C', () => {
       // Create another project the test user doesn't have access to
       const otherProject = await prisma.project.create({
         data: {
+          companyId: (await ensureTestCompany()).id,
           name: 'Other Relationships Project',
         },
       });

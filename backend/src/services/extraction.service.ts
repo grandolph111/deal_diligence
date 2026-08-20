@@ -451,6 +451,37 @@ interface PipelineResult {
   verifyQueued: boolean;
 }
 
+/**
+ * Parse a model-supplied effective date, or null.
+ *
+ * `effectiveDate` is a free-text field on the extraction schema, so the model
+ * sometimes returns prose ("upon execution", "see §2.1") instead of a date.
+ * Handing that straight to `new Date()` yields Invalid Date, Prisma rejects the
+ * whole update, and the error path re-runs the ENTIRE extraction — four times,
+ * then FAILED. The document is destroyed by an unparseable optional field after
+ * the expensive work already succeeded, which is how four documents in the CUAD
+ * deal died and burned sixteen Sonnet extractions.
+ *
+ * A date we cannot read is worth nothing; the extraction around it is worth a
+ * lot. Drop the field, keep the document.
+ */
+export function parseEffectiveDate(raw: string | null | undefined): Date | null {
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    console.warn(`[extraction] unparseable effectiveDate ${JSON.stringify(raw)} — storing null`);
+    return null;
+  }
+  // Guard against year 0001 / 275760 style parses that are technically valid
+  // Dates but certainly not a contract date.
+  const year = parsed.getUTCFullYear();
+  if (year < 1900 || year > 2200) {
+    console.warn(`[extraction] implausible effectiveDate ${JSON.stringify(raw)} — storing null`);
+    return null;
+  }
+  return parsed;
+}
+
 export const extractionService = {
   isConfigured(): boolean {
     return isClaudeConfigured();
@@ -514,63 +545,14 @@ export const extractionService = {
         documentId,
         sourceETag: etag,
       });
-      // Drop "checked-but-absent" confirmations the model sometimes emits as clauses
-      // (from the alwaysInclude coverage prompt) so they don't pollute the library or
-      // register as false positives. Filtered once here → both persist + library filing.
-      const beforeClauses = pipeline.extraction.clauses.length;
-      pipeline.extraction.clauses = pipeline.extraction.clauses.filter(
-        (c) => !isAbsentMarkerClause(c.content)
-      );
-      const droppedAbsent = beforeClauses - pipeline.extraction.clauses.length;
-      if (droppedAbsent > 0) {
-        console.log(`[extraction] ${document.name} → dropped ${droppedAbsent} absent-marker clause(s)`);
-      }
+      this.dropAbsentMarkers(pipeline, document.name);
 
       await this.persistResult(documentId, pipeline, hash, modelId);
 
       const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
       console.log(`[extraction] ${document.name} → complete in ${seconds}s`);
 
-      // Stage 7 — file into the knowledge library (dark behind LIBRARY_ENABLED).
-      // Best-effort: never fail extraction on a library error.
-      if (libraryWriterService.isEnabled()) {
-        try {
-          const project = await prisma.project.findUnique({
-            where: { id: document.projectId },
-            select: { name: true },
-          });
-          await libraryWriterService.fileDocument({
-            projectId: document.projectId,
-            projectName: project?.name ?? 'Deal',
-            documentId,
-            documentName: document.name,
-            extraction: pipeline.extraction,
-          });
-        } catch (libErr) {
-          console.error(
-            `[library] fileDocument failed for ${document.name}:`,
-            libErr instanceof Error ? libErr.message : libErr
-          );
-        }
-      }
-
-      reconciliationService
-        .scheduleRebuild(document.projectId)
-        .catch(() => undefined);
-
-      // Fire the verification pass AFTER the document is COMPLETE and readable.
-      // Deliberately not awaited — it only patches review metadata. Errors are
-      // swallowed inside verifyDocument so a rejected promise can never bubble
-      // into the extraction retry path or crash the process.
-      if (pipeline.verifyQueued) {
-        void this.verifyDocument(documentId, {
-          pages: pipeline.pages,
-          extraction: pipeline.extraction,
-          documentType: pipeline.classification.documentType,
-          filename: document.name,
-          citationIssues: pipeline.citationIssues,
-        });
-      }
+      await this.afterPersist(document.projectId, documentId, document.name, pipeline);
     } catch (error) {
       const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
       console.error(
@@ -1040,6 +1022,82 @@ export const extractionService = {
     return stale.length;
   },
 
+  /**
+   * Drop "checked-but-absent" confirmations the model emits as clauses.
+   *
+   * These come from the alwaysInclude coverage prompt; left in they pollute the
+   * library and register as false positives. Shared so the batch path filters
+   * identically — a batched document that kept them would score differently
+   * from the same document extracted live.
+   */
+  dropAbsentMarkers(pipeline: { extraction: ExtractionResponse }, documentName: string): void {
+    const before = pipeline.extraction.clauses.length;
+    pipeline.extraction.clauses = pipeline.extraction.clauses.filter(
+      (c) => !isAbsentMarkerClause(c.content)
+    );
+    const dropped = before - pipeline.extraction.clauses.length;
+    if (dropped > 0) {
+      // eslint-disable-next-line no-console
+      console.log(`[extraction] ${documentName} → dropped ${dropped} absent-marker clause(s)`);
+    }
+  },
+
+  /**
+   * Everything that must happen once a document is COMPLETE and readable:
+   * file it into the library, schedule the entity-graph rebuild, and queue
+   * verification.
+   *
+   * Shared with the batch path deliberately. These steps used to live inline in
+   * `process()`, so a batched document landed COMPLETE but was never filed —
+   * which, now that the library drives both retrieval and the data-room
+   * navigation, meant it was invisible to chat, to Kanban AI, to the deal map,
+   * and to the workstream tree despite having been fully extracted.
+   */
+  async afterPersist(
+    projectId: string,
+    documentId: string,
+    documentName: string,
+    pipeline: PipelineResult
+  ): Promise<void> {
+    // Best-effort: never fail an extraction that already succeeded.
+    if (libraryWriterService.isEnabled()) {
+      try {
+        const project = await prisma.project.findUnique({
+          where: { id: projectId },
+          select: { name: true },
+        });
+        await libraryWriterService.fileDocument({
+          projectId,
+          projectName: project?.name ?? 'Deal',
+          documentId,
+          documentName,
+          extraction: pipeline.extraction,
+        });
+      } catch (libErr) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `[library] fileDocument failed for ${documentName}:`,
+          libErr instanceof Error ? libErr.message : libErr
+        );
+      }
+    }
+
+    reconciliationService.scheduleRebuild(projectId).catch(() => undefined);
+
+    // Fire verification AFTER the document is COMPLETE and readable.
+    // Deliberately not awaited — it only patches review metadata, and errors are
+    // swallowed inside verifyDocument so they can never reach the retry path.
+    if (pipeline.verifyQueued) {
+      void this.verifyDocument(documentId, {
+        pages: pipeline.pages,
+        extraction: pipeline.extraction,
+        documentType: pipeline.classification.documentType,
+        filename: documentName,
+        citationIssues: pipeline.citationIssues,
+      });
+    }
+  },
+
   async persistResult(
     documentId: string,
     pipeline: PipelineResult,
@@ -1074,9 +1132,7 @@ export const extractionService = {
         currency: extraction.currency ?? null,
         region: extraction.region ?? null,
         dealValue: extraction.dealValue ?? null,
-        effectiveDate: extraction.effectiveDate
-          ? new Date(extraction.effectiveDate)
-          : null,
+        effectiveDate: parseEffectiveDate(extraction.effectiveDate),
         governingLaw: extraction.governingLaw ?? null,
         verificationStatus,
         verificationIssues: (verificationIssues.length > 0

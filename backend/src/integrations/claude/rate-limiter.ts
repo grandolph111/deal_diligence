@@ -197,7 +197,16 @@ export const acquire = async (req: AcquireRequest): Promise<Reservation> => {
   const inTok = clamp(Math.max(req.inputTokens, 0), inputTokens, 'input');
   const outTok = clamp(Math.max(req.expectedOutputTokens, 0), outputTokens, 'output');
 
-  if (inTok < MIN_METERED_TOKENS && outTok < MIN_METERED_TOKENS && waiters.length === 0) {
+  if (
+    inTok < MIN_METERED_TOKENS &&
+    outTok < MIN_METERED_TOKENS &&
+    waiters.length === 0 &&
+    // A global 429 backoff has to hold for small calls too. sendWithRetry never
+    // sleeps on a 429 — it relies entirely on the next acquire() blocking — so
+    // skipping the pause here let a sub-1k-token call spin through all its
+    // attempts with no delay, defeating the pauseAll guarantee outright.
+    Date.now() >= pauseUntil
+  ) {
     // Trivial call and nothing queued — still consume a request slot.
     refill(requests, Date.now());
     requests.available = Math.max(0, requests.available - 1);

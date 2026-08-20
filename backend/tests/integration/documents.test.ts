@@ -1,3 +1,4 @@
+import { ensureTestCompany } from '../utils/db-helpers';
 import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest';
 import { ProjectRole, DocumentStatus } from '@prisma/client';
 import {
@@ -549,6 +550,7 @@ describe('Documents Module', () => {
       const project1 = await createTestProject(owner.id, { name: 'Project 1' });
       const project2 = await testPrisma.project.create({
         data: {
+          companyId: (await ensureTestCompany()).id,
           name: 'Project 2',
           members: {
             create: {
