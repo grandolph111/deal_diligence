@@ -308,8 +308,149 @@
   color: rgb(255 255 255 / 0.92);
 }
 
+/* ── Paper animation ───────────────────────────────────────────────────────── */
+.login-paper {
+  position: relative;
+  width: 124px;
+  margin-top: 40px;
+  animation: login-fade-in 0.9s 0.15s ease both;
+}
+
+.login-paper::before {
+  content: "";
+  position: absolute;
+  inset: -34% -30%;
+  background: radial-gradient(circle at 42% 45%, rgb(199 164 108 / 0.16) 0%, transparent 68%);
+  filter: blur(18px);
+  pointer-events: none;
+}
+
+.login-paper svg {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  animation: paper-float 7s ease-in-out infinite;
+}
+
+.paper-sheet {
+  fill: rgb(255 255 255 / 0.07);
+  stroke: rgb(255 255 255 / 0.18);
+  stroke-width: 1;
+}
+
+.paper-sheet-back {
+  fill: rgb(255 255 255 / 0.035);
+  stroke: rgb(255 255 255 / 0.09);
+  transform: rotate(-5deg);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.paper-line {
+  stroke: rgb(255 255 255 / 0.3);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: paper-write 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.paper-title {
+  stroke: rgb(255 255 255 / 0.62);
+  stroke-width: 3.5;
+  animation-delay: 0.2s;
+}
+
+.paper-line-marked {
+  stroke: rgb(255 255 255 / 0.55);
+}
+
+.paper-highlight {
+  fill: rgb(199 164 108 / 0.38);
+  opacity: 0;
+  transform: scaleX(0);
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: paper-highlight 9s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.paper-tick {
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  opacity: 0;
+  animation: paper-write 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation-delay: 2.5s;
+}
+
+.paper-badge circle {
+  fill: #16304f;
+  stroke: rgb(199 164 108 / 0.55);
+  stroke-width: 1;
+}
+
+.paper-badge path {
+  stroke: var(--color-accent);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.paper-badge {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: paper-stamp 9s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@keyframes paper-write {
+  0%, 3%    { stroke-dashoffset: 1; opacity: 0; }
+  6%        { opacity: 1; }
+  17%       { stroke-dashoffset: 0; opacity: 1; }
+  86%       { stroke-dashoffset: 0; opacity: 1; }
+  94%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+
+@keyframes paper-highlight {
+  0%, 32%   { transform: scaleX(0); opacity: 0; }
+  34%       { opacity: 1; }
+  42%, 86%  { transform: scaleX(1); opacity: 1; }
+  94%, 100% { transform: scaleX(1); opacity: 0; }
+}
+
+@keyframes paper-stamp {
+  0%, 40%   { opacity: 0; transform: scale(0.6); }
+  48%       { opacity: 1; transform: scale(1.12); }
+  54%, 86%  { opacity: 1; transform: scale(1); }
+  94%, 100% { opacity: 0; transform: scale(1); }
+}
+
+@keyframes paper-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-5px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-paper svg,
+  .paper-line,
+  .paper-tick,
+  .paper-highlight,
+  .paper-badge {
+    animation: none;
+  }
+  .paper-line,
+  .paper-tick { stroke-dashoffset: 0; opacity: 1; }
+  .paper-highlight { transform: scaleX(1); opacity: 1; }
+  .paper-badge { opacity: 1; transform: scale(1); }
+}
+
 .login-hero {
-  margin-top: 48px;
+  margin-top: 36px;
 }
 
 .login-hero h1 {
