@@ -6,12 +6,25 @@ import type { DealMap, DealMapNode } from '../../../api/services/library.service
 import './deal-map.css';
 
 /* ---- palette ----
- * Tuned for a dark canvas. Each node is drawn as a radial gradient from a lit
- * core to a darker rim, with a wide translucent border standing in for a glow —
- * cytoscape has no shadow support, and flat discs on a light ground were what
- * made the previous map look like a chart rather than a map.
+ * Tuned for a dark canvas. Each node is a flat disc with a hairline rim.
+ *
+ * The lit-sphere treatment this replaces — radial gradient plus a wide
+ * translucent border standing in for a glow — gave every dot a plastic-bead
+ * look, and the halo's hard outer edge read as a second, blurry ring. Flat
+ * fills with a single crisp edge are what makes a hundred small nodes look
+ * like one system rather than a bowl of marbles; depth now comes from the
+ * ground and from what happens on hover, not from shading each disc.
  */
 type Swatch = { core: string; rim: string; glow: string };
+
+/** Blend two hex colours; used to derive rims that sit between fill and shadow. */
+function mix(a: string, b: string, t: number): string {
+  const hex = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  const [r1, g1, b1] = hex(a);
+  const [r2, g2, b2] = hex(b);
+  const ch = (x: number, y: number) => Math.round(x + (y - x) * t).toString(16).padStart(2, '0');
+  return `#${ch(r1, r2)}${ch(g1, g2)}${ch(b1, b2)}`;
+}
 
 /**
  * Risk reads as a continuous ramp, one step per score.
@@ -36,13 +49,15 @@ const RISK_RAMP: Swatch[] = [
 ];
 
 const PALETTE: Record<string, Swatch> = {
-  root: { core: '#e6d8ff', rim: '#8b6fd4', glow: 'rgba(150,116,222,0.34)' },
-  workstream: { core: '#d3e0f2', rim: '#7f9bc4', glow: 'rgba(139,164,201,0.24)' },
+  // Deliberately duller than the risk ramp: hubs are the frame, and near-white
+  // discs made the scaffolding louder than the documents it holds.
+  root: { core: '#c9b6f0', rim: '#7d5fca', glow: 'rgba(150,116,222,0.34)' },
+  workstream: { core: '#9db6d8', rim: '#5c789e', glow: 'rgba(139,164,201,0.26)' },
   none: { core: '#7d8ba4', rim: '#454f63', glow: 'rgba(122,139,164,0.14)' },
   ...Object.fromEntries(RISK_RAMP.map((sw, i) => [`r${i}`, sw])),
 };
 
-const EDGE_COLOR = { CONTAINS: '#3d4a63', PEER: '#4a6572' };
+const EDGE_COLOR = { CONTAINS: '#2f3d56', PEER: '#3b5265' };
 
 /** Which palette entry a node draws from. */
 function paletteKey(n: DealMapNode): string {
@@ -73,6 +88,13 @@ const truncate = (s: string, max = 30) => (s.length <= max ? s : `${s.slice(0, m
  * structure is known, so placing it directly is both stable and far more
  * legible; the phyllotaxis fill keeps it organic rather than gridded.
  */
+/**
+ * Clear radius around a hub: its largest rendered radius (28) plus room for the
+ * label that hangs under it, so neither the disc nor its name collides with the
+ * documents it holds.
+ */
+const HUB_HOLE = 52;
+
 function clusterPositions(map: DealMap): Record<string, { x: number; y: number }> {
   const pos: Record<string, { x: number; y: number }> = {};
   const hubs = map.nodes.filter((n) => n.type === 'WORKSTREAM');
@@ -87,7 +109,7 @@ function clusterPositions(map: DealMap): Record<string, { x: number; y: number }
     docsByHub.set(key, bucket);
   }
 
-  const discFor = (n: number) => (n === 0 ? 0 : 38 + Math.sqrt(n) * 25);
+  const discFor = (n: number) => (n === 0 ? 0 : 44 + Math.sqrt(n) * 25);
   const GOLDEN = Math.PI * (3 - Math.sqrt(5));
 
   // Shelf-pack the clusters into the canvas aspect rather than a ring. A circle
@@ -123,8 +145,10 @@ function clusterPositions(map: DealMap): Record<string, { x: number; y: number }
     pos[c.id] = { x: cx, y: cy };
 
     c.docs.forEach((id, j) => {
-      // Phyllotaxis: even coverage of the disc without visible rows.
-      const r = c.disc * Math.sqrt((j + 0.5) / c.docs.length);
+      // Phyllotaxis over an annulus: even coverage of the disc without visible
+      // rows, with a hole the size of the hub so no document is drawn sitting
+      // on top of the disc and label it belongs to.
+      const r = Math.sqrt(HUB_HOLE ** 2 + (c.disc ** 2 - HUB_HOLE ** 2) * ((j + 0.5) / c.docs.length));
       const a = j * GOLDEN;
       pos[id] = { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r };
     });
@@ -139,6 +163,26 @@ function clusterPositions(map: DealMap): Record<string, { x: number; y: number }
   pos.root = { x: maxX / 2, y: -140 };
 
   return pos;
+}
+
+/**
+ * Fit, then give back the strip the legend floats over.
+ *
+ * A plain `fit` centres the graph in the whole canvas, which put the last row
+ * of workstreams — the empty ones — underneath the legend where their labels
+ * were unreadable.
+ */
+const LEGEND_STRIP = 64;
+
+function fitMap(cy: Core) {
+  cy.fit(undefined, 48);
+  const h = cy.height();
+  if (h <= LEGEND_STRIP * 2) return;
+  cy.zoom({
+    level: cy.zoom() * ((h - LEGEND_STRIP) / h),
+    renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 },
+  });
+  cy.panBy({ x: 0, y: -LEGEND_STRIP / 2 });
 }
 
 interface Props {
@@ -179,13 +223,16 @@ export function DealMapGraph({ map, loading, error, selectedId, onSelect, onRefr
         {
           selector: 'node',
           style: {
-            'background-fill': 'radial-gradient',
-            'background-gradient-stop-positions': '0% 100%',
             width: 'data(size)',
             height: 'data(size)',
-            // Wide, near-transparent border reads as a halo.
-            'border-width': 'data(halo)',
-            'border-opacity': 1,
+            // A hairline rim, not a halo: enough to separate touching discs
+            // without giving each one a second visible ring.
+            'border-width': 1,
+            'border-opacity': 0.85,
+            // Glow is spent on the one node being looked at, so it stays a
+            // signal instead of a permanent fringe on all 106 of them.
+            'outline-width': 0,
+            'outline-opacity': 1,
             label: '',
             color: '#c8d4e6',
             'font-size': '9px',
@@ -193,25 +240,35 @@ export function DealMapGraph({ map, loading, error, selectedId, onSelect, onRefr
             'text-valign': 'bottom',
             'text-halign': 'center',
             'text-margin-y': 6,
-            'text-outline-width': 2,
-            'text-outline-color': '#0b1220',
-            'text-outline-opacity': 0.9,
-            'transition-property': 'opacity, border-width',
+            'text-outline-width': 2.5,
+            'text-outline-color': '#0a1120',
+            'text-outline-opacity': 0.5,
+            'transition-property': 'opacity, outline-width',
             'transition-duration': 160,
           } as unknown as cytoscape.Css.Node,
         },
-        // One class per palette entry: gradient stops must be literal.
+        // One class per palette entry: colours must be literal in the sheet.
         ...Object.entries(PALETTE).map(([key, p]) => ({
           selector: `node.k-${key.toLowerCase()}`,
           style: {
-            'background-gradient-stop-colors': `${p.core} ${p.rim}`,
-            'border-color': p.glow,
+            'background-color': p.core,
+            'border-color': mix(p.core, p.rim, 0.7),
+            'outline-color': p.glow,
           } as unknown as cytoscape.Css.Node,
         })),
         {
           // Hubs are always named; documents only on demand.
           selector: 'node[type="WORKSTREAM"]',
-          style: { label: 'data(label)', 'font-size': '11px', 'font-weight': 700, color: '#e4ecf8' } as cytoscape.Css.Node,
+          style: {
+            label: 'data(label)',
+            'font-size': '11px',
+            'font-weight': 600,
+            color: '#dbe6f6',
+            'text-margin-y': 9,
+            // Hub names sit above the documents so a dot from the ring can
+            // never be drawn over the label it belongs beside.
+            'z-index': 20,
+          } as cytoscape.Css.Node,
         },
         {
           selector: 'node[type="ROOT"]',
@@ -221,11 +278,20 @@ export function DealMapGraph({ map, loading, error, selectedId, onSelect, onRefr
             'font-weight': 700,
             color: '#f0e9ff',
             'text-margin-y': 8,
+            'z-index': 21,
           } as cytoscape.Css.Node,
         },
         {
           selector: 'node.hl',
-          style: { label: 'data(label)', 'z-index': 99, 'border-width': 'data(haloBig)' } as cytoscape.Css.Node,
+          style: { 'z-index': 99, 'outline-width': 'data(ring)' } as unknown as cytoscape.Css.Node,
+        },
+        // Naming every neighbour at once printed forty filenames on top of each
+        // other; the hovered node is always named, its neighbours only when few
+        // enough that the names do not collide.
+        { selector: 'node.hl-label', style: { label: 'data(label)' } as cytoscape.Css.Node },
+        {
+          selector: 'node.focus',
+          style: { label: 'data(label)', color: '#f2f6fd', 'z-index': 101 } as cytoscape.Css.Node,
         },
         { selector: 'node.dim', style: { opacity: 0.12 } as cytoscape.Css.Node },
         {
@@ -233,24 +299,30 @@ export function DealMapGraph({ map, loading, error, selectedId, onSelect, onRefr
           style: {
             label: 'data(label)',
             'border-color': '#f0d9a8',
-            'border-width': 'data(haloBig)',
+            'outline-color': 'rgba(240,217,168,0.30)',
+            'outline-width': 'data(ring)',
             'z-index': 100,
-          } as cytoscape.Css.Node,
+          } as unknown as cytoscape.Css.Node,
         },
         {
+          // Gently bowed rather than dead straight: a few hundred taut lines
+          // crossing at hard angles is what made the field read as a hairball.
+          // Arcs of the same length separate where they overlap.
           selector: 'edge',
           style: {
             width: 'data(w)',
             'line-color': 'data(color)',
-            'curve-style': 'straight',
+            'curve-style': 'unbundled-bezier',
+            'control-point-distances': 'data(bow)',
+            'control-point-weights': 0.5,
             'target-arrow-shape': 'none',
-            opacity: 0.35,
+            opacity: 'data(op)',
             'transition-property': 'opacity, line-color',
             'transition-duration': 160,
-          } as cytoscape.Css.Edge,
+          } as unknown as cytoscape.Css.Edge,
         },
-        { selector: 'edge.hl', style: { opacity: 0.9, 'line-color': '#8fb3c9', width: 2 } as cytoscape.Css.Edge },
-        { selector: 'edge.dim', style: { opacity: 0.04 } as cytoscape.Css.Edge },
+        { selector: 'edge.hl', style: { opacity: 0.85, 'line-color': '#8fb3c9', width: 1.6 } as cytoscape.Css.Edge },
+        { selector: 'edge.dim', style: { opacity: 0.03 } as cytoscape.Css.Edge },
       ],
       layout: { name: 'preset' },
       minZoom: 0.08,
@@ -262,8 +334,10 @@ export function DealMapGraph({ map, loading, error, selectedId, onSelect, onRefr
       const near = node.closedNeighborhood();
       cy.elements().addClass('dim');
       near.removeClass('dim').addClass('hl');
+      node.addClass('focus');
+      if (near.nodes().length <= 12) near.nodes().addClass('hl-label');
     };
-    const clearHighlight = () => cy.elements().removeClass('dim hl');
+    const clearHighlight = () => cy.elements().removeClass('dim hl hl-label focus');
 
     cy.on('mouseover', 'node', (e) => {
       highlight(e.target as NodeSingular);
@@ -324,34 +398,42 @@ export function DealMapGraph({ map, loading, error, selectedId, onSelect, onRefr
           type: n.type,
           label: truncate(n.label, n.type === 'DOCUMENT' ? 34 : 26),
           size: base,
-          halo: Math.max(3, base * 0.22),
-          haloBig: Math.max(6, base * 0.42),
+          // Halo shown only under the cursor, so it can be generous.
+          ring: Math.max(5, base * 0.38),
         },
         classes: `k-${paletteKey(n)}`,
       });
     }
-    for (const e of map.edges) {
+    const positions = clusterPositions(map);
+    map.edges.forEach((e, i) => {
+      const a = positions[e.source];
+      const b = positions[e.target];
+      const len = a && b ? Math.hypot(b.x - a.x, b.y - a.y) : 0;
+      // Bow scales with span and alternates side, so parallel runs between two
+      // clusters fan out instead of stacking into one thick smear.
+      const bow = e.type === 'CONTAINS' ? 0 : Math.min(46, len * 0.075) * (i % 2 ? 1 : -1);
       els.push({
         data: {
           id: e.id,
           source: e.source,
           target: e.target,
           color: EDGE_COLOR[e.type],
-          w: e.type === 'CONTAINS' ? 1 : Math.min(2.4, 0.6 + e.weight * 0.18),
+          bow,
+          op: e.type === 'CONTAINS' ? 0.16 : 0.2,
+          w: e.type === 'CONTAINS' ? 0.8 : Math.min(1.6, 0.5 + e.weight * 0.13),
         },
       });
-    }
+    });
 
     cy.elements().remove();
     cy.add(els);
-    const positions = clusterPositions(map);
     cy.layout({
       name: 'preset',
       positions: (n: NodeSingular) => positions[n.id()] ?? { x: 0, y: 0 },
-      fit: true,
-      padding: 60,
+      fit: false,
       animate: false,
     } as cytoscape.LayoutOptions).run();
+    fitMap(cy);
   }, [map, ready]);
 
   // Reflect external selection.
@@ -369,7 +451,7 @@ export function DealMapGraph({ map, loading, error, selectedId, onSelect, onRefr
 
   const fit = useCallback(() => {
     const cy = cyRef.current;
-    if (cy && !cy.destroyed()) cy.fit(undefined, 50);
+    if (cy && !cy.destroyed()) fitMap(cy);
   }, []);
 
   return (
