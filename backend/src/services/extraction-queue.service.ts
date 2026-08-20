@@ -32,7 +32,8 @@ let started = false;
 /** Atomically claim the next highest-priority PENDING document (→ PROCESSING). */
 const claimNext = async (): Promise<string | null> => {
   const rows = await prisma.$queryRaw<Array<{ id: string }>>`
-    UPDATE "Document" SET "processingStatus" = 'PROCESSING', "lastError" = NULL
+    UPDATE "Document"
+    SET "processingStatus" = 'PROCESSING', "lastError" = NULL, "processingStartedAt" = NOW()
     WHERE "id" = (
       SELECT "id" FROM "Document"
       WHERE "processingStatus" = 'PENDING'
@@ -56,8 +57,21 @@ const claimNext = async (): Promise<string | null> => {
 const sweepStaleProcessing = async (): Promise<number> => {
   const cutoff = new Date(Date.now() - STALE_PROCESSING_MS);
   const { count } = await prisma.document.updateMany({
-    where: { processingStatus: 'PROCESSING', updatedAt: { lt: cutoff } },
-    data: { processingStatus: 'PENDING' },
+    where: {
+      processingStatus: 'PROCESSING',
+      // Age since the CLAIM, never since updatedAt. `@updatedAt` is applied
+      // client-side by Prisma and the claim is raw SQL, so updatedAt still
+      // holds the upload time — sweeping on it re-queued documents that were
+      // actively extracting, giving two concurrent runs of the same document
+      // whose persistResult writes can interleave.
+      OR: [
+        { processingStartedAt: { lt: cutoff } },
+        // Claimed before this column existed: fall back to updatedAt so the
+        // pre-migration backlog is still recoverable.
+        { processingStartedAt: null, updatedAt: { lt: cutoff } },
+      ],
+    },
+    data: { processingStatus: 'PENDING', processingStartedAt: null },
   });
   if (count > 0) {
     // eslint-disable-next-line no-console

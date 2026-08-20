@@ -3,6 +3,7 @@ import { Request, Response, NextFunction } from 'express';
 import { config } from '../config';
 import { prisma } from '../config/database';
 import { ApiError } from '../utils/ApiError';
+import { verifySessionToken, devAuthAllowed } from '../utils/session-token';
 
 // Auth0 JWT validation middleware
 export const validateJwt = auth({
@@ -11,8 +12,19 @@ export const validateJwt = auth({
   tokenSigningAlg: 'RS256',
 });
 
-// Mock JWT validation for development
-const validateMockJwt = (req: Request, res: Response, next: NextFunction) => {
+/**
+ * Accept a signed session token, a real Auth0 JWT, or — only behind an explicit
+ * opt-in — the legacy unsigned dev token.
+ *
+ * The legacy `mock-dev-token-<userId>` format is a user id with a prefix, and
+ * user ids are freely readable from member lists and task assignees. Accepting
+ * it unconditionally meant anyone could authenticate as any user, including the
+ * platform super-admin, with no password. It now requires ALLOW_DEV_AUTH=true,
+ * which is never inferred from NODE_ENV — production runs NODE_ENV=development,
+ * so an environment check would have left the bypass open exactly where it
+ * mattered.
+ */
+const authenticate = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {
@@ -21,10 +33,19 @@ const validateMockJwt = (req: Request, res: Response, next: NextFunction) => {
 
   const token = authHeader.replace('Bearer ', '');
 
-  // Check if it's a mock token. Prefix:`mock-dev-token-<userId>`
-  // emitted by POST /auth/dev-login. The old format (no suffix, just a
-  // timestamp) is treated as the legacy single-dev-user fallback.
+  // Signed credential session (POST /auth/dev-login).
+  const claims = verifySessionToken(token);
+  if (claims) {
+    req.auth = {
+      payload: { sub: `dev|user-id:${claims.userId}`, aud: config.auth0.audience },
+    };
+    return next();
+  }
+
   if (token.startsWith('mock-dev-token-')) {
+    if (!devAuthAllowed()) {
+      return next(ApiError.unauthorized('Invalid or expired session'));
+    }
     const suffix = token.substring('mock-dev-token-'.length);
     const looksLikeUserId = /^[0-9a-f-]{8,}$/i.test(suffix);
     req.auth = {
@@ -39,6 +60,9 @@ const validateMockJwt = (req: Request, res: Response, next: NextFunction) => {
   // Otherwise try real Auth0 validation
   validateJwt(req, res, next);
 };
+
+/** @deprecated name retained for callers; use `authenticate`. */
+const validateMockJwt = authenticate;
 
 // Attach user to request after JWT validation
 export const attachUser = async (

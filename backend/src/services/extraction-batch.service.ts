@@ -62,6 +62,7 @@ const POLL_MS = num(process.env.CLAUDE_BATCH_POLL_MS, 60_000);
 const PREPARE_CONCURRENCY = num(process.env.CLAUDE_BATCH_PREPARE_CONCURRENCY, 8);
 
 export let polling = false;
+let submitting = false;
 /** Poll failures tolerated before a batch is abandoned and its docs re-queued. */
 const MAX_POLL_FAILURES = Math.max(
   2,
@@ -239,14 +240,26 @@ export const extractionBatchService = {
    */
   async maybeSubmit(): Promise<string | null> {
     if (!isBatchingEnabled()) return null;
+    // Preparation downloads and parses up to a thousand documents, which runs
+    // far longer than the 60s tick. The atomic claim stops any document being
+    // prepared twice, but without this the preparation passes still stack.
+    if (submitting) return null;
+    submitting = true;
+    try {
+      return await this.submitOnce();
+    } finally {
+      submitting = false;
+    }
+  },
 
+  async submitOnce(): Promise<string | null> {
     const backlog = await pendingBulkCount();
     if (backlog < MIN_BACKLOG) return null;
 
     // Claim atomically so the synchronous queue cannot also pick these up.
     // SKIP LOCKED keeps this safe with multiple app instances running.
     const claimed = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-      `UPDATE "Document" SET "processingStatus" = 'BATCHED'
+      `UPDATE "Document" SET "processingStatus" = 'BATCHED', "processingStartedAt" = NOW()
        WHERE "id" IN (
          SELECT "id" FROM "Document"
          WHERE ${ELIGIBLE_WHERE}
@@ -355,6 +368,15 @@ export const extractionBatchService = {
     for (const record of open) {
       try {
         const batch = await client.messages.batches.retrieve(record.id);
+        // A healthy retrieve clears the failure streak. Without this, five
+        // scattered transient failures across a 24-hour batch (~1440 polls)
+        // abandoned a perfectly healthy batch.
+        if (record.pollFailures > 0) {
+          await prisma.extractionBatch.update({
+            where: { id: record.id },
+            data: { pollFailures: 0, lastError: null },
+          });
+        }
         if (batch.processing_status !== 'ended') continue;
         await this.applyResults(record.id, client);
       } catch (err) {
@@ -363,12 +385,12 @@ export const extractionBatchService = {
           `[batch] poll ${record.id} failed:`,
           err instanceof Error ? err.message : err
         );
-        const failures = (record.erroredCount ?? 0) + 1;
+        const failures = (record.pollFailures ?? 0) + 1;
         await prisma.extractionBatch.update({
           where: { id: record.id },
           data: {
             lastError: err instanceof Error ? err.message : String(err),
-            erroredCount: failures,
+            pollFailures: failures,
             // Give up after repeated failures and hand the documents back to the
             // live queue. A batch that stops resolving (expired, 404 after the
             // 29-day window) would otherwise leave them in BATCHED forever —

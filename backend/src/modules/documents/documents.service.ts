@@ -81,7 +81,35 @@ export const documentsService = {
   /**
    * Get a document by ID
    */
-  async getDocumentById(documentId: string, projectId: string) {
+  /**
+   * Assert the caller may see this document.
+   *
+   * `requirePermission('canAccessVDR')` is a boolean flag — it says whether a
+   * member may open the data room at all, not which documents they may open.
+   * Without this check a member scoped to one workstream could fetch any
+   * document in the deal by id, including its fact sheet and a presigned S3
+   * URL for the raw source. The list endpoint scoped correctly; the
+   * single-document path did not.
+   */
+  async assertDocumentInScope(documentId: string, projectId: string, userId: string): Promise<void> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, platformRole: true, companyId: true },
+    });
+    if (!user) throw ApiError.unauthorized('User not found');
+
+    const scope = await resolveProjectScope(user, projectId);
+    if (scope.isFullAccess) return;
+
+    const allowed = await this.allowedDocumentIds(projectId, scope);
+    if (allowed === null || allowed.has(documentId)) return;
+
+    // 404 rather than 403: whether a document exists in a deal the caller
+    // cannot fully see is itself information.
+    throw ApiError.notFound('Document not found');
+  },
+
+  async getDocumentById(documentId: string, projectId: string, userId?: string) {
     const document = await prisma.document.findFirst({
       where: { id: documentId, projectId },
     });
@@ -90,6 +118,8 @@ export const documentsService = {
       throw ApiError.notFound('Document not found');
     }
 
+    if (userId) await this.assertDocumentInScope(documentId, projectId, userId);
+
     return document;
   },
 
@@ -97,8 +127,12 @@ export const documentsService = {
    * Get the extracted fact-sheet markdown for a document.
    * Returns the raw markdown string. Throws 404 if no extraction has run yet.
    */
-  async getFactSheetMarkdown(documentId: string, projectId: string): Promise<string> {
-    const document = await this.getDocumentById(documentId, projectId);
+  async getFactSheetMarkdown(
+    documentId: string,
+    projectId: string,
+    userId?: string
+  ): Promise<string> {
+    const document = await this.getDocumentById(documentId, projectId, userId);
     if (!document.extractionS3Key) {
       throw ApiError.notFound(
         'No extraction available yet. This document has not completed processing.'
@@ -116,8 +150,8 @@ export const documentsService = {
    * Note: Download is allowed regardless of processing status since file is in S3
    * Processing only extracts metadata (document type, risk level, etc.)
    */
-  async getDocumentWithDownloadUrl(documentId: string, projectId: string) {
-    const document = await this.getDocumentById(documentId, projectId);
+  async getDocumentWithDownloadUrl(documentId: string, projectId: string, userId?: string) {
+    const document = await this.getDocumentById(documentId, projectId, userId);
 
     // Ensure document has an S3 key (upload was completed)
     if (!document.s3Key) {

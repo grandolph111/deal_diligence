@@ -4,6 +4,7 @@ import { updateMeSchema, devLoginSchema } from './auth.validators';
 import { changePasswordSchema } from '../companies/companies.validators';
 import { companyMembersService } from '../companies/company-members.service';
 import { ApiError } from '../../utils/ApiError';
+import { toPublicUser, withPublicUser } from '../../utils/serialize-user';
 import { asyncHandler } from '../../utils/asyncHandler';
 
 // Auth0 custom claims namespace (must match Auth0 Action)
@@ -18,7 +19,7 @@ export const authController = {
     // Dev-creds path: attachUser has already resolved req.user from the
     // mock-dev-token-<userId> bearer. Return it directly.
     if (req.user) {
-      res.json(req.user);
+      res.json(toPublicUser(req.user));
       return;
     }
 
@@ -39,7 +40,7 @@ export const authController = {
       picture,
     });
 
-    res.json(user);
+    res.json(toPublicUser(user));
   }),
 
   /**
@@ -55,7 +56,7 @@ export const authController = {
 
     const user = await authService.updateUser(req.user.id, data);
 
-    res.json(user);
+    res.json(toPublicUser(user));
   }),
 
   /**
@@ -70,7 +71,9 @@ export const authController = {
     if (!result) {
       throw ApiError.unauthorized('Invalid email or password');
     }
-    res.json(result);
+    // The token is the credential the client needs; the stored password must
+    // never travel back out with the profile.
+    res.json(withPublicUser(result as unknown as Record<string, unknown>));
   }),
 
   /**

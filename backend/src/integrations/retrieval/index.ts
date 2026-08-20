@@ -62,7 +62,7 @@ export const stuffRetriever: Retriever = {
       // whatever the planner returns, so which 12 documents answer a question
       // is unspecified and can change between identical queries. Riskiest first
       // is the right bias when only some of the deal fits.
-      orderBy: [{ riskScore: 'desc' }, { createdAt: 'asc' }],
+      orderBy: [{ riskScore: { sort: 'desc', nulls: 'last' } }, { createdAt: 'asc' }],
       select: {
         id: true,
         name: true,

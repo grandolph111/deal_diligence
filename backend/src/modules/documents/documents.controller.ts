@@ -38,6 +38,7 @@ export const documentsController = {
    * Query params: includeDownloadUrl=true or download=true
    */
   getDocument: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) throw ApiError.unauthorized('User not found');
     const projectId = req.params.id as string;
     const documentId = req.params.documentId as string;
     // Support both query parameter names for backward compatibility
@@ -47,12 +48,17 @@ export const documentsController = {
     if (includeDownloadUrl) {
       const document = await documentsService.getDocumentWithDownloadUrl(
         documentId,
-        projectId
+        projectId,
+        req.user.id
       );
       return res.json(document);
     }
 
-    const document = await documentsService.getDocumentById(documentId, projectId);
+    const document = await documentsService.getDocumentById(
+      documentId,
+      projectId,
+      req.user.id
+    );
     res.json(document);
   }),
 
@@ -63,7 +69,12 @@ export const documentsController = {
   getFactSheet: asyncHandler(async (req: Request, res: Response) => {
     const projectId = req.params.id as string;
     const documentId = req.params.documentId as string;
-    const markdown = await documentsService.getFactSheetMarkdown(documentId, projectId);
+    if (!req.user) throw ApiError.unauthorized('User not found');
+    const markdown = await documentsService.getFactSheetMarkdown(
+      documentId,
+      projectId,
+      req.user.id
+    );
     res.type('text/markdown').send(markdown);
   }),
 

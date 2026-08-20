@@ -84,25 +84,6 @@ const describe = (r: Omit<ProjectReadiness, 'state' | 'message'>): {
   };
 };
 
-/** Documents reachable through the caller's granted workstreams. */
-async function documentIdsInGrantedWorkstreams(
-  projectId: string,
-  workstreamIds: string[]
-): Promise<string[]> {
-  if (workstreamIds.length === 0) return [];
-  const rows = await prisma.libraryNode.findMany({
-    where: {
-      projectId,
-      type: { in: ['PROVISION', 'RISK', 'OBLIGATION'] },
-      workstreamId: { in: workstreamIds },
-      sourceDocumentId: { not: null },
-    },
-    select: { sourceDocumentId: true },
-    distinct: ['sourceDocumentId'],
-  });
-  return rows.map((r) => r.sourceDocumentId as string);
-}
-
 export const readinessService = {
   async getProjectReadiness(
     projectId: string,
@@ -135,27 +116,32 @@ export const readinessService = {
       };
     }
 
-    // Scope on workstreams, matching the rest of the app — folder grants are
-    // dormant, so gating on them reported NO_ACCESS for every restricted member.
-    const visibleDocIds = scope.isFullAccess
-      ? null
-      : await documentIdsInGrantedWorkstreams(projectId, scope.allowedWorkstreamIds);
-
-    const docFilter = visibleDocIds === null ? {} : { id: { in: visibleDocIds } };
-
+    // Ingest progress is counted deal-wide, on purpose.
+    //
+    // Scoping it by workstream cannot work: a document only acquires evidence
+    // AFTER extraction succeeds, so a scoped query structurally never sees a
+    // pending, processing or failed document. `total` would always equal
+    // `complete`, PARTIAL and PROCESSING would be unreachable, and a specialist
+    // joining a mid-ingest deal would be told "upload documents to this deal" —
+    // to someone with no upload rights, about a deal that is busy working.
+    //
+    // How far along ingestion is says nothing about which documents exist or
+    // what they contain, and the caller is already a member of this deal, so
+    // reporting it deal-wide leaks nothing they should not have. Evidence
+    // volume, which does describe content, stays scoped below.
     const [grouped, evidenceCount] = await Promise.all([
       prisma.document.groupBy({
         by: ['processingStatus'],
-        where: { projectId, ...docFilter },
+        where: { projectId },
         _count: { _all: true },
       }),
       prisma.libraryNode.count({
         where: {
           projectId,
-          sourceDocumentId:
-            visibleDocIds === null ? { not: null } : { in: visibleDocIds },
-          // Evidence must be scoped too — an unscoped count told a restricted
-          // member how much the whole deal knows.
+          sourceDocumentId: { not: null },
+          // Evidence volume describes content, so it stays scoped — an
+          // unscoped count told a restricted member how much the whole deal
+          // knows.
           ...(scope.isFullAccess
             ? {}
             : { workstreamId: { in: scope.allowedWorkstreamIds } }),

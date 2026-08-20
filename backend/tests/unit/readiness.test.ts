@@ -120,30 +120,26 @@ describe('readiness states', () => {
     expect(groupBy).not.toHaveBeenCalled();
   });
 
-  it('scopes counts to the documents a restricted member can reach', async () => {
+  it('reports ingest progress deal-wide but keeps evidence scoped', async () => {
     resolveProjectScope.mockResolvedValue({
       isFullAccess: false,
-      // Grants are workstreams now; gating on folders reported NO_ACCESS for
-      // every restricted member, since folder grants are dormant.
       allowedFolderIds: [],
       allowedWorkstreamIds: ['04-intellectual-property'],
     });
-    nodeFindMany.mockResolvedValue([
-      { sourceDocumentId: 'd1' },
-      { sourceDocumentId: 'd2' },
-    ]);
-    groupBy.mockResolvedValue(statuses({ COMPLETE: 2 }));
+    groupBy.mockResolvedValue(statuses({ COMPLETE: 2, PROCESSING: 3 }));
 
     const r = await read();
 
     expect(r.state).not.toBe('NO_ACCESS');
+    // Documents acquire evidence only AFTER extraction succeeds, so scoping the
+    // status counts by workstream would make processing/pending/failed
+    // structurally zero — PARTIAL and PROCESSING become unreachable and a
+    // mid-ingest deal reports itself finished.
+    expect(r.processing).toBe(3);
     expect(groupBy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ id: { in: ['d1', 'd2'] } }),
-      })
+      expect.objectContaining({ where: { projectId: 'p1' } })
     );
-    // Evidence has to be scoped too — an unscoped count told a restricted
-    // member how much the whole deal knows.
+    // Evidence volume describes content, so it stays scoped.
     expect(nodeCount).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({

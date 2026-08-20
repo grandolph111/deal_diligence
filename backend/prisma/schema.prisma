@@ -423,6 +423,11 @@ model Document {
   // Processing pipeline
   processingStatus DocumentStatus @default(PENDING)
   retryCount       Int?           @default(0)
+  // When the queue claimed this document. The stale-PROCESSING sweep keys off
+  // this and NOT updatedAt: @updatedAt is applied client-side by Prisma, and
+  // both claim paths are raw SQL, so updatedAt still reflects the upload. A
+  // sweep on updatedAt re-queues documents that are actively extracting.
+  processingStartedAt DateTime?
   lastError        String?
 
   // Async bulk extraction. Set while processingStatus = BATCHED; the batch
@@ -925,6 +930,11 @@ model ProvisionEmbedding {
 /// SUBMITTED batch against the API, which is the only way a document sitting in
 /// BATCHED ever gets released.
 model ExtractionBatch {
+  // Consecutive poll failures, reset on any successful retrieve. Distinct from
+  // erroredCount, which counts documents that errored — overloading that field
+  // meant a long-running healthy batch accumulated "errors" and was abandoned.
+  pollFailures Int @default(0)
+
   id     String                @id /// Anthropic batch id (msgbatch_...)
   status ExtractionBatchStatus @default(SUBMITTED)
 

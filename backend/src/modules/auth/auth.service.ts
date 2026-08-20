@@ -1,3 +1,4 @@
+import { issueSessionToken } from '../../utils/session-token';
 import { prisma } from '../../config/database';
 import { User } from '@prisma/client';
 
@@ -119,7 +120,9 @@ export const authService = {
       return null;
     }
     return {
-      token: `mock-dev-token-${user.id}`,
+      // Signed + expiring. The previous `mock-dev-token-<id>` was forgeable by
+      // anyone who could read a user id from a member list.
+      token: issueSessionToken(user.id),
       user,
     };
   },

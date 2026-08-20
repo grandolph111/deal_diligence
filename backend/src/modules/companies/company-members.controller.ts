@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/ApiError';
+import { withPublicUser } from '../../utils/serialize-user';
 import { companyMembersService } from './company-members.service';
 import { createCompanyMemberSchema } from './companies.validators';
 
@@ -14,7 +15,7 @@ export const companyMembersController = {
       companyId,
       data
     );
-    res.status(201).json(result);
+    res.status(201).json(withPublicUser(result as unknown as Record<string, unknown>));
   }),
 
   addMember: asyncHandler(async (req: Request, res: Response) => {
@@ -26,7 +27,7 @@ export const companyMembersController = {
       companyId,
       data
     );
-    res.status(201).json(result);
+    res.status(201).json(withPublicUser(result as unknown as Record<string, unknown>));
   }),
 
   removeMember: asyncHandler(async (req: Request, res: Response) => {
@@ -44,6 +45,8 @@ export const companyMembersController = {
       req.user,
       userId
     );
-    res.json(result);
+    // A freshly generated password is returned deliberately at the top level;
+    // the nested user row must not also carry it.
+    res.json(withPublicUser(result as unknown as Record<string, unknown>));
   }),
 };
