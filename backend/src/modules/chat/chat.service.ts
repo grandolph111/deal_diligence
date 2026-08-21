@@ -339,7 +339,9 @@ export const chatService = {
         history: priorTurns,
         userMessage: data.content,
       });
-      content = response.content;
+      content = response.truncated
+        ? `${response.content}\n\n_…cut off at the model's length limit. Ask something narrower to see the rest._`
+        : response.content;
       citations = response.citations.map((c) => {
         const pinned = pinnedDocs.find((f) => f.documentId === c.documentId);
         return {
@@ -358,9 +360,11 @@ export const chatService = {
         'I apologize, but I encountered an error processing your request. Please try again.',
         []
       );
-      throw ApiError.internal(
-        error instanceof Error ? error.message : 'Failed to get AI response'
-      );
+      // The detail belongs in the logs. Handing a Zod issue array to the chat
+      // panel puts a wall of JSON where the answer should be.
+      // eslint-disable-next-line no-console
+      console.error('[chat] answer failed', error);
+      throw ApiError.internal('The assistant could not answer that. Please try again.');
     }
 
     const assistantMessage = await this.saveMessage(

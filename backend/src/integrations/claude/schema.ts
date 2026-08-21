@@ -243,18 +243,23 @@ export const confidenceBand = (
 
 export const chatResponseSchema = z.object({
   content: z.string().min(1),
-  citations: z.preprocess(
-    jsonArrayPreprocessor,
-    z
-      .array(
-        z.object({
-          documentId: z.string(),
-          pageNumber: z.number().int().nullable().optional(),
-          snippet: z.string(),
-        })
-      )
-      .default([])
-  ),
+  // An answer with no citations still answers the question, so a citations
+  // blob that arrives malformed — usually a tool call truncated at max_tokens
+  // mid-array — costs the citations, not the reply.
+  citations: z
+    .preprocess(
+      jsonArrayPreprocessor,
+      z
+        .array(
+          z.object({
+            documentId: z.string(),
+            pageNumber: z.number().int().nullable().optional(),
+            snippet: z.string(),
+          })
+        )
+        .default([])
+    )
+    .catch([]),
 });
 export type ChatResponse = z.infer<typeof chatResponseSchema>;
 

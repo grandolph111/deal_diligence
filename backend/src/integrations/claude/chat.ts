@@ -8,12 +8,15 @@ export interface ChatTurn {
   content: string;
 }
 
+/** Headroom for an answer plus its citations; a cut-off tool call loses both. */
+const CHAT_MAX_TOKENS = 8192;
+
 export const runChat = async (args: {
   brief?: string | null;
   pinnedDocs?: AttachedDoc[];
   history: ChatTurn[];
   userMessage: string;
-}): Promise<ChatResponse> => {
+}): Promise<ChatResponse & { truncated: boolean }> => {
   const client = getClaudeClient();
   const model = getModelId('chat');
 
@@ -81,7 +84,7 @@ export const runChat = async (args: {
   // Custom runToolUse pass since we have multi-turn messages.
   const response = await client.messages.create({
     model,
-    max_tokens: 2048,
+    max_tokens: CHAT_MAX_TOKENS,
     system: [
       {
         type: 'text',
@@ -124,5 +127,25 @@ export const runChat = async (args: {
     (c: { type?: string }) => c?.type === 'tool_use'
   );
   if (!toolBlock) throw new Error('Claude chat returned no tool_use');
-  return chatResponseSchema.parse(toolBlock.input);
+
+  // A tool call cut off at max_tokens arrives as half-written JSON: the reply
+  // is there but its tail is missing, and the citations array is a fragment.
+  // Salvaging the prose beats failing the turn — but the caller has to know it
+  // is incomplete, because a truncated answer that presents itself as whole is
+  // the worst of the three outcomes.
+  const truncated = response.stop_reason === 'max_tokens';
+
+  const parsed = chatResponseSchema.safeParse(toolBlock.input);
+  if (parsed.success) {
+    return { ...parsed.data, truncated };
+  }
+
+  const salvaged = (toolBlock.input as { content?: unknown })?.content;
+  if (typeof salvaged === 'string' && salvaged.trim()) {
+    return { content: salvaged, citations: [], truncated: true };
+  }
+
+  throw new Error(
+    `Claude chat returned an unusable reply${truncated ? ' (truncated at max_tokens)' : ''}`
+  );
 };
