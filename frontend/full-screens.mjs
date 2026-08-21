@@ -16,7 +16,7 @@ const pg = (sql) =>
     { encoding: 'utf8' }
   ).stdout.trim();
 
-const ALAN = { email: 'alan@dealdiligence.com', password: 'dealdone198cdx4' };
+const ALAN = { email: 'alan.lewis@dealdiligence.ai', password: 'LuckyMe327!$!' };
 const ADMIN = { email: 'admin@dealdiligence.com', password: 'Adm!n-9fK2pQzR7vLx' };
 const DEMO = { email: 'demo@dealdiligence.com', password: 'Dem0-3hT8wYbN5qJe' };
 const ACME_ADMIN = {

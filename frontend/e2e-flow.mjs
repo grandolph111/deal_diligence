@@ -18,7 +18,7 @@ const pg = (sql) =>
 
 const ADMIN_PASS = 'Adm!n-9fK2pQzR7vLx';
 const DEMO_PASS = 'Dem0-3hT8wYbN5qJe';
-const ALAN_PASS = 'dealdone198cdx4';
+const ALAN_PASS = 'LuckyMe327!$!';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -66,7 +66,7 @@ try {
     if (m.type() === 'error') errors.push(`console(alan): ${m.text()}`);
   });
 
-  await setSession(page, 'alan@dealdiligence.com', ALAN_PASS);
+  await setSession(page, 'alan.lewis@dealdiligence.ai', ALAN_PASS);
   await page.goto(`${UI}/admin/companies`, { waitUntil: 'networkidle0' });
   await shot(page, 'a1-super-admin-companies');
 

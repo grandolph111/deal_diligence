@@ -19,7 +19,7 @@ const BASE = 'http://localhost:3000';
 const STORAGE_KEY = 'dd_auth_session';
 
 const profiles = [
-  { label: 'super-admin',     email: 'alan@dealdiligence.com',  password: 'dealdone198cdx4',    role: 'Super Admin' },
+  { label: 'super-admin',     email: 'alan.lewis@dealdiligence.ai',  password: 'LuckyMe327!$!',    role: 'Super Admin' },
   { label: 'customer-admin',  email: 'admin@dealdiligence.com', password: 'Adm!n-9fK2pQzR7vLx', role: 'Customer Admin' },
   { label: 'member',          email: 'demo@dealdiligence.com',  password: 'Dem0-3hT8wYbN5qJe',  role: 'Member' },
 ];

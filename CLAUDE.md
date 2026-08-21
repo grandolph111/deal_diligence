@@ -4,7 +4,7 @@ Guidance for Claude Code (claude.ai/code) when working in this repo.
 
 ## Project Vision
 
-**DealDiligence.ai** is a Claude-native M&A deal platform. Documents uploaded to a Virtual Data Room are read end-to-end by Claude — Sonnet 4.6 is the extraction baseline, Opus 4.7 for long documents — and turned into CUAD-aligned markdown fact sheets (entities, CUAD clause coverage, /10 risk score, top risks, intra-document relationships). Those fact sheets are the document-level artifact and the audit record — deterministically rendered from the structured fields, so they are a projection rather than a second source of truth. Downstream reads structured columns and library provisions, not parsed markdown: the Kanban becomes an AI prompting workflow where tasks carry a prompt + attached documents and Claude writes risk reports for specialist review; the VDR chat answers questions from in-scope fact sheets; a debounced reconciliation pass merges entities into a deal-level knowledge graph; the project dashboard surfaces deal-level risk posture — all filtered by the caller's folder scope.
+**DealDiligence.ai** is a Claude-native M&A deal platform. Documents uploaded to a Virtual Data Room are read end-to-end by Claude — Sonnet 4.6 is the extraction baseline, Opus 4.7 for long documents — and turned into CUAD-aligned markdown fact sheets (entities, CUAD clause coverage, /10 risk score, top risks, intra-document relationships). Those fact sheets are the document-level artifact and the audit record — deterministically rendered from the structured fields, so they are a projection rather than a second source of truth. Downstream reads structured columns and library provisions, not parsed markdown: the Kanban becomes an AI prompting workflow where tasks carry a prompt + attached documents and Claude writes risk reports for specialist review; the VDR chat answers questions from in-scope fact sheets; a debounced reconciliation pass merges entities into a deal-level knowledge graph; the project dashboard surfaces deal-level risk posture; the Deal Report assembles the due-diligence issues report a client receives — all filtered by the caller's risk-category scope.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full architecture diagram and rationale.
 
@@ -18,6 +18,12 @@ SOC 2 Type 2, AI regulatory (US/EU), privacy law — targeted via AWS Bedrock ho
 Web app only.
 
 ---
+
+## The organizing axis
+
+The deal is organized by **26 risk categories** — the Topics of the DUE DILIGENCE ISSUES REPORT template (PDF at repo root), verbatim and in its order. Canonical config: `src/integrations/library/risk-categories.ts`. One tier only: coverage sits on the category, evidence files directly under it, and a category with no evidence is the gap. This replaced a 12-workstream x 51-question checklist that was authored in-house.
+
+Note that ~69% of clause evidence lands in Material Contracts, because CUAD is a contracts dataset and this axis is subject-matter based. Expected; group by clause type when presenting a category.
 
 ## Architecture at a glance
 
@@ -48,7 +54,7 @@ Prompt caching: the ~4k-token extraction system prompt (CUAD schema + risk rubri
 
 `src/integrations/retrieval/` defines a `Retriever` interface. **`defaultRetriever` is what callers use.**
 
-It navigates the diligence checklist (`libraryTocRetriever`): route the question to the relevant checklist items, then return only the provisions behind them, plus a coverage summary naming any OPEN items so answers can surface gaps. Retrieval granularity is the **provision**, not the document — a change-of-control question needs six provisions from four contracts, not four whole fact sheets.
+It navigates the risk categories (`libraryTocRetriever`): route the question to the relevant categories, then return only the provisions behind them, plus a coverage summary naming any OPEN categories so answers can surface gaps. Retrieval granularity is the **provision**, not the document — a change-of-control question needs six provisions from four contracts, not four whole fact sheets.
 
 `stuffRetriever` is no longer the default. It remains correct for an explicit document pin (the caller has already chosen the scope, so it is honoured in full) and as the fallback when a project has no library evidence yet. In that fallback role it is **capped** at `RETRIEVAL_STUFF_MAX_DOCS` (default 12) and logs when it truncates — an unbounded sweep is millions of tokens per turn on a real VDR, and a silently truncated answer that presents itself as complete is worse than a bounded one that says so.
 
@@ -146,7 +152,8 @@ router.patch('/:id', requireMinRole('ADMIN'), controller.update);
 OWNER/ADMIN have full access. MEMBER/VIEWER use `ProjectMember.permissions` JSON:
 - `canAccessKanban`, `canAccessVDR`, `canUploadDocs`
 - `restrictedToTags` — tasks filtered
-- `restrictedFolders` — documents + entity aggregations filtered
+- `restrictedRiskCategories` — the live scoping axis: documents, coverage, brief, report and boards all filtered by it
+- `restrictedFolders` — dormant; folders were retired and do not imply category access
 
 Enforced in `documents.service.ts`, `dashboard.service.ts`, `chat.service.ts`, `task-ai.service.ts`.
 
@@ -182,7 +189,7 @@ Vitest + supertest. Auth mocking via `setMockUser()` in `tests/utils/auth-mock.t
 |---|---|
 | `src/app.ts` | Express app + route mounting |
 | `src/middleware/auth.ts` | JWT + user attach (mock-token fallback for dev) |
-| `src/middleware/permissions.ts` | RBAC + folder scope |
+| `src/middleware/permissions.ts` | RBAC + risk-category scope |
 | `src/utils/ApiError.ts` | Error helpers |
 | `prisma/schema.prisma` | Canonical schema; `Document` has extraction + risk fields; `Task` has AI workflow fields (`aiPrompt`, `aiStatus`, `aiReportS3Key`, …) |
 | `src/integrations/claude/index.ts` | Barrel for Claude runners + types |

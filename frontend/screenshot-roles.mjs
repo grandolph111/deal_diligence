@@ -44,8 +44,8 @@ const baseUrl = 'http://localhost:3000';
 const scenarios = [
   {
     label: 'super-admin-companies',
-    email: 'alan@dealdiligence.com',
-    password: 'dealdone198cdx4',
+    email: 'alan.lewis@dealdiligence.ai',
+    password: 'LuckyMe327!$!',
     path: '/admin/companies',
   },
   {
