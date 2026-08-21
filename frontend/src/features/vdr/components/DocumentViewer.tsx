@@ -502,9 +502,15 @@ export function DocumentViewer({
 
         // Render text layer for search highlighting
         if (textLayerRef.current) {
+          // Size the layer in the same units its children use — device pixels —
+          // and let the transform bring it down to the canvas's CSS size. Sizing
+          // it in CSS pixels instead leaves a box half as wide as the text it
+          // holds, and `overflow: hidden` clips in the untransformed box: on a
+          // retina screen every run past the halfway mark of the page simply
+          // vanished, highlights included.
           textLayerRef.current.innerHTML = '';
-          textLayerRef.current.style.width = `${viewport.width / pixelRatio}px`;
-          textLayerRef.current.style.height = `${viewport.height / pixelRatio}px`;
+          textLayerRef.current.style.width = `${viewport.width}px`;
+          textLayerRef.current.style.height = `${viewport.height}px`;
           textLayerRef.current.style.transform = `scale(${1 / pixelRatio})`;
           textLayerRef.current.style.transformOrigin = 'top left';
 
