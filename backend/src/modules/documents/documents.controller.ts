@@ -22,7 +22,7 @@ export const documentsController = {
     const query = listDocumentsQuerySchema.parse(req.query);
 
     // Must be the scoped variant: requirePermission('canAccessVDR') gates the
-    // VDR flag only, it does not filter by the caller's workstream grants.
+    // VDR flag only, it does not filter by the caller's risk category grants.
     const result = await documentsService.listAccessibleDocuments(
       projectId,
       req.user.id,

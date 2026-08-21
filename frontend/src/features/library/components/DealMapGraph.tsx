@@ -52,7 +52,7 @@ const PALETTE: Record<string, Swatch> = {
   // Deliberately duller than the risk ramp: hubs are the frame, and near-white
   // discs made the scaffolding louder than the documents it holds.
   root: { core: '#c9b6f0', rim: '#7d5fca', glow: 'rgba(150,116,222,0.34)' },
-  workstream: { core: '#9db6d8', rim: '#5c789e', glow: 'rgba(139,164,201,0.26)' },
+  riskCategory: { core: '#9db6d8', rim: '#5c789e', glow: 'rgba(139,164,201,0.26)' },
   none: { core: '#7d8ba4', rim: '#454f63', glow: 'rgba(122,139,164,0.14)' },
   ...Object.fromEntries(RISK_RAMP.map((sw, i) => [`r${i}`, sw])),
 };
@@ -62,7 +62,7 @@ const EDGE_COLOR = { CONTAINS: '#2f3d56', PEER: '#3b5265' };
 /** Which palette entry a node draws from. */
 function paletteKey(n: DealMapNode): string {
   if (n.type === 'ROOT') return 'root';
-  if (n.type === 'WORKSTREAM') return 'workstream';
+  if (n.type === 'RISK_CATEGORY') return 'riskCategory';
   if (!n.analyzed) return 'none';
   if (n.riskScore != null) {
     return `r${Math.max(0, Math.min(10, Math.round(n.riskScore)))}`;
@@ -78,8 +78,8 @@ function paletteKey(n: DealMapNode): string {
 const truncate = (s: string, max = 30) => (s.length <= max ? s : `${s.slice(0, max - 1)}…`);
 
 /**
- * Deterministic positions: root at centre, workstreams on a ring, each
- * workstream's documents filling a disc around it.
+ * Deterministic positions: root at centre, risk categories on a ring, each
+ * risk category's documents filling a disc around it.
  *
  * A force layout cannot be relied on here. Documents link both to their hub and
  * to peers in other clusters, and any spring setting that keeps a 36-document
@@ -97,13 +97,13 @@ const HUB_HOLE = 52;
 
 function clusterPositions(map: DealMap): Record<string, { x: number; y: number }> {
   const pos: Record<string, { x: number; y: number }> = {};
-  const hubs = map.nodes.filter((n) => n.type === 'WORKSTREAM');
+  const hubs = map.nodes.filter((n) => n.type === 'RISK_CATEGORY');
   if (hubs.length === 0) return pos;
 
   const docsByHub = new Map<string, string[]>();
   for (const n of map.nodes) {
     if (n.type !== 'DOCUMENT') continue;
-    const key = `ws:${n.workstreamId}`;
+    const key = `ws:${n.riskCategoryId}`;
     const bucket = docsByHub.get(key) ?? [];
     bucket.push(n.id);
     docsByHub.set(key, bucket);
@@ -169,7 +169,7 @@ function clusterPositions(map: DealMap): Record<string, { x: number; y: number }
  * Fit, then give back the strip the legend floats over.
  *
  * A plain `fit` centres the graph in the whole canvas, which put the last row
- * of workstreams — the empty ones — underneath the legend where their labels
+ * of risk categories — the empty ones — underneath the legend where their labels
  * were unreadable.
  */
 const LEGEND_STRIP = 64;
@@ -195,7 +195,7 @@ interface Props {
 }
 
 /**
- * The deal drawn as a network: root → workstreams → documents, with documents
+ * The deal drawn as a network: root → risk categories → documents, with documents
  * linked where they share clause language.
  *
  * Node size follows link count, so the contracts everything else resembles
@@ -258,7 +258,7 @@ export function DealMapGraph({ map, loading, error, selectedId, onSelect, onRefr
         })),
         {
           // Hubs are always named; documents only on demand.
-          selector: 'node[type="WORKSTREAM"]',
+          selector: 'node[type="RISK_CATEGORY"]',
           style: {
             label: 'data(label)',
             'font-size': '11px',
@@ -381,14 +381,14 @@ export function DealMapGraph({ map, loading, error, selectedId, onSelect, onRefr
     for (const n of map.nodes) {
       const d = degree.get(n.id) ?? 0;
       // Three separated size bands so the hierarchy is legible at a glance:
-      // deal ≫ workstream ≫ document, with no overlap between them.
+      // deal ≫ risk category ≫ document, with no overlap between them.
       const base =
         n.type === 'ROOT'
-          // Just clear of the largest workstream (56) — enough to read as the
+          // Just clear of the largest risk category (56) — enough to read as the
           // root of the hierarchy without dominating the field.
           ? 64
-          : n.type === 'WORKSTREAM'
-            // Bigger workstreams hold more, but never small enough to be
+          : n.type === 'RISK_CATEGORY'
+            // Bigger risk categories hold more, but never small enough to be
             // mistaken for a document or big enough to rival the deal.
             ? 40 + Math.min(16, Math.sqrt(n.documentCount) * 2.6)
             : 10 + Math.min(11, Math.sqrt(d) * 2.4);
@@ -481,7 +481,7 @@ export function DealMapGraph({ map, loading, error, selectedId, onSelect, onRefr
           </div>
           <div className="dmap__legend">
             <span className="dmap__key"><i style={{ background: PALETTE.root.core }} /> Deal</span>
-            <span className="dmap__key"><i style={{ background: PALETTE.workstream.core }} /> Workstream</span>
+            <span className="dmap__key"><i style={{ background: PALETTE.riskCategory.core }} /> Risk category</span>
             <span className="dmap__key dmap__key--ramp">
               Risk
               <span className="dmap__ramp" aria-hidden="true">

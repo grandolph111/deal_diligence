@@ -5,14 +5,14 @@ import { ApiError } from '../../utils/ApiError';
 import { boardsService } from '../../services/boards.service';
 
 // A board is created FOR a specialist — `smeUserId` is the scope, and the
-// workstreams follow from that member's grants. `workstreamIds` is kept only so
+// risk categories follow from that member's grants. `riskCategoryIds` is kept only so
 // pre-SME clients keep working; new callers should not send it.
 const createBoardSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(1000).nullable().optional(),
   smeUserId: z.string().uuid().optional(),
   /** @deprecated superseded by smeUserId. */
-  workstreamIds: z.array(z.string().min(1).max(64)).optional(),
+  riskCategoryIds: z.array(z.string().min(1).max(64)).optional(),
   /** @deprecated dormant — folder scoping is retired from the UI. */
   folderIds: z.array(z.string().uuid()).optional(),
 });
@@ -22,7 +22,7 @@ const updateBoardSchema = z.object({
   description: z.string().max(1000).nullable().optional(),
   smeUserId: z.string().uuid().nullable().optional(),
   /** @deprecated superseded by smeUserId. */
-  workstreamIds: z.array(z.string().min(1).max(64)).optional(),
+  riskCategoryIds: z.array(z.string().min(1).max(64)).optional(),
   /** @deprecated dormant. */
   folderIds: z.array(z.string().uuid()).optional(),
 });

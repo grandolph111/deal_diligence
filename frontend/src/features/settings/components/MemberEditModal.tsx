@@ -6,7 +6,7 @@ import type {
   UpdateMemberDto,
   MemberPermissions,
 } from '../../../types/api';
-import { WorkstreamScopePicker } from './WorkstreamScopePicker';
+import { RiskCategoryScopePicker } from './RiskCategoryScopePicker';
 
 interface MemberEditModalProps {
   member: ProjectMember | null;
@@ -31,7 +31,7 @@ export function MemberEditModal({
   const [canAccessKanban, setCanAccessKanban] = useState(true);
   const [canAccessVDR, setCanAccessVDR] = useState(false);
   const [canUploadDocs, setCanUploadDocs] = useState(false);
-  const [restrictedWorkstreams, setRestrictedWorkstreams] = useState<string[]>([]);
+  const [restrictedRiskCategories, setRestrictedWorkstreams] = useState<string[]>([]);
 
   useEffect(() => {
     if (member) {
@@ -39,7 +39,7 @@ export function MemberEditModal({
       setCanAccessKanban(member.permissions?.canAccessKanban ?? true);
       setCanAccessVDR(member.permissions?.canAccessVDR ?? false);
       setCanUploadDocs(member.permissions?.canUploadDocs ?? false);
-      setRestrictedWorkstreams(member.permissions?.restrictedWorkstreams ?? []);
+      setRestrictedWorkstreams(member.permissions?.restrictedRiskCategories ?? []);
     }
   }, [member]);
 
@@ -50,7 +50,7 @@ export function MemberEditModal({
       canAccessKanban,
       canAccessVDR,
       canUploadDocs,
-      restrictedWorkstreams,
+      restrictedRiskCategories,
     };
 
     await onSave(member.id, { role, permissions });
@@ -192,17 +192,17 @@ export function MemberEditModal({
               </div>
 
               <div className="permission-label permission-label--stacked">
-                <span className="permission-title">Workstream access</span>
+                <span className="permission-title">Risk category access</span>
                 <span className="permission-description permission-description--block">
-                  Pick the diligence workstreams this user can see. They get every document with
-                    evidence in those workstreams, and Kanban, Chat and the Dashboard are
+                  Pick the diligence risk categories this user can see. They get every document with
+                    evidence in those risk categories, and Kanban, Chat and the Dashboard are
                     limited to the same scope. Any Kanban board they own re-scopes to match —
                     this is the one place their access is set. Leave blank to lock them out until
                     you grant access.
                 </span>
-                <WorkstreamScopePicker
+                <RiskCategoryScopePicker
                   projectId={projectId}
-                  selectedWorkstreamIds={restrictedWorkstreams}
+                  selectedWorkstreamIds={restrictedRiskCategories}
                   onChange={setRestrictedWorkstreams}
                   disabled={saving}
                 />

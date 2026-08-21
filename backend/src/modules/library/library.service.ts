@@ -2,19 +2,19 @@
  * Library read layer — serves the Data Room navigation and the Deal Map.
  *
  * Three shapes:
- *   getToc(projectId, user)                → workstream → checklist item tree
+ *   getToc(projectId, user)                → risk category → checklist item tree
  *       with per-node document counts. The Data Room tree and the board scope
  *       picker both render this.
- *   getGraph(projectId, user, options)     → the BASE graph: workstream hubs →
+ *   getGraph(projectId, user, options)     → the BASE graph: risk category hubs →
  *       checklist items. Sources and entities are opt-in (see GraphOptions);
  *       provisions are always fetched on expand, never in the base tier.
- *   getItemEvidence(projectId, itemId, u)  → the PROVISION nodes under one item
+ *   getCategoryEvidence(projectId, riskCategoryId, u)  → the PROVISION nodes under one item
  *       plus their edges, spliced into the base graph client-side on click.
  *
- * Everything is workstream-scoped via scope.service: checklist items always
+ * Everything is risk category-scoped via scope.service: checklist items always
  * show (they are the ToC skeleton, and an unanswered question is itself the
  * finding), but sources / provisions / entities are limited to documents the
- * caller can reach through their granted workstreams.
+ * caller can reach through their granted risk categories.
  */
 
 import type { User } from '@prisma/client';
@@ -23,18 +23,17 @@ import { resolveProjectScope } from '../../services/scope.service';
 import { ApiError } from '../../utils/ApiError';
 import { playbookService } from '../../services/playbook.service';
 import {
-  computeItemStatus,
+  computeCategoryStatus,
   highPriorityClauseTypesFor,
 } from '../../services/library-writer.service';
-import { WORKSTREAMS, getWorkstream, getItem } from '../../integrations/library/checklist';
+import { RISK_CATEGORIES, getRiskCategory, TRIAGE_CATEGORY_ID } from '../../integrations/library/risk-categories';
 
 export interface GraphNode {
   id: string;
-  type: 'WORKSTREAM' | 'CHECKLIST_ITEM' | 'PROVISION' | 'RISK' | 'OBLIGATION' | 'ENTITY' | 'SOURCE';
+  type: 'RISK_CATEGORY' | 'PROVISION' | 'RISK' | 'OBLIGATION' | 'ENTITY' | 'SOURCE';
   label: string;
   status?: string | null;
-  workstreamId?: string;
-  itemId?: string;
+  riskCategoryId?: string;
   clauseType?: string | null;
   riskLevel?: string | null;
   page?: number | null;
@@ -56,7 +55,7 @@ export interface LibraryGraph {
   truncated?: { sources: number; entities: number };
 }
 
-// The base graph is the checklist skeleton only: workstream hubs + their items
+// The base graph is the checklist skeleton only: risk category hubs + their items
 // (~64 nodes). Sources and entities are opt-in via `include`, because showing
 // them by default produced a hairball — 180 nodes whose item↔source and
 // source↔entity edges are dense enough to bury the checklist structure that is
@@ -85,14 +84,14 @@ async function allowedDocIds(user: ScopeUser, projectId: string): Promise<Set<st
   const scope = await resolveProjectScope(user, projectId);
   if (scope.isFullAccess) return null;
   // Restricted: a document is visible when it supplies evidence to a granted
-  // workstream. Documents with no evidence yet belong to no workstream and so
+  // risk category. Documents with no evidence yet belong to no risk category and so
   // are visible only to full-access callers.
-  if (scope.allowedWorkstreamIds.length === 0) return new Set();
+  if (scope.allowedRiskCategoryIds.length === 0) return new Set();
   const rows = await prisma.libraryNode.findMany({
     where: {
       projectId,
       type: { in: [...EVIDENCE_TYPES] },
-      workstreamId: { in: scope.allowedWorkstreamIds },
+      riskCategoryId: { in: scope.allowedRiskCategoryIds },
       sourceDocumentId: { not: null },
     },
     select: { sourceDocumentId: true },
@@ -104,7 +103,7 @@ async function allowedDocIds(user: ScopeUser, projectId: string): Promise<Set<st
 const inScope = (allowed: Set<string> | null, docId: string | null): boolean =>
   allowed === null || (docId != null && allowed.has(docId));
 
-export interface TocWorkstream {
+export interface TocRiskCategory {
   id: string;
   title: string;
   order: number;
@@ -113,7 +112,7 @@ export interface TocWorkstream {
 }
 
 export interface LibraryToc {
-  workstreams: TocWorkstream[];
+  riskCategories: TocRiskCategory[];
   /** Documents with no evidence at all — never extracted, or extraction failed. */
   unfiled: { documentCount: number };
   totals: { documents: number; placed: number };
@@ -121,13 +120,11 @@ export interface LibraryToc {
 
 export interface DocumentBacklinks {
   document: { id: string; name: string };
-  /** Checklist questions this document answers, worst-risk first. */
-  checklistItems: Array<{
-    itemId: string;
+  /** Risk categories this document supplies evidence to, worst-risk first. */
+  riskCategories: Array<{
+    riskCategoryId: string;
     title: string;
     status: string;
-    workstreamId: string;
-    workstreamTitle: string;
     evidenceCount: number;
     highRiskCount: number;
   }>;
@@ -141,12 +138,12 @@ export interface DocumentBacklinks {
     sharedClauseTypes: string[];
   }>;
   entities: Array<{ id: string; title: string; mentionCount: number }>;
-  notes: Array<{ id: string; title: string; itemId: string; createdAt: string }>;
+  notes: Array<{ id: string; title: string; riskCategoryId: string; createdAt: string }>;
 }
 
 export interface ClauseComparison {
   clauseType: string;
-  itemId: string | null;
+  riskCategoryId: string | null;
   provisions: Array<{
     id: string;
     documentId: string | null;
@@ -156,7 +153,7 @@ export interface ClauseComparison {
     riskLevel: string | null;
     confidence: number | null;
     pageNumber: number | null;
-    itemId: string;
+    riskCategoryId: string;
   }>;
   stats: {
     total: number;
@@ -186,9 +183,9 @@ export type DealMapNode =
   | { id: string; type: 'ROOT'; label: string; documentCount: number }
   | {
       id: string;
-      type: 'WORKSTREAM';
+      type: 'RISK_CATEGORY';
       label: string;
-      workstreamId: string;
+      riskCategoryId: string;
       documentCount: number;
       order: number;
     }
@@ -197,8 +194,8 @@ export type DealMapNode =
       type: 'DOCUMENT';
       label: string;
       documentId: string;
-      /** The single workstream this document is placed under. */
-      workstreamId: string;
+      /** The single risk category this document is placed under. */
+      riskCategoryId: string;
       riskScore: number | null;
       riskLevel: string | null;
       documentType: string | null;
@@ -221,7 +218,7 @@ export interface DealMapEdge {
 export interface DealMap {
   nodes: DealMapNode[];
   edges: DealMapEdge[];
-  stats: { documents: number; workstreams: number };
+  stats: { documents: number; riskCategories: number };
 }
 
 // Peer links are the associative trails between documents, but they are dense:
@@ -286,41 +283,41 @@ function peerEdges(docs: Array<{ id: string; clauseTypes: Set<string> }>): DealM
 }
 
 /**
- * Where each document lives: exactly one workstream.
+ * Where each document lives: exactly one risk category.
  *
- * A document supplies evidence to ~8 workstreams, but showing it in all eight
+ * A document supplies evidence to ~8 risk categories, but showing it in all eight
  * made both the tree and the map read as noise — the same contract everywhere,
- * with no sense of what it primarily is. Placement picks the workstream it
+ * with no sense of what it primarily is. Placement picks the risk category it
  * contributes the most evidence to; the other relationships remain reachable
  * through the document's backlinks and the clause comparison.
  *
- * `granted` restricts the candidate workstreams for a scoped caller, so every
+ * `granted` restricts the candidate risk categories for a scoped caller, so every
  * document they can reach still lands somewhere they can see.
  */
-export async function primaryWorkstreamByDocument(
+export async function primaryRiskCategoryByDocument(
   projectId: string,
   allowed: Set<string> | null,
   granted: Set<string> | null
 ): Promise<Map<string, string>> {
   const evidence = await prisma.libraryNode.findMany({
     where: { projectId, type: { in: [...EVIDENCE_TYPES] }, sourceDocumentId: { not: null } },
-    select: { workstreamId: true, sourceDocumentId: true, riskLevel: true },
+    select: { riskCategoryId: true, sourceDocumentId: true, riskLevel: true },
   });
 
   const counts = new Map<string, Map<string, { n: number; high: number }>>();
   for (const e of evidence) {
     const docId = e.sourceDocumentId as string;
     if (!inScope(allowed, docId)) continue;
-    if (granted && !granted.has(e.workstreamId)) continue;
+    if (granted && !granted.has(e.riskCategoryId)) continue;
     const byWs = counts.get(docId) ?? new Map<string, { n: number; high: number }>();
-    const cur = byWs.get(e.workstreamId) ?? { n: 0, high: 0 };
+    const cur = byWs.get(e.riskCategoryId) ?? { n: 0, high: 0 };
     cur.n += 1;
     if (e.riskLevel === 'HIGH') cur.high += 1;
-    byWs.set(e.workstreamId, cur);
+    byWs.set(e.riskCategoryId, cur);
     counts.set(docId, byWs);
   }
 
-  const order = new Map(WORKSTREAMS.map((w) => [w.id, w.order]));
+  const order = new Map(RISK_CATEGORIES.map((w) => [w.id, w.order]));
   const out = new Map<string, string>();
   for (const [docId, byWs] of counts) {
     let best: string | null = null;
@@ -383,9 +380,9 @@ async function sourceNodeIds(projectId: string, documentIds: string[]): Promise<
 
 export const libraryService = {
   /**
-   * The workstream tree the Data Room navigates and the board picker scopes to.
+   * The risk category tree the Data Room navigates and the board picker scopes to.
    *
-   * Each document is counted once, under the workstream it primarily belongs
+   * Each document is counted once, under the risk category it primarily belongs
    * to, so the counts partition the deal rather than overlapping. `unfiled`
    * holds documents with no evidence at all — never extracted, or extraction
    * failed — which would otherwise vanish from a tree keyed on evidence.
@@ -393,41 +390,41 @@ export const libraryService = {
   async getToc(projectId: string, user: ScopeUser): Promise<LibraryToc> {
     const scope = await resolveProjectScope(user, projectId);
     const allowed = await allowedDocIds(user, projectId);
-    // A restricted caller navigates only their granted workstreams. Listing the
+    // A restricted caller navigates only their granted risk categories. Listing the
     // others would advertise branches the documents API then refuses with 403.
-    const grantedWorkstreams = scope.isFullAccess ? null : new Set(scope.allowedWorkstreamIds);
+    const grantedRiskCategories = scope.isFullAccess ? null : new Set(scope.allowedRiskCategoryIds);
 
     const [placement, projectDocs] = await Promise.all([
-      primaryWorkstreamByDocument(projectId, allowed, grantedWorkstreams),
+      primaryRiskCategoryByDocument(projectId, allowed, grantedRiskCategories),
       prisma.document.findMany({ where: { projectId }, select: { id: true } }),
     ]);
 
-    const docsByWorkstream = new Map<string, number>();
+    const docsByRiskCategory = new Map<string, number>();
     for (const ws of placement.values()) {
-      docsByWorkstream.set(ws, (docsByWorkstream.get(ws) ?? 0) + 1);
+      docsByRiskCategory.set(ws, (docsByRiskCategory.get(ws) ?? 0) + 1);
     }
 
-    const workstreams: TocWorkstream[] = WORKSTREAMS.filter((ws) => {
-      if (grantedWorkstreams && !grantedWorkstreams.has(ws.id)) return false;
-      // The catch-all triage workstream is internal — surface it only once
+    const riskCategories: TocRiskCategory[] = RISK_CATEGORIES.filter((ws) => {
+      if (grantedRiskCategories && !grantedRiskCategories.has(ws.id)) return false;
+      // The catch-all triage risk category is internal — surface it only once
       // something has actually landed there.
-      if (ws.id === TRIAGE_WORKSTREAM_ID) return (docsByWorkstream.get(ws.id) ?? 0) > 0;
+      if (ws.id === TRIAGE_WORKSTREAM_ID) return (docsByRiskCategory.get(ws.id) ?? 0) > 0;
       return true;
     }).map((ws) => ({
       id: ws.id,
       title: ws.title,
       order: ws.order,
-      documentCount: docsByWorkstream.get(ws.id) ?? 0,
+      documentCount: docsByRiskCategory.get(ws.id) ?? 0,
     }));
 
     // Unfiled is a full-access notion: a document with no evidence belongs to no
-    // workstream, so a restricted caller has no grant that could reach it.
+    // risk category, so a restricted caller has no grant that could reach it.
     const visibleDocs = projectDocs.filter((d) => allowed === null || allowed.has(d.id));
     const unfiledCount =
       allowed === null ? visibleDocs.filter((d) => !placement.has(d.id)).length : 0;
 
     return {
-      workstreams,
+      riskCategories,
       unfiled: { documentCount: unfiledCount },
       totals: { documents: visibleDocs.length, placed: placement.size },
     };
@@ -443,8 +440,8 @@ export const libraryService = {
 
     const [items, sources, provisions, entities, mentions] = await Promise.all([
       prisma.libraryNode.findMany({
-        where: { projectId, type: 'CHECKLIST_ITEM' },
-        select: { id: true, itemId: true, workstreamId: true, title: true, status: true },
+        where: { projectId, type: 'RISK_CATEGORY' },
+        select: { id: true, riskCategoryId: true, title: true, status: true },
       }),
       prisma.libraryNode.findMany({
         where: { projectId, type: 'SOURCE' },
@@ -454,7 +451,7 @@ export const libraryService = {
         where: { projectId, type: { in: ['PROVISION', 'RISK', 'OBLIGATION'] } },
         select: {
           id: true,
-          itemId: true,
+          riskCategoryId: true,
           sourceDocumentId: true,
           riskLevel: true,
           confidence: true,
@@ -463,7 +460,7 @@ export const libraryService = {
       }),
       prisma.libraryNode.findMany({
         where: { projectId, type: 'ENTITY' },
-        select: { id: true, title: true, workstreamId: true },
+        select: { id: true, title: true, riskCategoryId: true },
       }),
       prisma.libraryEdge.findMany({
         where: { projectId, edgeType: 'MENTIONS' },
@@ -501,15 +498,15 @@ export const libraryService = {
     // driven by documents outside their scope. Full-access users get scoped==global.
     const playbook = await playbookService.get(projectId);
     const highPriority = highPriorityClauseTypesFor(playbook);
-    const evidenceByItem = new Map<string, typeof provInScope>();
+    const evidenceByCategory = new Map<string, typeof provInScope>();
     for (const p of provInScope) {
-      const arr = evidenceByItem.get(p.itemId) ?? [];
+      const arr = evidenceByCategory.get(p.riskCategoryId) ?? [];
       arr.push(p);
-      evidenceByItem.set(p.itemId, arr);
+      evidenceByCategory.set(p.riskCategoryId, arr);
     }
-    const scopedStatus = (itemId: string): string =>
-      computeItemStatus(
-        (evidenceByItem.get(itemId) ?? []).map((e) => ({
+    const scopedStatus = (riskCategoryId: string): string =>
+      computeCategoryStatus(
+        (evidenceByCategory.get(riskCategoryId) ?? []).map((e) => ({
           riskLevel: e.riskLevel,
           confidence: e.confidence,
           clauseType: e.clauseType,
@@ -517,7 +514,7 @@ export const libraryService = {
         highPriority
       );
 
-    const itemNodeByItemId = new Map(items.map((i) => [i.itemId, i.id]));
+    const categoryNodeById = new Map(items.map((i) => [i.riskCategoryId, i.id]));
 
     // Entities mentioned by in-scope provisions.
     const entityIdsInScope = new Set<string>();
@@ -540,26 +537,19 @@ export const libraryService = {
       edges.push({ id, source, target, type, weight: 1 });
     };
 
-    // The catch-all "to triage" workstream is internal — only surface it (and its
-    // item) once something actually lands there.
-    const itemVisible = (it: { workstreamId: string; itemId: string }): boolean =>
-      it.workstreamId !== '99-to-triage' || (evidenceByItem.get(it.itemId)?.length ?? 0) > 0;
+    // The catch-all "other issues / red flags" category is the report's own
+    // bucket — surface it only once something actually lands there.
+    const categoryVisible = (it: { riskCategoryId: string }): boolean =>
+      it.riskCategoryId !== TRIAGE_CATEGORY_ID ||
+      (evidenceByCategory.get(it.riskCategoryId)?.length ?? 0) > 0;
 
-    // workstream hub → checklist item
-    const usedWorkstreams = new Set<string>();
-    for (const item of items) {
-      if (!itemVisible(item)) continue;
-      usedWorkstreams.add(item.workstreamId);
-      push(`ws:${item.workstreamId}`, item.id, 'CONTAINS');
-    }
-
-    // item ↔ source (aggregated from hidden provisions)
+    // category ↔ source (aggregated from hidden provisions)
     const evidenceCount = new Map<string, number>();
     for (const p of provInScope) {
-      evidenceCount.set(p.itemId, (evidenceCount.get(p.itemId) ?? 0) + 1);
-      const itemNode = itemNodeByItemId.get(p.itemId);
+      evidenceCount.set(p.riskCategoryId, (evidenceCount.get(p.riskCategoryId) ?? 0) + 1);
+      const categoryNode = categoryNodeById.get(p.riskCategoryId);
       const srcNode = p.sourceDocumentId ? sourceNodeByDoc.get(p.sourceDocumentId) : undefined;
-      if (itemNode && srcNode) push(itemNode, srcNode, 'EVIDENCES');
+      if (categoryNode && srcNode) push(categoryNode, srcNode, 'EVIDENCES');
     }
 
     // source ↔ entity (aggregated from provision mentions)
@@ -572,20 +562,15 @@ export const libraryService = {
 
     // ---- nodes ----
     const nodes: GraphNode[] = [];
-    for (const ws of WORKSTREAMS) {
-      if (!usedWorkstreams.has(ws.id)) continue;
-      nodes.push({ id: `ws:${ws.id}`, type: 'WORKSTREAM', label: ws.title, workstreamId: ws.id });
-    }
     for (const item of items) {
-      if (!itemVisible(item)) continue;
+      if (!categoryVisible(item)) continue;
       nodes.push({
         id: item.id,
-        type: 'CHECKLIST_ITEM',
+        type: 'RISK_CATEGORY',
         label: item.title,
-        status: scopedStatus(item.itemId),
-        workstreamId: item.workstreamId,
-        itemId: item.itemId,
-        evidenceCount: evidenceCount.get(item.itemId) ?? 0,
+        status: scopedStatus(item.riskCategoryId),
+        riskCategoryId: item.riskCategoryId,
+        evidenceCount: evidenceCount.get(item.riskCategoryId) ?? 0,
       });
     }
     // Cap cross-cutting nodes so the base graph stays renderable at scale.
@@ -607,7 +592,7 @@ export const libraryService = {
       nodes.push({ id: s.id, type: 'SOURCE', label: s.title, riskLevel: s.riskLevel });
     }
     for (const e of entitiesShown) {
-      nodes.push({ id: e.id, type: 'ENTITY', label: e.title, workstreamId: e.workstreamId });
+      nodes.push({ id: e.id, type: 'ENTITY', label: e.title, riskCategoryId: e.riskCategoryId });
     }
 
     // Drop edges whose endpoints were capped out.
@@ -625,29 +610,28 @@ export const libraryService = {
   },
 
   /**
-   * The deal map: one node per document, clustered under its workstream.
+   * The deal map: one node per document, clustered under its risk category.
    *
-   * The earlier map drew the checklist itself — workstreams and their 51
-   * questions — which described the schema rather than the deal. This draws the
-   * corpus: root → 13 workstreams → every document, with documents linked to
-   * each other where they share clause language. A 100-document deal is 114
-   * nodes, which is a readable network rather than a diagram of a taxonomy.
+   * An earlier map drew the taxonomy itself, which described the schema rather
+   * than the deal. This draws the corpus: root → risk categories → every
+   * document, with documents linked to each other where they share clause
+   * language. A 100-document deal is ~120 nodes, which is a readable network.
    *
-   * A document has evidence in ~8 workstreams but is placed under exactly one —
-   * whichever it contributes most evidence to. A node has to sit somewhere, and
-   * "where does this contract mostly live" is the honest answer; the other
-   * seven relationships are still reachable through the document's backlinks.
+   * A document usually has evidence in several risk categories but is placed
+   * under exactly one — whichever it contributes most evidence to. A node has to
+   * sit somewhere, and "where does this contract mostly live" is the honest
+   * answer; the rest stay reachable through the document's backlinks.
    */
   async getDealMap(projectId: string, user: ScopeUser): Promise<DealMap> {
     const allowed = await allowedDocIds(user, projectId);
     const scope = await resolveProjectScope(user, projectId);
-    const grantedWorkstreams = scope.isFullAccess ? null : new Set(scope.allowedWorkstreamIds);
+    const grantedRiskCategories = scope.isFullAccess ? null : new Set(scope.allowedRiskCategoryIds);
 
     const [project, evidence, documents] = await Promise.all([
       prisma.project.findUnique({ where: { id: projectId }, select: { name: true } }),
       prisma.libraryNode.findMany({
         where: { projectId, type: { in: [...EVIDENCE_TYPES] }, sourceDocumentId: { not: null } },
-        select: { workstreamId: true, itemId: true, sourceDocumentId: true, riskLevel: true, clauseType: true },
+        select: { riskCategoryId: true, sourceDocumentId: true, riskLevel: true, clauseType: true },
       }),
       prisma.document.findMany({
         where: { projectId },
@@ -657,10 +641,10 @@ export const libraryService = {
 
     const inScopeEvidence = evidence.filter((e) => inScope(allowed, e.sourceDocumentId));
 
-    // --- per-document rollup: evidence by workstream, clause types, risk ---
+    // --- per-document rollup: evidence by risk category, clause types, risk ---
     type Roll = {
-      byWorkstream: Map<string, number>;
-      highRiskByWorkstream: Map<string, number>;
+      byRiskCategory: Map<string, number>;
+      highRiskByRiskCategory: Map<string, number>;
       clauseTypes: Set<string>;
       items: Set<string>;
       evidenceCount: number;
@@ -668,35 +652,35 @@ export const libraryService = {
     const roll = new Map<string, Roll>();
     for (const e of inScopeEvidence) {
       const docId = e.sourceDocumentId as string;
-      if (grantedWorkstreams && !grantedWorkstreams.has(e.workstreamId)) continue;
+      if (grantedRiskCategories && !grantedRiskCategories.has(e.riskCategoryId)) continue;
       const r =
         roll.get(docId) ??
         ({
-          byWorkstream: new Map(),
-          highRiskByWorkstream: new Map(),
+          byRiskCategory: new Map(),
+          highRiskByRiskCategory: new Map(),
           clauseTypes: new Set(),
           items: new Set(),
           evidenceCount: 0,
         } as Roll);
-      r.byWorkstream.set(e.workstreamId, (r.byWorkstream.get(e.workstreamId) ?? 0) + 1);
+      r.byRiskCategory.set(e.riskCategoryId, (r.byRiskCategory.get(e.riskCategoryId) ?? 0) + 1);
       if (e.riskLevel === 'HIGH') {
-        r.highRiskByWorkstream.set(e.workstreamId, (r.highRiskByWorkstream.get(e.workstreamId) ?? 0) + 1);
+        r.highRiskByRiskCategory.set(e.riskCategoryId, (r.highRiskByRiskCategory.get(e.riskCategoryId) ?? 0) + 1);
       }
       if (e.clauseType) r.clauseTypes.add(e.clauseType);
-      r.items.add(e.itemId);
+      r.items.add(e.riskCategoryId);
       r.evidenceCount += 1;
       roll.set(docId, r);
     }
 
-    const wsOrder = new Map(WORKSTREAMS.map((w) => [w.id, w.order]));
+    const wsOrder = new Map(RISK_CATEGORIES.map((w) => [w.id, w.order]));
 
     /** Most evidence wins; ties break on high-risk density, then checklist order. */
-    const primaryWorkstream = (r: Roll): string | null => {
+    const primaryRiskCategory = (r: Roll): string | null => {
       let best: string | null = null;
       let bestN = -1;
       let bestHigh = -1;
-      for (const [ws, n] of r.byWorkstream) {
-        const high = r.highRiskByWorkstream.get(ws) ?? 0;
+      for (const [ws, n] of r.byRiskCategory) {
+        const high = r.highRiskByRiskCategory.get(ws) ?? 0;
         const better =
           n > bestN ||
           (n === bestN && high > bestHigh) ||
@@ -714,25 +698,25 @@ export const libraryService = {
     const edges: DealMapEdge[] = [];
 
     const ROOT_ID = 'root';
-    const docsByWorkstream = new Map<string, string[]>();
+    const docsByRiskCategory = new Map<string, string[]>();
     const placedDocs: Array<{ id: string; clauseTypes: Set<string> }> = [];
 
     for (const d of documents) {
       if (!inScope(allowed, d.id)) continue;
       const r = roll.get(d.id);
-      const ws = r ? primaryWorkstream(r) : null;
-      // A document with no in-scope evidence has no workstream to live under;
+      const ws = r ? primaryRiskCategory(r) : null;
+      // A document with no in-scope evidence has no risk category to live under;
       // restricted callers must not see it at all, and for full-access callers
       // it belongs in triage rather than floating unattached.
       if (!ws) {
         if (!scope.isFullAccess) continue;
-        const bucket = docsByWorkstream.get(TRIAGE_WORKSTREAM_ID) ?? [];
+        const bucket = docsByRiskCategory.get(TRIAGE_WORKSTREAM_ID) ?? [];
         bucket.push(d.id);
-        docsByWorkstream.set(TRIAGE_WORKSTREAM_ID, bucket);
+        docsByRiskCategory.set(TRIAGE_WORKSTREAM_ID, bucket);
       } else {
-        const bucket = docsByWorkstream.get(ws) ?? [];
+        const bucket = docsByRiskCategory.get(ws) ?? [];
         bucket.push(d.id);
-        docsByWorkstream.set(ws, bucket);
+        docsByRiskCategory.set(ws, bucket);
       }
 
       nodes.push({
@@ -740,7 +724,7 @@ export const libraryService = {
         type: 'DOCUMENT',
         label: d.name,
         documentId: d.id,
-        workstreamId: ws ?? TRIAGE_WORKSTREAM_ID,
+        riskCategoryId: ws ?? TRIAGE_WORKSTREAM_ID,
         riskScore: d.riskScore,
         riskLevel: d.riskLevel,
         documentType: d.documentType,
@@ -751,20 +735,20 @@ export const libraryService = {
       placedDocs.push({ id: d.id, clauseTypes: r?.clauseTypes ?? new Set() });
     }
 
-    // --- workstream hubs (only those the caller may see) ---
-    const visibleWorkstreams = WORKSTREAMS.filter((w) => {
-      if (grantedWorkstreams && !grantedWorkstreams.has(w.id)) return false;
-      if (w.id === TRIAGE_WORKSTREAM_ID) return (docsByWorkstream.get(w.id)?.length ?? 0) > 0;
+    // --- risk category hubs (only those the caller may see) ---
+    const visibleRiskCategories = RISK_CATEGORIES.filter((w) => {
+      if (grantedRiskCategories && !grantedRiskCategories.has(w.id)) return false;
+      if (w.id === TRIAGE_WORKSTREAM_ID) return (docsByRiskCategory.get(w.id)?.length ?? 0) > 0;
       return true;
     });
 
-    for (const w of visibleWorkstreams) {
-      const docIds = docsByWorkstream.get(w.id) ?? [];
+    for (const w of visibleRiskCategories) {
+      const docIds = docsByRiskCategory.get(w.id) ?? [];
       nodes.push({
         id: `ws:${w.id}`,
-        type: 'WORKSTREAM',
+        type: 'RISK_CATEGORY',
         label: w.title,
-        workstreamId: w.id,
+        riskCategoryId: w.id,
         documentCount: docIds.length,
         order: w.order,
       });
@@ -784,7 +768,7 @@ export const libraryService = {
     // --- document ↔ document links, from shared clause language ---
     edges.push(...peerEdges(placedDocs));
 
-    return { nodes, edges, stats: { documents: placedDocs.length, workstreams: visibleWorkstreams.length } };
+    return { nodes, edges, stats: { documents: placedDocs.length, riskCategories: visibleRiskCategories.length } };
   },
 
   /**
@@ -818,30 +802,28 @@ export const libraryService = {
         type: { in: [...EVIDENCE_TYPES] },
         sourceDocumentId: documentId,
       },
-      select: { id: true, itemId: true, workstreamId: true, clauseType: true, riskLevel: true },
+      select: { id: true, riskCategoryId: true, clauseType: true, riskLevel: true },
     });
 
     // --- checklist items this document answers ---
-    const byItem = new Map<string, { count: number; workstreamId: string; highRisk: number }>();
+    const byCategory = new Map<string, { count: number; riskCategoryId: string; highRisk: number }>();
     for (const p of provisions) {
-      const e = byItem.get(p.itemId) ?? { count: 0, workstreamId: p.workstreamId, highRisk: 0 };
+      const e = byCategory.get(p.riskCategoryId) ?? { count: 0, riskCategoryId: p.riskCategoryId, highRisk: 0 };
       e.count += 1;
       if (p.riskLevel === 'HIGH') e.highRisk += 1;
-      byItem.set(p.itemId, e);
+      byCategory.set(p.riskCategoryId, e);
     }
-    const itemNodes = await prisma.libraryNode.findMany({
-      where: { projectId, type: 'CHECKLIST_ITEM', itemId: { in: [...byItem.keys()] } },
-      select: { itemId: true, title: true, status: true },
+    const categoryNodes = await prisma.libraryNode.findMany({
+      where: { projectId, type: 'RISK_CATEGORY', riskCategoryId: { in: [...byCategory.keys()] } },
+      select: { riskCategoryId: true, title: true, status: true },
     });
-    const itemMeta = new Map(itemNodes.map((n) => [n.itemId, n]));
+    const categoryMeta = new Map(categoryNodes.map((n) => [n.riskCategoryId, n]));
 
-    const checklistItems = [...byItem.entries()]
-      .map(([itemId, e]) => ({
-        itemId,
-        title: itemMeta.get(itemId)?.title ?? getItem(itemId)?.title ?? itemId,
-        status: itemMeta.get(itemId)?.status ?? 'OPEN',
-        workstreamId: e.workstreamId,
-        workstreamTitle: getWorkstream(e.workstreamId)?.title ?? e.workstreamId,
+    const riskCategories = [...byCategory.entries()]
+      .map(([riskCategoryId, e]) => ({
+        riskCategoryId,
+        title: categoryMeta.get(riskCategoryId)?.title ?? getRiskCategory(riskCategoryId)?.title ?? riskCategoryId,
+        status: categoryMeta.get(riskCategoryId)?.status ?? 'OPEN',
         evidenceCount: e.count,
         highRiskCount: e.highRisk,
       }))
@@ -936,21 +918,21 @@ export const libraryService = {
     const notes = noteEdges.length
       ? await prisma.libraryNode.findMany({
           where: { projectId, type: 'NOTE', id: { in: noteEdges.map((e) => e.fromNodeId) } },
-          select: { id: true, title: true, itemId: true, createdAt: true },
+          select: { id: true, title: true, riskCategoryId: true, createdAt: true },
           orderBy: { createdAt: 'desc' },
         })
       : [];
 
     return {
       document,
-      checklistItems,
+      riskCategories,
       clauseTypes,
       relatedDocuments,
       entities,
       notes: notes.map((n) => ({
         id: n.id,
         title: n.title,
-        itemId: n.itemId,
+        riskCategoryId: n.riskCategoryId,
         createdAt: n.createdAt.toISOString(),
       })),
     };
@@ -981,7 +963,7 @@ export const libraryService = {
           riskLevel: true,
           confidence: true,
           pageNumber: true,
-          itemId: true,
+          riskCategoryId: true,
           sourceDocumentId: true,
         },
       })
@@ -1006,7 +988,7 @@ export const libraryService = {
         riskLevel: r.riskLevel,
         confidence: r.confidence,
         pageNumber: r.pageNumber,
-        itemId: r.itemId,
+        riskCategoryId: r.riskCategoryId,
       }))
       .sort(
         (a, b) =>
@@ -1023,7 +1005,7 @@ export const libraryService = {
 
     return {
       clauseType,
-      itemId: provisions[0]?.itemId ?? null,
+      riskCategoryId: provisions[0]?.riskCategoryId ?? null,
       provisions,
       stats: { total: provisions.length, documents: docIds.length, byRisk },
     };
@@ -1038,11 +1020,11 @@ export const libraryService = {
    * Suggestions only — the user confirms, because a mis-filed conclusion in a
    * diligence record is worse than an unfiled one.
    */
-  async suggestNoteItems(
+  async suggestNoteCategories(
     projectId: string,
     documentIds: string[],
     user: ScopeUser
-  ): Promise<Array<{ itemId: string; title: string; workstreamTitle: string; documentCount: number }>> {
+  ): Promise<Array<{ riskCategoryId: string; title: string; riskCategoryTitle: string; documentCount: number }>> {
     const allowed = await allowedDocIds(user, projectId);
     const resolved = await resolveDocumentRefs(projectId, documentIds);
     const inScopeDocs = resolved.filter((id) => inScope(allowed, id));
@@ -1054,28 +1036,28 @@ export const libraryService = {
         type: { in: [...EVIDENCE_TYPES] },
         sourceDocumentId: { in: inScopeDocs },
       },
-      select: { itemId: true, workstreamId: true, sourceDocumentId: true },
+      select: { riskCategoryId: true, sourceDocumentId: true },
     });
 
-    const docsByItem = new Map<string, { docs: Set<string>; workstreamId: string }>();
+    const docsByCategory = new Map<string, { docs: Set<string>; riskCategoryId: string }>();
     for (const r of rows) {
       if (!r.sourceDocumentId) continue;
-      const e = docsByItem.get(r.itemId) ?? { docs: new Set<string>(), workstreamId: r.workstreamId };
+      const e = docsByCategory.get(r.riskCategoryId) ?? { docs: new Set<string>(), riskCategoryId: r.riskCategoryId };
       e.docs.add(r.sourceDocumentId);
-      docsByItem.set(r.itemId, e);
+      docsByCategory.set(r.riskCategoryId, e);
     }
 
-    const itemNodes = await prisma.libraryNode.findMany({
-      where: { projectId, type: 'CHECKLIST_ITEM', itemId: { in: [...docsByItem.keys()] } },
-      select: { itemId: true, title: true },
+    const categoryNodes = await prisma.libraryNode.findMany({
+      where: { projectId, type: 'RISK_CATEGORY', riskCategoryId: { in: [...docsByCategory.keys()] } },
+      select: { riskCategoryId: true, title: true },
     });
-    const titleByItem = new Map(itemNodes.map((n) => [n.itemId, n.title]));
+    const titleByItem = new Map(categoryNodes.map((n) => [n.riskCategoryId, n.title]));
 
-    return [...docsByItem.entries()]
-      .map(([itemId, e]) => ({
-        itemId,
-        title: titleByItem.get(itemId) ?? getItem(itemId)?.title ?? itemId,
-        workstreamTitle: getWorkstream(e.workstreamId)?.title ?? e.workstreamId,
+    return [...docsByCategory.entries()]
+      .map(([riskCategoryId, e]) => ({
+        riskCategoryId,
+        title: titleByItem.get(riskCategoryId) ?? getRiskCategory(riskCategoryId)?.title ?? riskCategoryId,
+        riskCategoryTitle: getRiskCategory(e.riskCategoryId)?.title ?? e.riskCategoryId,
         documentCount: e.docs.size,
       }))
       .sort((a, b) => b.documentCount - a.documentCount || a.title.localeCompare(b.title))
@@ -1095,8 +1077,8 @@ export const libraryService = {
   async createNote(
     projectId: string,
     user: ScopeUser,
-    input: { title: string; content: string; itemIds?: string[]; documentIds?: string[] }
-  ): Promise<{ id: string; itemId: string; workstreamId: string; slug: string }> {
+    input: { title: string; content: string; riskCategoryIds?: string[]; documentIds?: string[] }
+  ): Promise<{ id: string; riskCategoryId: string; slug: string }> {
     const title = input.title.trim();
     if (!title) throw ApiError.badRequest('A note needs a title');
     if (!input.content.trim()) throw ApiError.badRequest('A note needs content');
@@ -1104,24 +1086,23 @@ export const libraryService = {
     const scope = await resolveProjectScope(user, projectId);
     const allowed = await allowedDocIds(user, projectId);
 
-    // Reject unknown item slugs up front — the checklist is static config, so
+    // Reject unknown category slugs up front — the taxonomy is static config, so
     // nothing downstream would catch a typo.
-    const requestedItems = [...new Set(input.itemIds ?? [])];
-    const unknown = requestedItems.filter((id) => !getItem(id));
+    const requested = [...new Set(input.riskCategoryIds ?? [])];
+    const unknown = requested.filter((id) => !getRiskCategory(id));
     if (unknown.length > 0) {
-      throw ApiError.badRequest(`Unknown checklist item(s): ${unknown.join(', ')}`);
+      throw ApiError.badRequest(`Unknown risk categor(ies): ${unknown.join(', ')}`);
     }
-    const itemIds = requestedItems.filter(
-      (id) => scope.isFullAccess || scope.allowedWorkstreamIds.includes(getItem(id)!.workstreamId)
+    const riskCategoryIds = requested.filter(
+      (id) => scope.isFullAccess || scope.allowedRiskCategoryIds.includes(id)
     );
-    if (requestedItems.length > 0 && itemIds.length === 0) {
-      throw ApiError.forbidden('You do not have access to those checklist items');
+    if (requested.length > 0 && riskCategoryIds.length === 0) {
+      throw ApiError.forbidden('You do not have access to those risk categories');
     }
 
-    // Unfiled notes land in triage rather than being rejected — a useful answer
-    // that doesn't map cleanly to a question is still worth keeping.
-    const primaryItemId = itemIds[0] ?? TRIAGE_ITEM_ID;
-    const workstreamId = getItem(primaryItemId)?.workstreamId ?? TRIAGE_WORKSTREAM_ID;
+    // Unfiled notes land in the report's catch-all rather than being rejected —
+    // a useful answer that doesn't map cleanly to a category is still worth keeping.
+    const riskCategoryId = riskCategoryIds[0] ?? TRIAGE_CATEGORY_ID;
 
     const documentIds = (await resolveDocumentRefs(projectId, input.documentIds ?? [])).filter(
       (id) => inScope(allowed, id)
@@ -1132,13 +1113,12 @@ export const libraryService = {
       data: {
         projectId,
         type: 'NOTE',
-        workstreamId,
-        itemId: primaryItemId,
+        riskCategoryId,
         slug,
         title,
         content: input.content,
       },
-      select: { id: true, itemId: true, workstreamId: true, slug: true },
+      select: { id: true, riskCategoryId: true, slug: true },
     });
 
     const edges: {
@@ -1149,13 +1129,13 @@ export const libraryService = {
     }[] = [];
 
     // note → checklist item, for every item it answers (not just the primary).
-    const itemNodes = itemIds.length
+    const categoryNodes = riskCategoryIds.length
       ? await prisma.libraryNode.findMany({
-          where: { projectId, type: 'CHECKLIST_ITEM', itemId: { in: itemIds } },
+          where: { projectId, type: 'RISK_CATEGORY', riskCategoryId: { in: riskCategoryIds } },
           select: { id: true },
         })
       : [];
-    for (const n of itemNodes) {
+    for (const n of categoryNodes) {
       edges.push({ projectId, fromNodeId: note.id, toNodeId: n.id, edgeType: 'EVIDENCES' });
     }
 
@@ -1171,24 +1151,24 @@ export const libraryService = {
     return note;
   },
 
-  async getItemEvidence(
+  async getCategoryEvidence(
     projectId: string,
-    itemId: string,
+    riskCategoryId: string,
     user: ScopeUser
   ): Promise<LibraryGraph> {
     const allowed = await allowedDocIds(user, projectId);
 
-    const itemNode = await prisma.libraryNode.findFirst({
-      where: { projectId, type: 'CHECKLIST_ITEM', itemId },
+    const categoryNode = await prisma.libraryNode.findFirst({
+      where: { projectId, type: 'RISK_CATEGORY', riskCategoryId },
       select: { id: true },
     });
-    if (!itemNode) return { nodes: [], edges: [] };
+    if (!categoryNode) return { nodes: [], edges: [] };
 
     const provisions = (
       await prisma.libraryNode.findMany({
         // NOTE included so a filed answer is visible on the map alongside the
         // evidence it was drawn from.
-        where: { projectId, itemId, type: { in: ['PROVISION', 'RISK', 'OBLIGATION', 'NOTE'] } },
+        where: { projectId, riskCategoryId, type: { in: ['PROVISION', 'RISK', 'OBLIGATION', 'NOTE'] } },
         select: {
           id: true,
           title: true,
@@ -1232,12 +1212,12 @@ export const libraryService = {
       clauseType: p.clauseType,
       riskLevel: p.riskLevel,
       page: p.pageNumber,
-      itemId,
+      riskCategoryId,
     }));
 
     const edges: GraphEdge[] = [];
     for (const p of provisions) {
-      edges.push({ id: `EVIDENCES:${p.id}->${itemNode.id}`, source: p.id, target: itemNode.id, type: 'EVIDENCES' });
+      edges.push({ id: `EVIDENCES:${p.id}->${categoryNode.id}`, source: p.id, target: categoryNode.id, type: 'EVIDENCES' });
       const srcNode = p.sourceDocumentId ? sourceNodeByDoc.get(p.sourceDocumentId) : undefined;
       if (srcNode) edges.push({ id: `SOURCED_FROM:${p.id}->${srcNode}`, source: p.id, target: srcNode, type: 'SOURCED_FROM' });
     }

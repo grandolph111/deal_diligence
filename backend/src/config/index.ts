@@ -36,13 +36,13 @@ export const config = {
   },
 
   // Knowledge library (hierarchical diligence ToC built on ingest). Ships dark:
-  // set LIBRARY_ENABLED=true to seed the checklist tree on project create and
+  // set LIBRARY_ENABLED=true to seed the risk-category spine on project create and
   // file evidence nodes during extraction (Stage 7).
   library: {
     /**
-     * Controls ingestion-time filing of evidence into the checklist ToC.
+     * Controls ingestion-time filing of evidence into the risk-category spine.
      *
-     * On by default now that checklist navigation is the default retrieval
+     * On by default now that risk-category navigation is the default retrieval
      * path — an unpopulated library means every query falls back to bounded
      * stuffing, which caps how much of a deal an answer can see. Set
      * LIBRARY_ENABLED=false to go back to the old dark behaviour.

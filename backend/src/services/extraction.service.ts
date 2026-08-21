@@ -1051,7 +1051,7 @@ export const extractionService = {
    * `process()`, so a batched document landed COMPLETE but was never filed —
    * which, now that the library drives both retrieval and the data-room
    * navigation, meant it was invisible to chat, to Kanban AI, to the deal map,
-   * and to the workstream tree despite having been fully extracted.
+   * and to the risk category tree despite having been fully extracted.
    */
   async afterPersist(
     projectId: string,

@@ -478,7 +478,7 @@
 }
 
 /* A member whose only grants are pre-migration folder scopes — they can see
-   nothing until an admin grants workstreams. */
+   nothing until an admin grants risk categories. */
 .member-scope-chip.is-stale {
   background: var(--color-warning-light);
   color: var(--color-warning);
@@ -1130,7 +1130,7 @@
   cursor: not-allowed;
 }
 
-/* ── Workstream / folder scope picker ─────────────────────────────────────── */
+/* ── Risk category / folder scope picker ─────────────────────────────────────── */
 .folder-scope-picker {
   display: flex;
   flex-direction: column;

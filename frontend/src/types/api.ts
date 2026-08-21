@@ -59,8 +59,8 @@ export interface MemberPermissions {
   canAccessVDR?: boolean;
   canUploadDocs?: boolean;
   restrictedToTags?: string[];
-  /** Checklist workstream slugs — the live scoping axis. */
-  restrictedWorkstreams?: string[];
+  /** Risk category slugs — the live scoping axis. */
+  restrictedRiskCategories?: string[];
   /** @deprecated dormant — folder scoping is retired from the UI. */
   restrictedFolders?: string[];
 }
@@ -174,7 +174,7 @@ export interface KanbanBoardSummary extends Timestamps {
   isDefault: boolean;
   sme: BoardSme | null;
   /** Derived from the SME's grants — not chosen per board. Empty = the whole deal. */
-  workstreams: Array<{ id: string; title: string }>;
+  riskCategories: Array<{ id: string; title: string }>;
   /** @deprecated dormant — folder scoping is retired from the UI. */
   folders: Array<{ id: string; name: string }>;
   taskCount: number;
@@ -187,7 +187,7 @@ export interface KanbanBoardDetail extends Timestamps {
   isDefault: boolean;
   sme: BoardSme | null;
   /** Derived from the SME's grants — not chosen per board. Empty = the whole deal. */
-  workstreams: Array<{ id: string; title: string }>;
+  riskCategories: Array<{ id: string; title: string }>;
   /**
    * Exactly the documents tasks on this board may attach. `null` = unscoped
    * (the default board), so every project document is eligible.
@@ -204,7 +204,7 @@ export interface BoardSmeOption {
   email: string;
   avatarUrl: string | null;
   role: Role;
-  workstreams: Array<{ id: string; title: string }>;
+  riskCategories: Array<{ id: string; title: string }>;
 }
 
 export interface CreateBoardDto {
@@ -213,7 +213,7 @@ export interface CreateBoardDto {
   /** The specialist this board is for. Their grants become its scope. */
   smeUserId?: string;
   /** @deprecated superseded by smeUserId. */
-  workstreamIds?: string[];
+  riskCategoryIds?: string[];
   /** @deprecated dormant — folder scoping is retired from the UI. */
   folderIds?: string[];
 }
@@ -223,7 +223,7 @@ export interface UpdateBoardDto {
   description?: string | null;
   smeUserId?: string | null;
   /** @deprecated superseded by smeUserId. */
-  workstreamIds?: string[];
+  riskCategoryIds?: string[];
   /** @deprecated dormant. */
   folderIds?: string[];
 }

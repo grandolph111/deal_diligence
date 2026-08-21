@@ -4,10 +4,10 @@ import './library-tree.css';
 
 /**
  * What the data room is currently scoped to. `null` = the whole deal.
- * Exactly one of workstreamId / unfiled is set.
+ * Exactly one of riskCategoryId / unfiled is set.
  */
 export interface LibrarySelection {
-  workstreamId?: string;
+  riskCategoryId?: string;
   unfiled?: boolean;
 }
 
@@ -20,11 +20,11 @@ interface LibraryTreeProps {
 }
 
 /**
- * Data-room navigation: workstreams as folders.
+ * Data-room navigation: risk categories as folders.
  *
- * Each document is placed in exactly one workstream — whichever it contributes
+ * Each document is placed in exactly one risk category — whichever it contributes
  * the most evidence to — so the counts partition the deal and a document
- * appears in one place. The other workstreams it touches are still reachable
+ * appears in one place. The other risk categories it touches are still reachable
  * from the document's own Connections panel.
  */
 export function LibraryTree({ toc, loading, error, selection, onSelect }: LibraryTreeProps) {
@@ -48,10 +48,13 @@ export function LibraryTree({ toc, loading, error, selection, onSelect }: Librar
 
   const isAllSelected = selection == null;
   const unfiledCount = toc?.unfiled.documentCount ?? 0;
-  const workstreams = (toc?.workstreams ?? []).filter((w) => w.documentCount > 0);
+  // Every risk category is listed, including the empty ones. An empty category
+  // is the report's supplemental diligence request — hiding it would hide the
+  // gap, which is the finding a diligence team most needs to see.
+  const riskCategories = toc?.riskCategories ?? [];
 
   return (
-    <nav className="lib-tree" aria-label="Deal workstreams">
+    <nav className="lib-tree" aria-label="Deal risk categories">
       <button
         type="button"
         className={`lib-tree__row lib-tree__row--root${isAllSelected ? ' is-selected' : ''}`}
@@ -63,7 +66,7 @@ export function LibraryTree({ toc, loading, error, selection, onSelect }: Librar
         <span className="lib-tree__count">{toc?.totals.documents ?? 0}</span>
       </button>
 
-      {/* Documents with no evidence belong to no workstream; without this bucket
+      {/* Documents with no evidence belong to no riskCategory; without this bucket
           a failed extraction would simply vanish from the tree. */}
       {unfiledCount > 0 && (
         <button
@@ -80,19 +83,19 @@ export function LibraryTree({ toc, loading, error, selection, onSelect }: Librar
 
       <p className="lib-tree__heading">
         <Layers size={12} aria-hidden="true" />
-        Workstreams
+        Risk categories
       </p>
 
-      {workstreams.length > 0 ? (
+      {riskCategories.length > 0 ? (
         <ul className="lib-tree__list">
-          {workstreams.map((ws) => {
-            const isSelected = selection?.workstreamId === ws.id;
+          {riskCategories.map((ws) => {
+            const isSelected = selection?.riskCategoryId === ws.id;
             return (
               <li key={ws.id}>
                 <button
                   type="button"
                   className={`lib-tree__row lib-tree__row--ws-flat${isSelected ? ' is-selected' : ''}`}
-                  onClick={() => onSelect({ workstreamId: ws.id })}
+                  onClick={() => onSelect({ riskCategoryId: ws.id })}
                   aria-current={isSelected ? 'true' : undefined}
                 >
                   <span className="lib-tree__title">{ws.title}</span>
@@ -103,7 +106,7 @@ export function LibraryTree({ toc, loading, error, selection, onSelect }: Librar
           })}
         </ul>
       ) : (
-        <p className="lib-tree__empty">Workstreams fill in as documents are analyzed.</p>
+        <p className="lib-tree__empty">RiskCategories fill in as documents are analyzed.</p>
       )}
     </nav>
   );

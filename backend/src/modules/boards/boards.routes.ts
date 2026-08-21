@@ -17,7 +17,7 @@ router.get('/smes', requireMinRole('ADMIN'), boardsController.listSmes);
 router.get('/:boardId', requirePermission('canAccessKanban'), boardsController.get);
 // MEMBER is deliberate: a specialist may carve out their own board, which the
 // service pins to them — they cannot name anyone else, so this cannot widen
-// their access beyond the workstreams they already hold.
+// their access beyond the risk categories they already hold.
 router.post(
   '/',
   requireMinRole('MEMBER'),

@@ -6,7 +6,7 @@ import type {
   MemberPermissions,
   InvitationResult,
 } from '../../../types/api';
-import { WorkstreamScopePicker } from './WorkstreamScopePicker';
+import { RiskCategoryScopePicker } from './RiskCategoryScopePicker';
 
 interface InviteMemberModalProps {
   isOpen: boolean;
@@ -30,7 +30,7 @@ export function InviteMemberModal({
   const [canAccessKanban, setCanAccessKanban] = useState(true);
   const [canAccessVDR, setCanAccessVDR] = useState(false);
   const [canUploadDocs, setCanUploadDocs] = useState(false);
-  const [restrictedWorkstreams, setRestrictedWorkstreams] = useState<string[]>([]);
+  const [restrictedRiskCategories, setRestrictedWorkstreams] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -56,7 +56,7 @@ export function InviteMemberModal({
       canAccessKanban,
       canAccessVDR,
       canUploadDocs,
-      restrictedWorkstreams,
+      restrictedRiskCategories,
     };
 
     try {
@@ -208,15 +208,15 @@ export function InviteMemberModal({
                 </div>
 
                 <div className="permission-label permission-label--stacked">
-                  <span className="permission-title">Workstream access</span>
+                  <span className="permission-title">Risk category access</span>
                   <span className="permission-description permission-description--block">
-                    Pick the diligence workstreams this user can see. They get every document with
-                    evidence in those workstreams, and Kanban, Chat and the Dashboard are
+                    Pick the diligence risk categories this user can see. They get every document with
+                    evidence in those risk categories, and Kanban, Chat and the Dashboard are
                     limited to the same scope. Leave blank to lock them out until you grant access.
                   </span>
-                  <WorkstreamScopePicker
+                  <RiskCategoryScopePicker
                     projectId={projectId}
-                    selectedWorkstreamIds={restrictedWorkstreams}
+                    selectedWorkstreamIds={restrictedRiskCategories}
                     onChange={setRestrictedWorkstreams}
                     disabled={inviting}
                   />

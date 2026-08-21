@@ -177,11 +177,11 @@ model KanbanBoard {
   // Default board = auto-migrated "All Documents" board. Cannot be deleted.
   isDefault   Boolean  @default(false)
   // The subject-matter expert this board belongs to. A board is a view of one
-  // person's slice of the deal, so its workstream scope is DERIVED from this
-  // member's grants at read time rather than stored — re-granting workstreams
+  // person's slice of the deal, so its risk-category scope is DERIVED from this
+  // member's grants at read time rather than stored — re-granting categories
   // in Admin → Team re-scopes their boards immediately. Null = an unassigned
   // board (the "All Documents" default, or one whose SME left the project),
-  // which falls back to the stored KanbanBoardWorkstream rows.
+  // which falls back to the stored KanbanBoardRiskCategory rows.
   smeUserId   String?
   createdById String
   createdAt   DateTime @default(now())
@@ -191,7 +191,7 @@ model KanbanBoard {
   createdBy   User                    @relation("BoardCreator", fields: [createdById], references: [id])
   sme         User?                   @relation("BoardSme", fields: [smeUserId], references: [id], onDelete: SetNull)
   folders     KanbanBoardFolder[]
-  workstreams KanbanBoardWorkstream[]
+  riskCategories KanbanBoardRiskCategory[]
   tasks       Task[]
 
   @@unique([projectId, name])
@@ -200,7 +200,7 @@ model KanbanBoard {
 }
 
 // N:N join: which data-room folders a board covers.
-// Dormant — folder scoping is retired from the UI in favour of workstreams.
+// Dormant — folder scoping is retired from the UI in favour of risk categories.
 model KanbanBoardFolder {
   boardId  String
   folderId String
@@ -213,18 +213,18 @@ model KanbanBoardFolder {
   @@index([folderId])
 }
 
-// N:N join: which checklist workstreams a board covers. This is how an admin
+// N:N join: which risk categories a board covers. This is how an admin
 // carves a board out for a specialist ("IP Diligence" → 04-intellectual-property).
-// `workstreamId` is a checklist.ts slug, not an FK — the checklist is static
-// config, not table rows. A board with neither folders nor workstreams covers
+// `riskCategoryId` is a risk-categories.ts slug, not an FK — the taxonomy is
+// static config, not table rows. A board with neither folders nor categories covers
 // the whole project (the auto-generated "All Documents" board).
-model KanbanBoardWorkstream {
-  boardId      String
-  workstreamId String
+model KanbanBoardRiskCategory {
+  boardId        String
+  riskCategoryId String
 
   board KanbanBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
 
-  @@id([boardId, workstreamId])
+  @@id([boardId, riskCategoryId])
   @@index([boardId])
 }
 
@@ -811,9 +811,9 @@ model AuditLog {
 // RBAC folder-scoping, and dashboard rollups (same pattern as Document scalars
 // mirroring the fact-sheet markdown).
 //
-// CHECKLIST_ITEM nodes are pre-seeded (one per canonical checklist item) and
+// RISK_CATEGORY nodes are pre-seeded (one per canonical risk category) and
 // carry a coverage `status`. Evidence nodes (PROVISION / RISK / OBLIGATION) are
-// created on ingest and file under a checklist item via `itemId`. ENTITY and
+// created on ingest and file under a category via `riskCategoryId`. ENTITY and
 // SOURCE nodes are cross-cutting.
 //
 // sourceDocumentId / masterEntityId are intentionally plain indexed columns (not
@@ -823,16 +823,18 @@ model LibraryNode {
   id        String @id @default(uuid())
   projectId String
 
-  type         LibraryNodeType
-  workstreamId String // Tier-1 slug, e.g. "01-corporate-org"
-  itemId       String // Tier-2 checklist item slug this node lives under / is
-  slug         String // node file basename, unique within a project
+  type           LibraryNodeType
+  // Tier-1 risk category slug, e.g. "15-material-contracts". The single
+  // organizing axis: navigation, access control and the issues report all key
+  // off it. See integrations/library/risk-categories.ts.
+  riskCategoryId String
+  slug           String // node file basename, unique within a project
 
   title   String
   content String? @db.Text // clause quote/summary (PROVISION) — read at query time for Haiku reranking
   s3Key   String? // pointer to this node's markdown (null for lightweight rows)
 
-  // CHECKLIST_ITEM only
+  // RISK_CATEGORY only
   status CoverageStatus?
 
   // Evidence-node detail
@@ -856,8 +858,7 @@ model LibraryNode {
   @@unique([projectId, slug])
   @@index([projectId])
   @@index([projectId, type])
-  @@index([projectId, workstreamId])
-  @@index([projectId, itemId])
+  @@index([projectId, riskCategoryId])
   @@index([projectId, status])
   @@index([sourceDocumentId])
   @@index([masterEntityId])
@@ -888,7 +889,7 @@ model LibraryEdge {
 }
 
 enum LibraryNodeType {
-  CHECKLIST_ITEM
+  RISK_CATEGORY
   PROVISION
   RISK
   OBLIGATION
@@ -896,7 +897,7 @@ enum LibraryNodeType {
   SOURCE
   // A filed answer — an analysis the team chose to keep, rather than let it
   // evaporate into chat history. Authored, not extracted, so it is deliberately
-  // NOT evidence: it never counts toward a checklist item's coverage.
+  // NOT evidence: it never counts toward a risk category's coverage.
   NOTE
 }
 

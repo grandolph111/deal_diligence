@@ -6,7 +6,7 @@ export { generateDealBrief, generateBriefSynthesis } from './deal-brief';
 export { detectAnomalies } from './anomaly';
 export { generateRiskReport, type AttachedDoc } from './riskReport';
 export { runChat, type ChatTurn } from './chat';
-export { routeLibraryItems, type RouteItem } from './route';
+export { routeRiskCategories, type RouteCategory } from './route';
 export { rerankProvisions, type RerankCandidate } from './rerank';
 export { adjudicateFlags, type AdjudicationInput } from './adjudicate';
 export {

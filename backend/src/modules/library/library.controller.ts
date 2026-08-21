@@ -6,11 +6,11 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/ApiError';
 
 // Checklist item slugs, not UUIDs; the service validates them against the
-// static checklist and against the caller's workstream grants.
+// static checklist and against the caller's risk category grants.
 const createNoteSchema = z.object({
   title: z.string().min(1).max(200),
   content: z.string().min(1).max(50_000),
-  itemIds: z.array(z.string().min(1).max(64)).max(20).optional(),
+  riskCategoryIds: z.array(z.string().min(1).max(64)).max(20).optional(),
   documentIds: z.array(z.string().min(1).max(500)).max(50).optional(),
 });
 
@@ -19,7 +19,7 @@ const suggestNoteSchema = z.object({
 });
 
 export const libraryController = {
-  /** GET /projects/:id/library/toc — workstream → checklist item tree with counts. */
+  /** GET /projects/:id/library/toc — risk category → checklist item tree with counts. */
   getToc: asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) throw ApiError.unauthorized('User not found');
     const projectId = req.params.id as string;
@@ -45,16 +45,16 @@ export const libraryController = {
     res.json(graph);
   }),
 
-  /** GET /projects/:id/library/items/:itemId/evidence — provisions under one item. */
-  getItemEvidence: asyncHandler(async (req: Request, res: Response) => {
+  /** GET /projects/:id/library/items/:riskCategoryId/evidence — provisions under one item. */
+  getCategoryEvidence: asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) throw ApiError.unauthorized('User not found');
     const projectId = req.params.id as string;
-    const itemId = req.params.itemId as string;
-    const graph = await libraryService.getItemEvidence(projectId, itemId, req.user);
+    const riskCategoryId = req.params.riskCategoryId as string;
+    const graph = await libraryService.getCategoryEvidence(projectId, riskCategoryId, req.user);
     res.json(graph);
   }),
 
-  /** GET /projects/:id/library/map — root → workstreams → documents, with peer links. */
+  /** GET /projects/:id/library/map — root → risk categories → documents, with peer links. */
   getDealMap: asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) throw ApiError.unauthorized('User not found');
     const projectId = req.params.id as string;
@@ -78,11 +78,11 @@ export const libraryController = {
   }),
 
   /** POST /projects/:id/library/notes/suggest — where an answer would file. */
-  suggestNoteItems: asyncHandler(async (req: Request, res: Response) => {
+  suggestNoteCategories: asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) throw ApiError.unauthorized('User not found');
     const projectId = req.params.id as string;
     const { documentIds } = suggestNoteSchema.parse(req.body);
-    res.json({ items: await libraryService.suggestNoteItems(projectId, documentIds, req.user) });
+    res.json({ items: await libraryService.suggestNoteCategories(projectId, documentIds, req.user) });
   }),
 
   /** POST /projects/:id/library/notes — file an answer back into the library. */

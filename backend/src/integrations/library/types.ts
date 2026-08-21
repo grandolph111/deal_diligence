@@ -6,15 +6,15 @@
 
 /** What a LibraryNode represents. */
 export type LibraryNodeType =
-  | 'CHECKLIST_ITEM' // Tier-2 slot (pre-seeded); carries a coverage status
-  | 'PROVISION' // Tier-3 evidence: a CUAD clause instance in one document
-  | 'RISK' // Tier-3 evidence: an identified risk
-  | 'OBLIGATION' // Tier-3 evidence: a covenant / date / milestone
+  | 'RISK_CATEGORY' // Tier-1 slot (pre-seeded); carries a coverage status
+  | 'PROVISION' // evidence: a clause instance in one document
+  | 'RISK' // evidence: an identified risk
+  | 'OBLIGATION' // evidence: a covenant / date / milestone
   | 'ENTITY' // cross-cutting: a canonical company/person/jurisdiction
   | 'SOURCE'; // cross-cutting: one ingested document (provenance hub)
 
 /**
- * Coverage status of a CHECKLIST_ITEM node — the diligence-tracker semantics.
+ * Coverage status of a RISK_CATEGORY node — the diligence-tracker semantics.
  * Authoritatively recomputed by reconciliation (Phase 2); set opportunistically
  * at file-time in Phase 1.
  */
@@ -23,11 +23,11 @@ export type CoverageStatus =
   | 'COVERED' // evidence found, on-playbook / no red flag
   | 'FLAGGED' // evidence found, deviates from playbook or is HIGH risk
   | 'THIN' // some evidence but likely incomplete
-  | 'NA'; // not applicable to this deal
+  | 'NA'; // not applicable, or delegated to another adviser
 
 /** How two LibraryNodes relate. */
 export type LibraryEdgeType =
-  | 'EVIDENCES' // provision/risk/obligation → checklist item
+  | 'EVIDENCES' // provision/risk/obligation → risk category
   | 'SOURCED_FROM' // any evidence node → source node
   | 'MENTIONS' // evidence node → entity node
   | 'PEER_OF' // evidence node ↔ same-clause-type evidence in another doc

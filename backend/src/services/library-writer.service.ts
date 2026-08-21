@@ -2,16 +2,16 @@
  * Library writer — Phase 1.
  *
  * Two entry points:
- *   seedProjectLibrary(projectId, name)  → pre-seeds the checklist ToC: one
- *       CHECKLIST_ITEM node per canonical item (status OPEN) + the static
- *       CLAUDE.md / checklist.md / index.md / log.md and per-item `_index.md`
- *       files. Called on project create so open diligence questions are visible
- *       before any document exists.
+ *   seedProjectLibrary(projectId, name)  → pre-seeds the risk-category spine:
+ *       one RISK_CATEGORY node per canonical category (status OPEN) + the static
+ *       CLAUDE.md / categories.md / index.md / log.md and per-category
+ *       `_index.md` files. Called on project create so every category is visible
+ *       as an open gap before any document exists.
  *   fileDocument({...})                  → Stage 7 of ingestion: decomposes an
  *       extraction into evidence nodes (PROVISION + SOURCE + light ENTITY),
- *       files each under the checklist item its CUAD type answers, links them,
- *       flips touched items OPEN→COVERED/FLAGGED, and refreshes the affected
- *       index files + log.
+ *       files each under the risk category its clause type belongs to, links
+ *       them, flips touched categories OPEN→COVERED/FLAGGED, and refreshes the
+ *       affected index files + log.
  *
  * Markdown files in S3 are the durable artifact; LibraryNode/LibraryEdge rows
  * mirror them for fast queries. Everything here is best-effort at the call site
@@ -26,14 +26,12 @@ import { s3Service } from './s3.service';
 import type { ExtractionResponse } from '../integrations/claude';
 import { embedTexts, embeddingModelId, isEmbeddingsConfigured } from '../integrations/embeddings';
 import {
-  WORKSTREAMS,
-  CHECKLIST_ITEMS,
-  itemsForWorkstream,
-  itemForClauseType,
-  getWorkstream,
-  type ChecklistItem,
-} from '../integrations/library/checklist';
-import { LIBRARY_CLAUDE_MD, renderChecklistMarkdown } from '../integrations/library/templates';
+  RISK_CATEGORIES,
+  categoryForClauseType,
+  getRiskCategory,
+  type RiskCategory,
+} from '../integrations/library/risk-categories';
+import { LIBRARY_CLAUDE_MD, renderCategoriesMarkdown } from '../integrations/library/templates';
 import type { CoverageStatus } from '../integrations/library/types';
 import { playbookService } from './playbook.service';
 import type { Playbook } from '../integrations/claude';
@@ -43,14 +41,12 @@ import type { Playbook } from '../integrations/claude';
 const base = (projectId: string) => `projects/${projectId}/library`;
 const keys = {
   claudeMd: (p: string) => `${base(p)}/CLAUDE.md`,
-  checklistMd: (p: string) => `${base(p)}/checklist.md`,
+  categoriesMd: (p: string) => `${base(p)}/categories.md`,
   indexMd: (p: string) => `${base(p)}/index.md`,
   logMd: (p: string) => `${base(p)}/log.md`,
-  workstreamIndex: (p: string, wsId: string) => `${base(p)}/workstreams/${wsId}/_index.md`,
-  itemIndex: (p: string, wsId: string, itemId: string) =>
-    `${base(p)}/workstreams/${wsId}/${itemId}/_index.md`,
-  provision: (p: string, wsId: string, itemId: string, slug: string) =>
-    `${base(p)}/workstreams/${wsId}/${itemId}/${slug}.md`,
+  categoryIndex: (p: string, catId: string) => `${base(p)}/categories/${catId}/_index.md`,
+  provision: (p: string, catId: string, slug: string) =>
+    `${base(p)}/categories/${catId}/${slug}.md`,
   source: (p: string, slug: string) => `${base(p)}/sources/${slug}.md`,
   entity: (p: string, folder: string, slug: string) =>
     `${base(p)}/entities/${folder}/${slug}.md`,
@@ -79,11 +75,9 @@ const normalizeOrgName = (text: string): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
-// Entities and sources are cross-cutting — they aren't filed under a workstream
-// or checklist item. Use explicit sentinels rather than a misleading real id.
-const CROSS_CUTTING_WS = '_cross-cutting';
-const ENTITY_ITEM = '_entity';
-const SOURCE_ITEM = '_source';
+// Entities and sources are cross-cutting — they belong to no single risk
+// category. Use an explicit sentinel rather than a misleading real id.
+const CROSS_CUTTING = '_cross-cutting';
 
 const ENTITY_FOLDER: Record<string, string> = {
   ORGANIZATION: 'organizations',
@@ -130,7 +124,7 @@ const THIN_CONFIDENCE = 75;
  * The playbook additionally escalates MEDIUM→FLAGGED for clause types the firm
  * marks riskIfDeviates=HIGH. THIN = has evidence but all of it is low-confidence.
  */
-export const computeItemStatus = (
+export const computeCategoryStatus = (
   evidence: EvidenceForStatus[],
   highPriorityClauseTypes: Set<string>
 ): CoverageStatus => {
@@ -168,33 +162,36 @@ const STATUS_LABEL: Record<CoverageStatus, string> = {
 
 /* ---------- markdown renderers ---------- */
 
-const renderItemIndex = (
-  item: ChecklistItem,
+const renderCategoryIndex = (
+  category: RiskCategory,
   status: CoverageStatus,
   evidence: { title: string; slug: string; page: number | null; risk: string | null }[]
 ): string => {
-  const ws = getWorkstream(item.workstreamId);
   const lines = [
     '---',
-    `item: ${item.id}`,
-    `workstream: ${item.workstreamId}`,
+    `risk_category: ${category.id}`,
+    `report_topic: ${category.reportTitle}`,
     `status: ${status}`,
     `evidence_count: ${evidence.length}`,
     `updated: ${nowIso()}`,
     '---',
     '',
-    `# ${item.title}`,
+    `# ${category.title}`,
     '',
-    `**Workstream:** ${ws?.title ?? item.workstreamId}`,
+    `**Issues report topic:** ${category.reportTitle}`,
     `**Status:** ${STATUS_LABEL[status]}`,
     '',
-    `> ${item.description}`,
+    `> ${category.description}`,
     '',
     '## Evidence',
     '',
   ];
   if (evidence.length === 0) {
-    lines.push('_No evidence found yet. This is an open diligence question._');
+    lines.push(
+      category.factFed
+        ? '_No evidence yet. Nothing in the data room speaks to this category — it belongs in the supplemental diligence requests._'
+        : '_No evidence yet. This category is an open gap._'
+    );
   } else {
     for (const e of evidence) {
       const pg = e.page != null ? ` (p.${e.page})` : '';
@@ -206,23 +203,9 @@ const renderItemIndex = (
   return lines.join('\n');
 };
 
-const renderWorkstreamIndex = (
-  wsId: string,
-  itemStatuses: Map<string, CoverageStatus>
-): string => {
-  const ws = getWorkstream(wsId);
-  const lines = ['---', `workstream: ${wsId}`, `updated: ${nowIso()}`, '---', '', `# ${ws?.title ?? wsId}`, '', '| Item | Status |', '| --- | --- |'];
-  for (const item of itemsForWorkstream(wsId)) {
-    const st = itemStatuses.get(item.id) ?? 'OPEN';
-    lines.push(`| [${item.title}](./${item.id}/_index.md) | ${st} |`);
-  }
-  lines.push('');
-  return lines.join('\n');
-};
-
 const renderMasterIndex = (
   projectName: string,
-  itemStatuses: Map<string, CoverageStatus>
+  statuses: Map<string, CoverageStatus>
 ): string => {
   const lines = [
     '---',
@@ -232,29 +215,27 @@ const renderMasterIndex = (
     '',
     `# ${projectName} — Deal Library`,
     '',
-    'Diligence checklist ToC. Each item is a question with a coverage status;',
-    'open items are unanswered questions. See [checklist.md](./checklist.md) and',
-    '[CLAUDE.md](./CLAUDE.md).',
+    'Risk categories from the due-diligence issues report. Each carries a coverage',
+    'status; a category with no evidence is an open gap. See',
+    '[categories.md](./categories.md) and [CLAUDE.md](./CLAUDE.md).',
     '',
+    '| # | Risk category | Status |',
+    '| --- | --- | --- |',
   ];
-  for (const ws of WORKSTREAMS) {
-    const items = itemsForWorkstream(ws.id);
-    const open = items.filter((i) => (itemStatuses.get(i.id) ?? 'OPEN') === 'OPEN').length;
-    const flagged = items.filter((i) => itemStatuses.get(i.id) === 'FLAGGED').length;
-    const tag = flagged ? ` — 🚩 ${flagged} flagged` : '';
-    lines.push(`## ${ws.order}. [${ws.title}](./workstreams/${ws.id}/_index.md) — ${open}/${items.length} open${tag}`);
-    for (const item of items) {
-      const st = itemStatuses.get(item.id) ?? 'OPEN';
-      lines.push(`- ${st === 'OPEN' ? '🔲' : st === 'FLAGGED' ? '🚩' : '✅'} [${item.title}](./workstreams/${ws.id}/${item.id}/_index.md)`);
-    }
-    lines.push('');
+  for (const cat of RISK_CATEGORIES) {
+    const st = statuses.get(cat.id) ?? 'OPEN';
+    const mark = st === 'OPEN' ? '🔲' : st === 'FLAGGED' ? '🚩' : st === 'THIN' ? '◻️' : '✅';
+    lines.push(
+      `| ${cat.order} | ${mark} [${cat.title}](./categories/${cat.id}/_index.md) | ${st} |`
+    );
   }
+  lines.push('');
   return lines.join('\n');
 };
 
 const renderProvisionNode = (args: {
   id: string;
-  item: ChecklistItem;
+  category: RiskCategory;
   clauseType: string;
   title: string;
   summary: string;
@@ -266,7 +247,6 @@ const renderProvisionNode = (args: {
   sourceName: string;
   entityLinks: { name: string; folder: string; slug: string }[];
 }): string => {
-  const ws = getWorkstream(args.item.workstreamId);
   const links = [
     `sources/${args.sourceSlug}`,
     ...args.entityLinks.map((e) => `entities/${e.folder}/${e.slug}`),
@@ -275,8 +255,7 @@ const renderProvisionNode = (args: {
     '---',
     `id: ${args.id}`,
     'type: provision',
-    `workstream: ${args.item.workstreamId}`,
-    `item: ${args.item.id}`,
+    `risk_category: ${args.category.id}`,
     `clause_type: ${args.clauseType}`,
     `source_doc: ${args.sourceSlug}`,
     `page: ${args.page ?? 'null'}`,
@@ -288,15 +267,15 @@ const renderProvisionNode = (args: {
     '',
     `# ${args.title}`,
     '',
-    `**Workstream / item:** ${ws?.title ?? args.item.workstreamId} → ${args.item.title}`,
-    `**Source:** [${args.sourceName}](../../../sources/${args.sourceSlug}.md)${args.page != null ? ` (p.${args.page})` : ''}`,
+    `**Risk category:** ${args.category.title}`,
+    `**Source:** [${args.sourceName}](../../sources/${args.sourceSlug}.md)${args.page != null ? ` (p.${args.page})` : ''}`,
     '',
     `**Summary:** ${args.summary || '_none_'}`,
     '',
     args.quote ? `**Quote (p.${args.page ?? '?'}):**\n> ${args.quote.replace(/\n/g, ' ')}` : '',
     '',
     args.entityLinks.length
-      ? `**Mentions:** ${args.entityLinks.map((e) => `[${e.name}](../../../entities/${e.folder}/${e.slug}.md)`).join(', ')}`
+      ? `**Mentions:** ${args.entityLinks.map((e) => `[${e.name}](../../entities/${e.folder}/${e.slug}.md)`).join(', ')}`
       : '',
     '',
   ]
@@ -374,27 +353,26 @@ export const libraryWriterService = {
 
   async isSeeded(projectId: string): Promise<boolean> {
     const count = await prisma.libraryNode.count({
-      where: { projectId, type: 'CHECKLIST_ITEM' },
+      where: { projectId, type: 'RISK_CATEGORY' },
     });
     return count > 0;
   },
 
-  /** Pre-seed the checklist ToC (all items OPEN) + static + index files. Idempotent. */
+  /** Pre-seed the 26 risk categories (all OPEN) + static + index files. Idempotent. */
   async seedProjectLibrary(projectId: string, projectName: string): Promise<void> {
     if (await this.isSeeded(projectId)) return;
 
-    // 1. CHECKLIST_ITEM nodes (one insert).
+    // 1. RISK_CATEGORY nodes (one insert).
     await prisma.libraryNode.createMany({
-      data: CHECKLIST_ITEMS.map((item) => ({
+      data: RISK_CATEGORIES.map((cat) => ({
         id: randomUUID(),
         projectId,
-        type: 'CHECKLIST_ITEM' as const,
-        workstreamId: item.workstreamId,
-        itemId: item.id,
-        slug: `item-${item.id}`,
-        title: item.title,
+        type: 'RISK_CATEGORY' as const,
+        riskCategoryId: cat.id,
+        slug: `cat-${cat.id}`,
+        title: cat.title,
         status: 'OPEN' as const,
-        s3Key: keys.itemIndex(projectId, item.workstreamId, item.id),
+        s3Key: keys.categoryIndex(projectId, cat.id),
       })),
       skipDuplicates: true,
     });
@@ -403,15 +381,12 @@ export const libraryWriterService = {
     const statuses = new Map<string, CoverageStatus>();
     const writes: Promise<void>[] = [
       s3Service.putObjectText(keys.claudeMd(projectId), LIBRARY_CLAUDE_MD),
-      s3Service.putObjectText(keys.checklistMd(projectId), renderChecklistMarkdown()),
-      s3Service.putObjectText(keys.logMd(projectId), `# Ingestion log\n\n- ${nowIso()} — library seeded (${CHECKLIST_ITEMS.length} items)\n`),
+      s3Service.putObjectText(keys.categoriesMd(projectId), renderCategoriesMarkdown()),
+      s3Service.putObjectText(keys.logMd(projectId), `# Ingestion log\n\n- ${nowIso()} — library seeded (${RISK_CATEGORIES.length} risk categories)\n`),
       s3Service.putObjectText(keys.indexMd(projectId), renderMasterIndex(projectName, statuses)),
     ];
-    for (const ws of WORKSTREAMS) {
-      writes.push(s3Service.putObjectText(keys.workstreamIndex(projectId, ws.id), renderWorkstreamIndex(ws.id, statuses)));
-    }
-    for (const item of CHECKLIST_ITEMS) {
-      writes.push(s3Service.putObjectText(keys.itemIndex(projectId, item.workstreamId, item.id), renderItemIndex(item, 'OPEN', [])));
+    for (const cat of RISK_CATEGORIES) {
+      writes.push(s3Service.putObjectText(keys.categoryIndex(projectId, cat.id), renderCategoryIndex(cat, 'OPEN', [])));
     }
     await Promise.all(writes);
 
@@ -421,7 +396,7 @@ export const libraryWriterService = {
     });
 
     // eslint-disable-next-line no-console
-    console.log(`[library] seeded ${CHECKLIST_ITEMS.length} checklist items for project ${projectId}`);
+    console.log(`[library] seeded ${RISK_CATEGORIES.length} risk categories for project ${projectId}`);
   },
 
   /** Stage 7: file one document's extraction into the library. */
@@ -475,8 +450,7 @@ export const libraryWriterService = {
           id: item.id,
           projectId,
           type: 'ENTITY',
-          workstreamId: CROSS_CUTTING_WS,
-          itemId: ENTITY_ITEM,
+          riskCategoryId: CROSS_CUTTING,
           slug,
           title: e.text,
           s3Key: keys.entity(projectId, folder, slug),
@@ -493,11 +467,11 @@ export const libraryWriterService = {
     const embedInputs: Array<{ nodeId: string; text: string }> = [];
     const edgeRows: Prisma.LibraryEdgeCreateManyInput[] = [];
     const provisionWrites: Promise<void>[] = [];
-    const touchedItems = new Set<string>();
+    const touchedCategories = new Set<string>();
 
     (extraction.clauses ?? []).forEach((clause, i) => {
-      const item = itemForClauseType(clause.clauseType);
-      touchedItems.add(item.id);
+      const category = categoryForClauseType(clause.clauseType);
+      touchedCategories.add(category.id);
       const provId = randomUUID();
       const slug = `prov-${documentId.slice(0, 8)}-${i}-${slugify(clause.clauseType)}`;
       const title = clause.title || `${clause.clauseType} — ${documentName}`;
@@ -508,11 +482,10 @@ export const libraryWriterService = {
         id: provId,
         projectId,
         type: 'PROVISION',
-        workstreamId: item.workstreamId,
-        itemId: item.id,
+        riskCategoryId: category.id,
         slug,
         title,
-        s3Key: keys.provision(projectId, item.workstreamId, item.id, slug),
+        s3Key: keys.provision(projectId, category.id, slug),
         clauseType: clause.clauseType.toUpperCase(),
         riskLevel: risk,
         confidence: conf,
@@ -527,8 +500,8 @@ export const libraryWriterService = {
         text: `${clause.clauseType} ${title} ${clause.content || ''}`.slice(0, 2000),
       });
 
-      // provision → item, provision → source, provision → entities
-      edgeRows.push({ id: randomUUID(), projectId, fromNodeId: provId, toNodeId: `item::${item.id}`, edgeType: 'EVIDENCES' });
+      // provision → category, provision → source, provision → entities
+      edgeRows.push({ id: randomUUID(), projectId, fromNodeId: provId, toNodeId: `cat::${category.id}`, edgeType: 'EVIDENCES' });
       edgeRows.push({ id: randomUUID(), projectId, fromNodeId: provId, toNodeId: sourceId, edgeType: 'SOURCED_FROM' });
       for (const ent of entityLinks.values()) {
         edgeRows.push({ id: randomUUID(), projectId, fromNodeId: provId, toNodeId: ent.id, edgeType: 'MENTIONS' });
@@ -536,10 +509,10 @@ export const libraryWriterService = {
 
       provisionWrites.push(
         s3Service.putObjectText(
-          keys.provision(projectId, item.workstreamId, item.id, slug),
+          keys.provision(projectId, category.id, slug),
           renderProvisionNode({
             id: provId,
-            item,
+            category,
             clauseType: clause.clauseType.toUpperCase(),
             title,
             summary: (clause.content || '').slice(0, 280),
@@ -560,8 +533,7 @@ export const libraryWriterService = {
       id: sourceId,
       projectId,
       type: 'SOURCE',
-      workstreamId: CROSS_CUTTING_WS,
-      itemId: SOURCE_ITEM,
+      riskCategoryId: CROSS_CUTTING,
       slug: `src-${sourceSlug}`,
       title: documentName,
       s3Key: keys.source(projectId, sourceSlug),
@@ -569,16 +541,16 @@ export const libraryWriterService = {
       riskLevel: extraction.riskLevel ?? null,
     });
 
-    // Resolve `item::<id>` placeholders to the real CHECKLIST_ITEM node ids.
-    const itemNodes = await prisma.libraryNode.findMany({
-      where: { projectId, type: 'CHECKLIST_ITEM', itemId: { in: [...touchedItems] } },
-      select: { id: true, itemId: true },
+    // Resolve `cat::<id>` placeholders to the real RISK_CATEGORY node ids.
+    const categoryNodes = await prisma.libraryNode.findMany({
+      where: { projectId, type: 'RISK_CATEGORY', riskCategoryId: { in: [...touchedCategories] } },
+      select: { id: true, riskCategoryId: true },
     });
-    const itemNodeId = new Map(itemNodes.map((n) => [n.itemId, n.id]));
+    const categoryNodeId = new Map(categoryNodes.map((n) => [n.riskCategoryId, n.id]));
     const resolvedEdges = edgeRows
       .map((e) =>
-        typeof e.toNodeId === 'string' && e.toNodeId.startsWith('item::')
-          ? { ...e, toNodeId: itemNodeId.get(e.toNodeId.slice(6)) }
+        typeof e.toNodeId === 'string' && e.toNodeId.startsWith('cat::')
+          ? { ...e, toNodeId: categoryNodeId.get(e.toNodeId.slice(5)) }
           : e
       )
       .filter((e): e is Prisma.LibraryEdgeCreateManyInput => Boolean(e.toNodeId));
@@ -628,57 +600,51 @@ export const libraryWriterService = {
     );
     await Promise.all(provisionWrites);
 
-    // --- Recompute status + refresh touched item indexes ---
-    const statuses = await this.refreshItemIndexes(projectId, [...touchedItems]);
+    // --- Recompute status + refresh touched category indexes ---
+    const statuses = await this.refreshCategoryIndexes(projectId, [...touchedCategories]);
 
-    // --- Refresh touched workstream indexes + master index ---
-    const allStatuses = await this.loadAllItemStatuses(projectId);
+    // --- Refresh the master index ---
+    const allStatuses = await this.loadAllCategoryStatuses(projectId);
     for (const [k, v] of statuses) allStatuses.set(k, v);
-    const touchedWs = new Set([...touchedItems].map((id) => itemForClauseTypeWorkstream(id)));
-    await Promise.all(
-      [...touchedWs].map((wsId) =>
-        s3Service.putObjectText(keys.workstreamIndex(projectId, wsId), renderWorkstreamIndex(wsId, allStatuses))
-      )
-    );
     await s3Service.putObjectText(keys.indexMd(projectId), renderMasterIndex(args.projectName, allStatuses));
     await updateManifest(projectId, { index: { s3Key: keys.indexMd(projectId), updatedAt: nowIso() } });
-    await appendLog(projectId, `ingested "${documentName}" — ${extraction.clauses?.length ?? 0} provisions across ${touchedItems.size} items`);
+    await appendLog(projectId, `ingested "${documentName}" — ${extraction.clauses?.length ?? 0} provisions across ${touchedCategories.size} risk categories`);
 
     // eslint-disable-next-line no-console
-    console.log(`[library] filed "${documentName}" → ${extraction.clauses?.length ?? 0} provisions, ${touchedItems.size} items touched`);
+    console.log(`[library] filed "${documentName}" → ${extraction.clauses?.length ?? 0} provisions, ${touchedCategories.size} categories touched`);
   },
 
-  /** Recompute + rewrite `_index.md` for the given items from their evidence. */
-  async refreshItemIndexes(
+  /** Recompute + rewrite `_index.md` for the given categories from their evidence. */
+  async refreshCategoryIndexes(
     projectId: string,
-    itemIds: string[]
+    categoryIds: string[]
   ): Promise<Map<string, CoverageStatus>> {
     // Same authoritative, playbook-aware status as reconcileLibrary — one source
     // of truth, so the file-time (provisional) status matches the reconciled one.
     const playbook = await playbookService.get(projectId);
     const highPriority = highPriorityClauseTypesFor(playbook);
     const result = new Map<string, CoverageStatus>();
-    for (const itemId of itemIds) {
-      const item = CHECKLIST_ITEMS.find((i) => i.id === itemId);
-      if (!item) continue;
+    for (const categoryId of categoryIds) {
+      const category = getRiskCategory(categoryId);
+      if (!category) continue;
       const evidence = await prisma.libraryNode.findMany({
-        where: { projectId, itemId, type: { in: ['PROVISION', 'RISK', 'OBLIGATION'] } },
+        where: { projectId, riskCategoryId: categoryId, type: { in: ['PROVISION', 'RISK', 'OBLIGATION'] } },
         select: { title: true, slug: true, pageNumber: true, riskLevel: true, confidence: true, clauseType: true },
         orderBy: { createdAt: 'asc' },
       });
-      const status = computeItemStatus(
+      const status = computeCategoryStatus(
         evidence.map((e) => ({ riskLevel: e.riskLevel, confidence: e.confidence, clauseType: e.clauseType })),
         highPriority
       );
-      result.set(itemId, status);
+      result.set(categoryId, status);
       await prisma.libraryNode.updateMany({
-        where: { projectId, type: 'CHECKLIST_ITEM', itemId },
+        where: { projectId, type: 'RISK_CATEGORY', riskCategoryId: categoryId },
         data: { status },
       });
       await s3Service.putObjectText(
-        keys.itemIndex(projectId, item.workstreamId, itemId),
-        renderItemIndex(
-          item,
+        keys.categoryIndex(projectId, categoryId),
+        renderCategoryIndex(
+          category,
           status,
           evidence.map((e) => ({ title: e.title, slug: e.slug, page: e.pageNumber, risk: e.riskLevel }))
         )
@@ -687,18 +653,18 @@ export const libraryWriterService = {
     return result;
   },
 
-  async loadAllItemStatuses(projectId: string): Promise<Map<string, CoverageStatus>> {
+  async loadAllCategoryStatuses(projectId: string): Promise<Map<string, CoverageStatus>> {
     const rows = await prisma.libraryNode.findMany({
-      where: { projectId, type: 'CHECKLIST_ITEM' },
-      select: { itemId: true, status: true },
+      where: { projectId, type: 'RISK_CATEGORY' },
+      select: { riskCategoryId: true, status: true },
     });
-    return new Map(rows.map((r) => [r.itemId, (r.status ?? 'OPEN') as CoverageStatus]));
+    return new Map(rows.map((r) => [r.riskCategoryId, (r.status ?? 'OPEN') as CoverageStatus]));
   },
 
   /**
    * Bounded library digest for the deal brief (Phase C map-reduce). The library
    * is the deterministic "map" of the corpus; this produces a compact, size-
-   * bounded synthesis input (coverage + top evidence per workstream + entities +
+   * bounded synthesis input (coverage + top evidence per category + entities +
    * anomalies) so the brief "reduce" is independent of document count — instead of
    * stuffing every fact sheet. Folder-scoped via allowedDocIds (null = full).
    */
@@ -707,14 +673,14 @@ export const libraryWriterService = {
       allowedDocIds === null || (docId != null && allowedDocIds.has(docId));
     const RANK: Record<string, number> = { HIGH: 2, MEDIUM: 1, LOW: 0 };
 
-    const [items, provisions, entities, anomalyDocs] = await Promise.all([
+    const [categoryNodes, provisions, entities, anomalyDocs] = await Promise.all([
       prisma.libraryNode.findMany({
-        where: { projectId, type: 'CHECKLIST_ITEM' },
-        select: { itemId: true, workstreamId: true, status: true, title: true },
+        where: { projectId, type: 'RISK_CATEGORY' },
+        select: { riskCategoryId: true, status: true, title: true },
       }),
       prisma.libraryNode.findMany({
         where: { projectId, type: 'PROVISION' },
-        select: { workstreamId: true, title: true, clauseType: true, riskLevel: true, confidence: true, pageNumber: true, sourceDocumentId: true },
+        select: { riskCategoryId: true, title: true, clauseType: true, riskLevel: true, confidence: true, pageNumber: true, sourceDocumentId: true },
       }),
       prisma.masterEntity.findMany({ where: { projectId }, select: { entityType: true, canonicalName: true }, take: 40 }),
       prisma.document.findMany({ where: { projectId, NOT: { anomalyFlags: { equals: Prisma.JsonNull } } }, select: { name: true, anomalyFlags: true }, take: 40 }),
@@ -726,25 +692,28 @@ export const libraryWriterService = {
       (await prisma.document.findMany({ where: { id: { in: docIds } }, select: { id: true, name: true } })).map((d) => [d.id, d.name])
     );
 
-    const statusByItem = new Map(items.map((i) => [i.itemId, i.status ?? 'OPEN']));
-    const provByWs = new Map<string, typeof provInScope>();
+    const statusByCategory = new Map(categoryNodes.map((c) => [c.riskCategoryId, c.status ?? 'OPEN']));
+    const provByCategory = new Map<string, typeof provInScope>();
     for (const p of provInScope) {
-      const arr = provByWs.get(p.workstreamId) ?? [];
+      const arr = provByCategory.get(p.riskCategoryId) ?? [];
       arr.push(p);
-      provByWs.set(p.workstreamId, arr);
+      provByCategory.set(p.riskCategoryId, arr);
     }
 
     const lines: string[] = ['# Deal library digest', ''];
-    for (const ws of WORKSTREAMS) {
-      if (ws.id === '99-to-triage') continue;
-      const wsItems = itemsForWorkstream(ws.id);
-      const open = wsItems.filter((i) => (statusByItem.get(i.id) ?? 'OPEN') === 'OPEN').length;
-      const flagged = wsItems.filter((i) => statusByItem.get(i.id) === 'FLAGGED');
-      lines.push(`## ${ws.title} — ${open}/${wsItems.length} open${flagged.length ? `, ${flagged.length} flagged` : ''}`);
-      if (flagged.length) lines.push(`Flagged: ${flagged.map((i) => i.title).join(', ')}`);
-      const top = (provByWs.get(ws.id) ?? [])
+    for (const cat of RISK_CATEGORIES) {
+      const status = statusByCategory.get(cat.id) ?? 'OPEN';
+      const inCat = provByCategory.get(cat.id) ?? [];
+      // A fact-fed category with nothing in it is a supplemental request, not a
+      // finding — say so once rather than printing an empty section per category.
+      if (status === 'OPEN' && inCat.length === 0) {
+        lines.push(`## ${cat.title} — OPEN (no evidence in the data room)`, '');
+        continue;
+      }
+      lines.push(`## ${cat.title} — ${status}`);
+      const top = inCat
         .sort((a, b) => (RANK[b.riskLevel ?? 'LOW'] ?? 0) - (RANK[a.riskLevel ?? 'LOW'] ?? 0) || (b.confidence ?? 0) - (a.confidence ?? 0))
-        .slice(0, 5);
+        .slice(0, 6);
       for (const p of top) {
         const src = p.sourceDocumentId ? docName.get(p.sourceDocumentId) ?? '?' : '?';
         lines.push(`- ${p.title} [${p.clauseType ?? ''}${p.riskLevel ? ` · ${p.riskLevel}` : ''}] ([${src}${p.pageNumber ? ` p.${p.pageNumber}` : ''}])`);
@@ -770,7 +739,7 @@ export const libraryWriterService = {
   /**
    * Phase 2 — cross-document reconciliation of the library. Deterministic, no
    * LLM. Runs in the debounced reconciliation pass once a batch settles:
-   *   1. Recompute every checklist item's coverage status authoritatively
+   *   1. Recompute every risk category's coverage status authoritatively
    *      (playbook-aware + THIN), from all evidence across all documents.
    *   2. Rebuild PEER_OF edges linking same-clause-type provisions across docs.
    *   3. Rebuild the index/log spine so counts are globally consistent.
@@ -788,68 +757,70 @@ export const libraryWriterService = {
         : {};
     const lastAt = !full && manifest.lastReconcileAt ? new Date(manifest.lastReconcileAt as string) : null;
 
-    let dirtyItemIds: Set<string> | null = null; // null = recompute all
+    let dirtyCategoryIds: Set<string> | null = null; // null = recompute all
     let dirtyClauseTypes: Set<string> | undefined; // undefined = rebuild all peer links
     if (lastAt) {
       const newProvs = await prisma.libraryNode.findMany({
         where: { projectId, type: { in: ['PROVISION', 'RISK', 'OBLIGATION'] }, createdAt: { gt: lastAt } },
-        select: { itemId: true, clauseType: true },
+        select: { riskCategoryId: true, clauseType: true },
       });
       if (newProvs.length === 0) return false; // nothing new since last reconcile — skip the O(corpus) work
-      dirtyItemIds = new Set(newProvs.map((p) => p.itemId));
+      dirtyCategoryIds = new Set(newProvs.map((p) => p.riskCategoryId));
       dirtyClauseTypes = new Set(newProvs.map((p) => (p.clauseType ?? '').toUpperCase()).filter(Boolean));
     }
 
     const playbook = await playbookService.get(projectId);
     const highPriority = highPriorityClauseTypesFor(playbook);
 
-    const items = await prisma.libraryNode.findMany({
-      where: { projectId, type: 'CHECKLIST_ITEM' },
-      select: { itemId: true, workstreamId: true, status: true },
+    const categoryNodes = await prisma.libraryNode.findMany({
+      where: { projectId, type: 'RISK_CATEGORY' },
+      select: { riskCategoryId: true, status: true },
     });
-    const itemsToRecompute = dirtyItemIds ? items.filter((i) => dirtyItemIds!.has(i.itemId)) : items;
-    const recomputeIds = itemsToRecompute.map((i) => i.itemId);
+    const toRecompute = dirtyCategoryIds
+      ? categoryNodes.filter((c) => dirtyCategoryIds!.has(c.riskCategoryId))
+      : categoryNodes;
+    const recomputeIds = toRecompute.map((c) => c.riskCategoryId);
 
-    // Load evidence only for the items being recomputed (incremental → O(dirty)).
+    // Load evidence only for the categories being recomputed (incremental → O(dirty)).
     const evidence = recomputeIds.length
       ? await prisma.libraryNode.findMany({
-          where: { projectId, type: { in: ['PROVISION', 'RISK', 'OBLIGATION'] }, itemId: { in: recomputeIds } },
-          select: { itemId: true, title: true, slug: true, pageNumber: true, riskLevel: true, confidence: true, clauseType: true },
+          where: { projectId, type: { in: ['PROVISION', 'RISK', 'OBLIGATION'] }, riskCategoryId: { in: recomputeIds } },
+          select: { riskCategoryId: true, title: true, slug: true, pageNumber: true, riskLevel: true, confidence: true, clauseType: true },
           orderBy: { createdAt: 'asc' },
         })
       : [];
-    const evidenceByItem = new Map<string, typeof evidence>();
+    const evidenceByCategory = new Map<string, typeof evidence>();
     for (const e of evidence) {
-      const arr = evidenceByItem.get(e.itemId) ?? [];
+      const arr = evidenceByCategory.get(e.riskCategoryId) ?? [];
       arr.push(e);
-      evidenceByItem.set(e.itemId, arr);
+      evidenceByCategory.set(e.riskCategoryId, arr);
     }
 
-    // statuses map: stored for all items, overridden for the recomputed ones.
+    // statuses map: stored for all categories, overridden for the recomputed ones.
     const statuses = new Map<string, CoverageStatus>();
-    for (const i of items) statuses.set(i.itemId, (i.status ?? 'OPEN') as CoverageStatus);
+    for (const c of categoryNodes) statuses.set(c.riskCategoryId, (c.status ?? 'OPEN') as CoverageStatus);
 
     const indexWrites: Promise<void>[] = [];
-    for (const itemNode of itemsToRecompute) {
-      const item = CHECKLIST_ITEMS.find((i) => i.id === itemNode.itemId);
-      if (!item) continue;
-      const ev = evidenceByItem.get(itemNode.itemId) ?? [];
-      const status = computeItemStatus(
+    for (const node of toRecompute) {
+      const category = getRiskCategory(node.riskCategoryId);
+      if (!category) continue;
+      const ev = evidenceByCategory.get(node.riskCategoryId) ?? [];
+      const status = computeCategoryStatus(
         ev.map((e) => ({ riskLevel: e.riskLevel, confidence: e.confidence, clauseType: e.clauseType })),
         highPriority
       );
-      statuses.set(itemNode.itemId, status);
-      if (status !== (itemNode.status ?? 'OPEN')) {
+      statuses.set(node.riskCategoryId, status);
+      if (status !== (node.status ?? 'OPEN')) {
         await prisma.libraryNode.updateMany({
-          where: { projectId, type: 'CHECKLIST_ITEM', itemId: itemNode.itemId },
+          where: { projectId, type: 'RISK_CATEGORY', riskCategoryId: node.riskCategoryId },
           data: { status },
         });
       }
-      if (status !== 'OPEN' || (itemNode.status ?? 'OPEN') !== 'OPEN') {
+      if (status !== 'OPEN' || (node.status ?? 'OPEN') !== 'OPEN') {
         indexWrites.push(
           s3Service.putObjectText(
-            keys.itemIndex(projectId, item.workstreamId, item.id),
-            renderItemIndex(item, status, ev.map((e) => ({ title: e.title, slug: e.slug, page: e.pageNumber, risk: e.riskLevel })))
+            keys.categoryIndex(projectId, category.id),
+            renderCategoryIndex(category, status, ev.map((e) => ({ title: e.title, slug: e.slug, page: e.pageNumber, risk: e.riskLevel })))
           )
         );
       }
@@ -859,19 +830,16 @@ export const libraryWriterService = {
     await this.rebuildPeerLinks(projectId, dirtyClauseTypes);
     await this.pruneOrphanEntities(projectId);
 
-    // Workstream + master indexes (bounded — always rebuilt from the full statuses map).
-    for (const ws of WORKSTREAMS) {
-      indexWrites.push(s3Service.putObjectText(keys.workstreamIndex(projectId, ws.id), renderWorkstreamIndex(ws.id, statuses)));
-    }
+    // Master index (bounded — always rebuilt from the full statuses map).
     indexWrites.push(s3Service.putObjectText(keys.indexMd(projectId), renderMasterIndex(projectName, statuses)));
     await Promise.all(indexWrites);
     await updateManifest(projectId, { index: { s3Key: keys.indexMd(projectId), updatedAt: nowIso() }, lastReconcileAt: nowIso() });
 
     const flaggedCount = [...statuses.values()].filter((s) => s === 'FLAGGED').length;
     const openCount = [...statuses.values()].filter((s) => s === 'OPEN').length;
-    await appendLog(projectId, `reconciled (${full ? 'full' : dirtyItemIds ? `incremental: ${recomputeIds.length} items` : 'first'}) — ${openCount} open, ${flaggedCount} flagged`);
+    await appendLog(projectId, `reconciled (${full ? 'full' : dirtyCategoryIds ? `incremental: ${recomputeIds.length} categories` : 'first'}) — ${openCount} open, ${flaggedCount} flagged`);
     // eslint-disable-next-line no-console
-    console.log(`[library] reconciled project ${projectId} (${full ? 'full' : dirtyItemIds ? 'incremental' : 'first'}): ${openCount} open, ${flaggedCount} flagged`);
+    console.log(`[library] reconciled project ${projectId} (${full ? 'full' : dirtyCategoryIds ? 'incremental' : 'first'}): ${openCount} open, ${flaggedCount} flagged`);
     return true;
   },
 
@@ -955,8 +923,8 @@ export const libraryWriterService = {
 
   /**
    * Remove a document's evidence from the library (called on document delete).
-   * Deletes its SOURCE + evidence nodes (edges cascade), then reconciles so item
-   * coverage, peer links, indexes, and orphaned entities are brought current.
+   * Deletes its SOURCE + evidence nodes (edges cascade), then reconciles so
+   * category coverage, peer links, indexes, and orphaned entities are current.
    * Best-effort and self-contained (no reconciliation.service import → no cycle).
    */
   async removeDocument(projectId: string, documentId: string): Promise<void> {
@@ -977,8 +945,3 @@ export const libraryWriterService = {
     await this.reconcileLibrary(projectId, project?.name ?? 'Deal', { full: true });
   },
 };
-
-/** Workstream id for a checklist item id (helper for index refresh). */
-function itemForClauseTypeWorkstream(itemId: string): string {
-  return CHECKLIST_ITEMS.find((i) => i.id === itemId)?.workstreamId ?? '99-to-triage';
-}

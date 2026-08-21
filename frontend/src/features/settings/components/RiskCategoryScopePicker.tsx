@@ -3,29 +3,29 @@ import { useEffect, useMemo, useState } from 'react';
 import { libraryService } from '../../../api/services/library.service';
 import type { TocWorkstream } from '../../../api/services/library.service';
 
-interface WorkstreamScopePickerProps {
+interface RiskCategoryScopePickerProps {
   projectId: string;
   selectedWorkstreamIds: string[];
-  onChange: (workstreamIds: string[]) => void;
+  onChange: (riskCategoryIds: string[]) => void;
   disabled?: boolean;
 }
 
 /**
- * Grant a member access to diligence workstreams.
+ * Grant a member access to diligence risk categories.
  *
- * Scoping runs on workstreams rather than folders because that is the axis a
+ * Scoping runs on risk categories rather than folders because that is the axis a
  * deal is actually divided along. A document supplies evidence to roughly eight
- * workstreams, so these grants overlap heavily — granting IP and Liability to
+ * risk categories, so these grants overlap heavily — granting IP and Liability to
  * two different specialists gives them both most of the same contracts, each
  * seeing the clauses that bear on their own questions.
  */
-export function WorkstreamScopePicker({
+export function RiskCategoryScopePicker({
   projectId,
   selectedWorkstreamIds,
   onChange,
   disabled = false,
-}: WorkstreamScopePickerProps) {
-  const [workstreams, setWorkstreams] = useState<TocWorkstream[]>([]);
+}: RiskCategoryScopePickerProps) {
+  const [riskCategories, setWorkstreams] = useState<TocWorkstream[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,9 +41,9 @@ export function WorkstreamScopePicker({
       try {
         setLoading(true);
         const toc = await libraryService.getToc(projectId);
-        if (!cancelled) setWorkstreams(toc.workstreams);
+        if (!cancelled) setWorkstreams(toc.riskCategories);
       } catch {
-        if (!cancelled) setError('Could not load the deal checklist');
+        if (!cancelled) setError('Could not load the deal.s risk categories');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -63,16 +63,16 @@ export function WorkstreamScopePicker({
     return (
       <div className="folder-scope-empty">
         <Layers size={16} />
-        <span>Loading workstreams…</span>
+        <span>Loading risk categories…</span>
       </div>
     );
   }
 
-  if (error || workstreams.length === 0) {
+  if (error || riskCategories.length === 0) {
     return (
       <div className="folder-scope-empty">
         <Layers size={16} />
-        <span>{error ?? 'The checklist populates as documents are analyzed.'}</span>
+        <span>{error ?? 'Risk categories populate as documents are analyzed.'}</span>
       </div>
     );
   }
@@ -87,16 +87,16 @@ export function WorkstreamScopePicker({
             {anyGranted ? (
               <>
                 Access granted to <strong>{selectedWorkstreamIds.length}</strong>{' '}
-                {selectedWorkstreamIds.length === 1 ? 'workstream' : 'workstreams'}
+                {selectedWorkstreamIds.length === 1 ? 'riskCategory' : 'riskCategories'}
               </>
             ) : (
-              <>No workstreams granted — user will see nothing</>
+              <>No risk categories granted — user will see nothing</>
             )}
           </span>
           <span className="folder-scope-hint">
             {anyGranted
-              ? 'This user sees every document with evidence in the checked workstreams, and only the boards fully inside them.'
-              : 'Pick at least one workstream to grant access. Specialists only see what they are granted.'}
+              ? 'This user sees every document with evidence in the checked risk categories, and only the boards fully inside them.'
+              : 'Pick at least one risk category to grant access. Specialists only see what they are granted.'}
           </span>
         </div>
         {anyGranted && (
@@ -112,7 +112,7 @@ export function WorkstreamScopePicker({
       </div>
 
       <div className="folder-scope-tree">
-        {workstreams.map((ws) => {
+        {riskCategories.map((ws) => {
           const checked = selectedSet.has(ws.id);
           return (
             <label

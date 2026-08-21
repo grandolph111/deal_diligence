@@ -548,7 +548,7 @@ export const extractionBatchService = {
 
       // Library filing, entity-graph rebuild and verification. Without these a
       // batched document lands COMPLETE but never reaches the library, so it is
-      // invisible to chat, the deal map and the workstream tree.
+      // invisible to chat, the deal map and the risk category tree.
       await extractionService.afterPersist(
         document.projectId,
         documentId,

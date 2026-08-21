@@ -16,7 +16,7 @@ interface LibraryFindingsProps {
   hasRun: boolean;
   onRun: () => void;
   onClose: () => void;
-  onFindingClick: (itemId: string) => void;
+  onFindingClick: (riskCategoryId: string) => void;
 }
 
 export function LibraryFindings({
@@ -71,12 +71,12 @@ export function LibraryFindings({
         )}
         {!loading &&
           findings.map((f, i) => {
-            const clickable = !!f.itemId;
+            const clickable = !!f.riskCategoryId;
             return (
               <div
                 key={i}
                 className={`lib-finding${clickable ? ' clickable' : ''}`}
-                onClick={clickable ? () => onFindingClick(f.itemId!) : undefined}
+                onClick={clickable ? () => onFindingClick(f.riskCategoryId!) : undefined}
                 role={clickable ? 'button' : undefined}
                 tabIndex={clickable ? 0 : undefined}
               >

@@ -1,9 +1,9 @@
 /**
  * Kanban board service. A board is a view of ONE specialist's slice of the
- * deal: it is created for a subject-matter expert, and its workstream scope is
+ * deal: it is created for a subject-matter expert, and its risk category scope is
  * derived from that member's grants rather than chosen separately.
  *
- * Deriving instead of storing is the point. An admin re-grants workstreams in
+ * Deriving instead of storing is the point. An admin re-grants risk categories in
  * Admin → Team and every board that SME owns re-scopes on the next read —
  * document pickers, task attachments, visibility, all of it. There is no
  * snapshot to drift out of sync with the permission that actually governs.
@@ -13,7 +13,7 @@
  *      membership) → every board in the project, assigned or not.
  *   2. Board with an SME → visible only to that SME.
  *   3. Board with no SME (the auto-generated "All Documents" default, or one
- *      whose SME left) → the legacy rule: visible if every stored workstream
+ *      whose SME left) → the legacy rule: visible if every stored risk category
  *      on it is inside the caller's grants.
  *
  * Rule 2 is deliberately stricter than rule 3. Two IP lawyers holding the same
@@ -27,7 +27,7 @@ import { prisma } from '../config/database';
 import { ApiError } from '../utils/ApiError';
 import { computeScopeKey, SCOPE_FULL } from '../utils/scope-key';
 import { documentsService } from '../modules/documents/documents.service';
-import { WORKSTREAMS } from '../integrations/library/checklist';
+import { RISK_CATEGORIES } from '../integrations/library/risk-categories';
 import type { ProjectMember } from '@prisma/client';
 
 const DEFAULT_BOARD_NAME = 'All Documents';
@@ -37,8 +37,8 @@ export interface CreateBoardInput {
   description?: string | null;
   /** The SME this board belongs to. Their grants become the board's scope. */
   smeUserId?: string;
-  /** @deprecated superseded by smeUserId — a board no longer picks workstreams directly. */
-  workstreamIds?: string[];
+  /** @deprecated superseded by smeUserId — a board no longer picks risk categories directly. */
+  riskCategoryIds?: string[];
   /** @deprecated dormant — folder scoping is retired from the UI. */
   folderIds?: string[];
 }
@@ -49,19 +49,19 @@ export interface UpdateBoardInput {
   /** Reassign the board to a different SME. */
   smeUserId?: string | null;
   /** @deprecated superseded by smeUserId. */
-  workstreamIds?: string[];
+  riskCategoryIds?: string[];
   /** @deprecated dormant. */
   folderIds?: string[];
 }
 
-const VALID_WORKSTREAM_IDS = new Set(WORKSTREAMS.map((w) => w.id));
+const VALID_WORKSTREAM_IDS = new Set(RISK_CATEGORIES.map((w) => w.id));
 
 /** Reject unknown slugs early — the checklist is static config, so there is no FK to catch typos. */
-const assertValidWorkstreams = (ids: string[]): string[] => {
+const assertValidRiskCategories = (ids: string[]): string[] => {
   const unique = [...new Set(ids)];
   const unknown = unique.filter((id) => !VALID_WORKSTREAM_IDS.has(id));
   if (unknown.length > 0) {
-    throw ApiError.badRequest(`Unknown workstream(s): ${unknown.join(', ')}`);
+    throw ApiError.badRequest(`Unknown risk category(s): ${unknown.join(', ')}`);
   }
   return unique;
 };
@@ -69,10 +69,10 @@ const assertValidWorkstreams = (ids: string[]): string[] => {
 const isFullAccess = (member: ProjectMember): boolean =>
   member.role === 'OWNER' || member.role === 'ADMIN';
 
-/** The workstream slugs a member has been granted on this project. */
-const grantedWorkstreamIds = (member: ProjectMember): string[] => {
+/** The risk category slugs a member has been granted on this project. */
+const grantedRiskCategoryIds = (member: ProjectMember): string[] => {
   const perms = (member.permissions ?? {}) as Record<string, unknown>;
-  const granted = perms.restrictedWorkstreams as string[] | undefined;
+  const granted = perms.restrictedRiskCategories as string[] | undefined;
   return Array.isArray(granted) ? [...new Set(granted)] : [];
 };
 
@@ -94,16 +94,16 @@ const resolveAccessibleFolderIds = async (
  *
  * This used to key off `computeScopeKey`, which reports full access whenever a
  * member holds no *folder* restrictions. Since folders were retired, that was
- * true of every member, so the workstream rule below never actually ran and any
+ * true of every member, so the risk category rule below never actually ran and any
  * scoped board was visible project-wide. Failing closed here matches
  * scope.service, which already returns NO_ACCESS for a member with no grants.
  *
  * A member with no grants still sees unscoped boards — `[].every()` is true —
  * which is what keeps the "All Documents" default board reachable.
  */
-const resolveAccessibleWorkstreamIds = (member: ProjectMember): string[] | null => {
+const resolveAccessibleRiskCategoryIds = (member: ProjectMember): string[] | null => {
   if (isFullAccess(member)) return null;
-  return grantedWorkstreamIds(member);
+  return grantedRiskCategoryIds(member);
 };
 
 /**
@@ -121,9 +121,9 @@ const boardVisibleTo = (
 };
 
 /** Hydrate a stored slug into the {id,title} shape the UI renders. */
-const describeWorkstream = (workstreamId: string): { id: string; title: string } => ({
-  id: workstreamId,
-  title: WORKSTREAMS.find((w) => w.id === workstreamId)?.title ?? workstreamId,
+const describeRiskCategory = (riskCategoryId: string): { id: string; title: string } => ({
+  id: riskCategoryId,
+  title: RISK_CATEGORIES.find((w) => w.id === riskCategoryId)?.title ?? riskCategoryId,
 });
 
 /** Shape the UI needs to render "whose board is this". */
@@ -131,21 +131,21 @@ type SmeSummary = { id: string; name: string | null; email: string } | null;
 
 interface BoardScopeRow {
   smeUserId: string | null;
-  workstreams: { workstreamId: string }[];
+  riskCategories: { riskCategoryId: string }[];
 }
 
 /**
- * The workstreams a board actually covers. Derived from the SME's live grants
+ * The risk categories a board actually covers. Derived from the SME's live grants
  * when the board has one; the stored rows are only a fallback for unassigned
  * boards. An SME whose grants were revoked yields [] — the board goes empty
  * rather than silently widening to the whole deal.
  */
-const resolveBoardWorkstreamIds = async (
+const resolveBoardRiskCategoryIds = async (
   projectId: string,
   board: BoardScopeRow
 ): Promise<string[]> => {
   if (!board.smeUserId) {
-    return board.workstreams.map((w) => w.workstreamId);
+    return board.riskCategories.map((w) => w.riskCategoryId);
   }
   const sme = await prisma.projectMember.findUnique({
     where: { projectId_userId: { projectId, userId: board.smeUserId } },
@@ -154,7 +154,7 @@ const resolveBoardWorkstreamIds = async (
   // An SME promoted to ADMIN holds no explicit grants but sees everything, so
   // their board covers the whole deal — same as the unscoped default board.
   if (isFullAccess(sme)) return [];
-  return grantedWorkstreamIds(sme);
+  return grantedRiskCategoryIds(sme);
 };
 
 export const boardsService = {
@@ -250,7 +250,7 @@ export const boardsService = {
 
   /**
    * Members eligible to be a board's SME: everyone on the project who holds
-   * workstream grants. OWNER/ADMIN are excluded — they already see every board,
+   * risk category grants. OWNER/ADMIN are excluded — they already see every board,
    * so assigning one as an SME would carve out nothing.
    */
   async listEligibleSmes(projectId: string) {
@@ -263,23 +263,23 @@ export const boardsService = {
     });
 
     return members.map((m) => {
-      const workstreamIds = grantedWorkstreamIds(m);
+      const riskCategoryIds = grantedRiskCategoryIds(m);
       return {
         userId: m.userId,
         name: m.user.name,
         email: m.user.email,
         avatarUrl: m.user.avatarUrl,
         role: m.role,
-        workstreams: workstreamIds.map(describeWorkstream),
+        riskCategories: riskCategoryIds.map(describeRiskCategory),
       };
     });
   },
 
   async listForMember(projectId: string, member: ProjectMember) {
     const fullAccess = isFullAccess(member);
-    const [accessibleFolders, accessibleWorkstreams] = [
+    const [accessibleFolders, accessibleRiskCategories] = [
       await resolveAccessibleFolderIds(projectId, member),
-      resolveAccessibleWorkstreamIds(member),
+      resolveAccessibleRiskCategoryIds(member),
     ];
     const boards = await prisma.kanbanBoard.findMany({
       where: {
@@ -293,7 +293,7 @@ export const boardsService = {
         folders: {
           include: { folder: { select: { id: true, name: true } } },
         },
-        workstreams: { select: { workstreamId: true } },
+        riskCategories: { select: { riskCategoryId: true } },
         sme: { select: { id: true, name: true, email: true } },
         _count: { select: { tasks: true } },
       },
@@ -310,9 +310,9 @@ export const boardsService = {
         updatedAt: b.updatedAt,
         sme: b.sme as SmeSummary,
         folders: b.folders.map((bf) => bf.folder),
-        workstreams: (
-          await resolveBoardWorkstreamIds(projectId, b)
-        ).map(describeWorkstream),
+        riskCategories: (
+          await resolveBoardRiskCategoryIds(projectId, b)
+        ).map(describeRiskCategory),
         taskCount: b._count.tasks,
         _smeUserId: b.smeUserId,
       }))
@@ -328,8 +328,8 @@ export const boardsService = {
             accessibleFolders
           ) &&
           boardVisibleTo(
-            b.workstreams.map((w) => w.id),
-            accessibleWorkstreams
+            b.riskCategories.map((w) => w.id),
+            accessibleRiskCategories
           )
         );
       })
@@ -345,7 +345,7 @@ export const boardsService = {
             folder: { select: { id: true, name: true, parentId: true } },
           },
         },
-        workstreams: { select: { workstreamId: true } },
+        riskCategories: { select: { riskCategoryId: true } },
         sme: { select: { id: true, name: true, email: true } },
       },
     });
@@ -363,27 +363,27 @@ export const boardsService = {
         ) {
           throw ApiError.forbidden('Board covers folders outside your access scope');
         }
-        const accessibleWorkstreams = resolveAccessibleWorkstreamIds(member);
+        const accessibleRiskCategories = resolveAccessibleRiskCategoryIds(member);
         if (
           !boardVisibleTo(
-            board.workstreams.map((bw) => bw.workstreamId),
-            accessibleWorkstreams
+            board.riskCategories.map((bw) => bw.riskCategoryId),
+            accessibleRiskCategories
           )
         ) {
-          throw ApiError.forbidden('Board covers workstreams outside your access scope');
+          throw ApiError.forbidden('Board covers risk categories outside your access scope');
         }
       }
     }
 
-    const workstreamIds = await resolveBoardWorkstreamIds(projectId, board);
+    const riskCategoryIds = await resolveBoardRiskCategoryIds(projectId, board);
 
     // The exact document set tasks on this board may attach. Sent so the
     // attachment picker offers what the API will actually accept, rather than
     // showing the whole data room and failing on save.
     const documentIds =
-      workstreamIds.length === 0
+      riskCategoryIds.length === 0
         ? null
-        : await documentsService.documentIdsWithEvidence(projectId, { workstreamIds });
+        : await documentsService.documentIdsWithEvidence(projectId, { riskCategoryIds });
 
     return {
       id: board.id,
@@ -394,7 +394,7 @@ export const boardsService = {
       updatedAt: board.updatedAt,
       sme: board.sme as SmeSummary,
       folders: board.folders.map((bf) => bf.folder),
-      workstreams: workstreamIds.map(describeWorkstream),
+      riskCategories: riskCategoryIds.map(describeRiskCategory),
       documentIds,
     };
   },
@@ -421,11 +421,11 @@ export const boardsService = {
       : actingMember.userId;
 
     const folderIds = data.folderIds ?? [];
-    const workstreamIds = data.workstreamIds?.length
-      ? assertValidWorkstreams(data.workstreamIds)
+    const riskCategoryIds = data.riskCategoryIds?.length
+      ? assertValidRiskCategories(data.riskCategoryIds)
       : [];
 
-    if (!smeUserId && folderIds.length === 0 && workstreamIds.length === 0) {
+    if (!smeUserId && folderIds.length === 0 && riskCategoryIds.length === 0) {
       throw ApiError.badRequest('Select the specialist this board is for');
     }
 
@@ -441,14 +441,14 @@ export const boardsService = {
           'Owners and admins already see every board — assign this board to a member instead'
         );
       }
-      if (grantedWorkstreamIds(sme).length === 0) {
+      if (grantedRiskCategoryIds(sme).length === 0) {
         throw ApiError.badRequest(
-          'That specialist has no workstreams yet. Grant them access in Admin → Team first.'
+          'That specialist has no risk categories yet. Grant them access in Admin → Team first.'
         );
       }
     }
 
-    // Verify every folderId belongs to the project (workstreams are static
+    // Verify every folderId belongs to the project (risk categories are static
     // config, already validated above).
     if (folderIds.length > 0) {
       const folders = await prisma.folder.findMany({
@@ -474,21 +474,21 @@ export const boardsService = {
         smeUserId: smeUserId ?? null,
         createdById: creatorUserId,
         folders: { create: folderIds.map((folderId) => ({ folderId })) },
-        workstreams: { create: workstreamIds.map((workstreamId) => ({ workstreamId })) },
+        riskCategories: { create: riskCategoryIds.map((riskCategoryId) => ({ riskCategoryId })) },
       },
       include: {
         folders: { include: { folder: { select: { id: true, name: true } } } },
-        workstreams: { select: { workstreamId: true } },
+        riskCategories: { select: { riskCategoryId: true } },
         sme: { select: { id: true, name: true, email: true } },
       },
     });
 
-    const resolved = await resolveBoardWorkstreamIds(projectId, board);
+    const resolved = await resolveBoardRiskCategoryIds(projectId, board);
     return {
       ...board,
       sme: board.sme as SmeSummary,
       folders: board.folders.map((bf) => bf.folder),
-      workstreams: resolved.map(describeWorkstream),
+      riskCategories: resolved.map(describeRiskCategory),
     };
   },
 
@@ -525,9 +525,9 @@ export const boardsService = {
             'Owners and admins already see every board — assign this board to a member instead'
           );
         }
-        if (grantedWorkstreamIds(sme).length === 0) {
+        if (grantedRiskCategoryIds(sme).length === 0) {
           throw ApiError.badRequest(
-            'That specialist has no workstreams yet. Grant them access in Admin → Team first.'
+            'That specialist has no risk categories yet. Grant them access in Admin → Team first.'
           );
         }
         patch.smeUserId = data.smeUserId;
@@ -539,18 +539,18 @@ export const boardsService = {
     // state, so clearing folders while naming an SME is fine.
     if (
       data.folderIds !== undefined ||
-      data.workstreamIds !== undefined ||
+      data.riskCategoryIds !== undefined ||
       data.smeUserId !== undefined
     ) {
-      const [currentFolders, currentWorkstreams] = await Promise.all([
+      const [currentFolders, currentRiskCategories] = await Promise.all([
         prisma.kanbanBoardFolder.count({ where: { boardId } }),
-        prisma.kanbanBoardWorkstream.count({ where: { boardId } }),
+        prisma.kanbanBoardRiskCategory.count({ where: { boardId } }),
       ]);
       const nextSme =
         data.smeUserId !== undefined ? data.smeUserId : board.smeUserId;
       const nextFolders = data.folderIds?.length ?? currentFolders;
-      const nextWorkstreams = data.workstreamIds?.length ?? currentWorkstreams;
-      if (!nextSme && nextFolders === 0 && nextWorkstreams === 0 && !board.isDefault) {
+      const nextRiskCategories = data.riskCategoryIds?.length ?? currentRiskCategories;
+      if (!nextSme && nextFolders === 0 && nextRiskCategories === 0 && !board.isDefault) {
         throw ApiError.badRequest('A board must be assigned to a specialist');
       }
     }
@@ -573,11 +573,11 @@ export const boardsService = {
       });
     }
 
-    if (data.workstreamIds !== undefined) {
-      const workstreamIds = assertValidWorkstreams(data.workstreamIds);
-      await prisma.kanbanBoardWorkstream.deleteMany({ where: { boardId } });
-      await prisma.kanbanBoardWorkstream.createMany({
-        data: workstreamIds.map((workstreamId) => ({ boardId, workstreamId })),
+    if (data.riskCategoryIds !== undefined) {
+      const riskCategoryIds = assertValidRiskCategories(data.riskCategoryIds);
+      await prisma.kanbanBoardRiskCategory.deleteMany({ where: { boardId } });
+      await prisma.kanbanBoardRiskCategory.createMany({
+        data: riskCategoryIds.map((riskCategoryId) => ({ boardId, riskCategoryId })),
       });
     }
 
@@ -586,17 +586,17 @@ export const boardsService = {
       data: patch,
       include: {
         folders: { include: { folder: { select: { id: true, name: true } } } },
-        workstreams: { select: { workstreamId: true } },
+        riskCategories: { select: { riskCategoryId: true } },
         sme: { select: { id: true, name: true, email: true } },
       },
     });
 
-    const resolved = await resolveBoardWorkstreamIds(projectId, updated);
+    const resolved = await resolveBoardRiskCategoryIds(projectId, updated);
     return {
       ...updated,
       sme: updated.sme as SmeSummary,
       folders: updated.folders.map((bf) => bf.folder),
-      workstreams: resolved.map(describeWorkstream),
+      riskCategories: resolved.map(describeRiskCategory),
     };
   },
 
@@ -638,7 +638,7 @@ export const boardsService = {
       where: { id: boardId, projectId },
       include: {
         folders: { select: { folderId: true } },
-        workstreams: { select: { workstreamId: true } },
+        riskCategories: { select: { riskCategoryId: true } },
       },
     });
     if (!board) return false;
@@ -646,10 +646,10 @@ export const boardsService = {
     if (board.smeUserId) return board.smeUserId === member.userId;
 
     const accessibleFolders = await resolveAccessibleFolderIds(projectId, member);
-    const accessibleWorkstreams = resolveAccessibleWorkstreamIds(member);
+    const accessibleRiskCategories = resolveAccessibleRiskCategoryIds(member);
     return (
       boardVisibleTo(board.folders.map((f) => f.folderId), accessibleFolders) &&
-      boardVisibleTo(board.workstreams.map((w) => w.workstreamId), accessibleWorkstreams)
+      boardVisibleTo(board.riskCategories.map((w) => w.riskCategoryId), accessibleRiskCategories)
     );
   },
 
@@ -695,28 +695,28 @@ export const boardsService = {
     return rows.map((r) => r.folderId);
   },
 
-  async boardWorkstreamIds(boardId: string, projectId?: string): Promise<string[]> {
+  async boardRiskCategoryIds(boardId: string, projectId?: string): Promise<string[]> {
     const board = await prisma.kanbanBoard.findUnique({
       where: { id: boardId },
       select: {
         projectId: true,
         smeUserId: true,
-        workstreams: { select: { workstreamId: true } },
+        riskCategories: { select: { riskCategoryId: true } },
       },
     });
     if (!board) return [];
-    return resolveBoardWorkstreamIds(projectId ?? board.projectId, board);
+    return resolveBoardRiskCategoryIds(projectId ?? board.projectId, board);
   },
 
   /**
    * Documents a board covers — those supplying evidence to any of its
-   * workstreams. `null` means unscoped (whole project), matching the
+   * risk categories. `null` means unscoped (whole project), matching the
    * "All Documents" default board.
    */
   async boardDocumentIds(boardId: string, projectId: string): Promise<string[] | null> {
-    const workstreamIds = await this.boardWorkstreamIds(boardId, projectId);
-    if (workstreamIds.length === 0) return null;
-    return documentsService.documentIdsWithEvidence(projectId, { workstreamIds });
+    const riskCategoryIds = await this.boardRiskCategoryIds(boardId, projectId);
+    if (riskCategoryIds.length === 0) return null;
+    return documentsService.documentIdsWithEvidence(projectId, { riskCategoryIds });
   },
 
   /**

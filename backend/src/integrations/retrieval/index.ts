@@ -1,8 +1,8 @@
 /**
  * Retrieval interface.
  *
- * `defaultRetriever` is what callers should use. It navigates the diligence
- * checklist (`libraryTocRetriever`) and falls back to whole fact sheets only
+ * `defaultRetriever` is what callers should use. It navigates the risk categories
+ * risk categories (`libraryTocRetriever`) and falls back to whole fact sheets only
  * when a project has no library evidence to navigate.
  *
  * The unit matters more than the ranking. A question about change-of-control
@@ -79,7 +79,7 @@ export const stuffRetriever: Retriever = {
       console.warn(
         `[retrieval] stuffRetriever truncated ${docs.length} in-scope documents to ` +
           `${selected.length}. The answer will not cover the rest — enable the ` +
-          `knowledge library so retrieval can navigate the checklist instead.`
+          `knowledge library so retrieval can navigate the risk categories instead.`
       );
     }
 
@@ -106,7 +106,7 @@ export const stuffRetriever: Retriever = {
 /**
  * The retriever every caller should use.
  *
- * Prefers checklist navigation and degrades to bounded stuffing when a project
+ * Prefers risk-category navigation and degrades to bounded stuffing when a project
  * has nothing filed in the library — which is the case for any deal ingested
  * before the library existed, and for the window between upload and the first
  * reconciliation pass. Choosing on actual data rather than on a config flag

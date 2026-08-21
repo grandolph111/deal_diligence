@@ -104,7 +104,7 @@ export function TeamTab({
               Members{!isLoading && memberCount > 0 ? ` · ${memberCount}` : ''}
             </h3>
             <p className="settings-section-description">
-              Everyone with access to this deal, and the workstreams they are scoped to.
+              Everyone with access to this deal, and the risk categories they are scoped to.
             </p>
           </div>
           <button

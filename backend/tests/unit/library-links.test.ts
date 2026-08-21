@@ -45,7 +45,7 @@ vi.mock('../../src/services/library-writer.service', () => ({
 import { libraryService, EVIDENCE_TYPES } from '../../src/modules/library/library.service';
 
 const USER = { id: 'u1', platformRole: 'MEMBER', companyId: 'c1' } as never;
-const FULL = { isFullAccess: true, allowedFolderIds: [], allowedWorkstreamIds: [] };
+const FULL = { isFullAccess: true, allowedFolderIds: [], allowedRiskCategoryIds: [] };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -66,16 +66,16 @@ describe('NOTE is not evidence', () => {
 });
 
 describe('libraryService.createNote', () => {
-  const ok = { id: 'n1', itemId: 'indemnification', workstreamId: '05-liability-risk', slug: 's' };
+  const ok = { id: 'n1', riskCategoryId: '15-material-contracts', slug: 's' };
 
-  it('rejects an unknown checklist item rather than filing it anywhere', async () => {
+  it('rejects an unknown risk category rather than filing it anywhere', async () => {
     await expect(
       libraryService.createNote('p1', USER, {
         title: 'T',
         content: 'C',
-        itemIds: ['not-a-real-item'],
+        riskCategoryIds: ['not-a-real-category'],
       })
-    ).rejects.toThrow(/Unknown checklist item/);
+    ).rejects.toThrow(/Unknown risk categor/);
     expect(nodeCreate).not.toHaveBeenCalled();
   });
 
@@ -88,38 +88,37 @@ describe('libraryService.createNote', () => {
     ).rejects.toThrow(/content/i);
   });
 
-  it('files an unmapped answer to triage instead of discarding it', async () => {
-    nodeCreate.mockResolvedValue({ ...ok, itemId: 'unmapped-provisions', workstreamId: '99-to-triage' });
+  it('files an unmapped answer to the report catch-all instead of discarding it', async () => {
+    nodeCreate.mockResolvedValue({ ...ok, riskCategoryId: '26-other-red-flags' });
     nodeFindMany.mockResolvedValue([]);
 
     await libraryService.createNote('p1', USER, { title: 'Stray thought', content: 'C' });
 
     const arg = nodeCreate.mock.calls[0][0];
     expect(arg.data.type).toBe('NOTE');
-    expect(arg.data.itemId).toBe('unmapped-provisions');
-    expect(arg.data.workstreamId).toBe('99-to-triage');
+    expect(arg.data.riskCategoryId).toBe('26-other-red-flags');
   });
 
-  it('links the note to every item it answers, not just the first', async () => {
+  it('links the note to every category it answers, not just the first', async () => {
     nodeCreate.mockResolvedValue(ok);
-    // checklist item node lookup
-    nodeFindMany.mockResolvedValueOnce([{ id: 'item-a' }, { id: 'item-b' }]);
+    // risk category node lookup
+    nodeFindMany.mockResolvedValueOnce([{ id: 'cat-a' }, { id: 'cat-b' }]);
 
     await libraryService.createNote('p1', USER, {
       title: 'T',
       content: 'C',
-      itemIds: ['indemnification', 'liability-caps'],
+      riskCategoryIds: ['15-material-contracts', '14-intellectual-property'],
     });
 
     const edges = edgeCreateMany.mock.calls[0][0].data;
     expect(edges.filter((e: { edgeType: string }) => e.edgeType === 'EVIDENCES')).toHaveLength(2);
   });
 
-  it('refuses to file into a workstream the caller was not granted', async () => {
+  it('refuses to file into a risk category the caller was not granted', async () => {
     resolveProjectScope.mockResolvedValue({
       isFullAccess: false,
       allowedFolderIds: [],
-      allowedWorkstreamIds: ['04-intellectual-property'],
+      allowedRiskCategoryIds: ['14-intellectual-property'],
     });
     nodeFindMany.mockResolvedValue([]);
 
@@ -127,8 +126,8 @@ describe('libraryService.createNote', () => {
       libraryService.createNote('p1', USER, {
         title: 'T',
         content: 'C',
-        // indemnification lives in 05-liability-risk, which is not granted.
-        itemIds: ['indemnification'],
+        // Material Contracts is not among the granted categories.
+        riskCategoryIds: ['15-material-contracts'],
       })
     ).rejects.toThrow(/do not have access/i);
   });
@@ -142,7 +141,7 @@ describe('libraryService.compareClause', () => {
     riskLevel,
     confidence: 80,
     pageNumber: 1,
-    itemId: 'indemnification',
+    riskCategoryId: 'indemnification',
     sourceDocumentId: doc,
   });
 
@@ -172,7 +171,7 @@ describe('libraryService.compareClause', () => {
     resolveProjectScope.mockResolvedValue({
       isFullAccess: false,
       allowedFolderIds: [],
-      allowedWorkstreamIds: ['05-liability-risk'],
+      allowedRiskCategoryIds: ['20-employees-contractors'],
     });
     // allowedDocIds query, then the provision query.
     nodeFindMany
@@ -192,7 +191,7 @@ describe('libraryService.getDocumentBacklinks', () => {
     resolveProjectScope.mockResolvedValue({
       isFullAccess: false,
       allowedFolderIds: [],
-      allowedWorkstreamIds: ['04-intellectual-property'],
+      allowedRiskCategoryIds: ['14-intellectual-property'],
     });
     nodeFindMany.mockResolvedValueOnce([{ sourceDocumentId: 'visible-doc' }]);
 

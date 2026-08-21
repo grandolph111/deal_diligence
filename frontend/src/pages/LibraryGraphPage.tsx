@@ -7,12 +7,12 @@ import type { DealMap, DealMapNode } from '../api/services/library.service';
 import { FactSheetModal } from '../features/vdr';
 import '../features/library/library.css';
 
-const EMPTY: DealMap = { nodes: [], edges: [], stats: { documents: 0, workstreams: 0 } };
+const EMPTY: DealMap = { nodes: [], edges: [], stats: { documents: 0, riskCategories: 0 } };
 
 /**
  * Deal Map — the corpus as a network.
  *
- * One node per document, clustered under the single workstream it primarily
+ * One node per document, clustered under the single risk category it primarily
  * belongs to, linked where documents share clause language. Clicking a document
  * opens its fact sheet, so the map is a way into the deal rather than a picture
  * of it.
@@ -62,7 +62,7 @@ export function LibraryGraphPage() {
 
       {!loading && !error && map.stats.documents > 0 && (
         <p className="lib-map-caption">
-          {map.stats.documents} documents across {map.stats.workstreams} workstreams · click a
+          {map.stats.documents} documents across {map.stats.riskCategories} risk categories · click a
           document to open its fact sheet
         </p>
       )}
@@ -81,9 +81,9 @@ export function LibraryGraphPage() {
             node={selected}
             onClose={() => setSelected(null)}
             onOpenFactSheet={(id, name) => setFactSheet({ id, name })}
-            onOpenDataRoom={(workstreamId) =>
+            onOpenDataRoom={(riskCategoryId) =>
               navigate(
-                `/projects/${projectId}/vdr${workstreamId ? `?workstream=${encodeURIComponent(workstreamId)}` : ''}`
+                `/projects/${projectId}/vdr${riskCategoryId ? `?riskCategory=${encodeURIComponent(riskCategoryId)}` : ''}`
               )
             }
           />

@@ -7,11 +7,11 @@ import { boardsService } from '../../services/boards.service';
 
 /**
  * Verify every document the caller wants to attach to a task is inside the
- * board's scope — i.e. supplies evidence to one of the SME's workstreams.
+ * board's scope — i.e. supplies evidence to one of the SME's risk categories.
  * Strict confinement: tasks never reach documents their board does not cover.
  *
  * Documents are matched by evidence, not storage location. A single contract
- * supplies evidence to roughly eight workstreams, so an IP board legitimately
+ * supplies evidence to roughly eight risk categories, so an IP board legitimately
  * reaches a contract filed under "Commercial" — the folder it happens to sit
  * in says nothing about which specialist needs it.
  */
@@ -63,7 +63,7 @@ const verifyDocumentsInBoardScope = async (
   });
   if (outOfScope.length > 0) {
     throw ApiError.badRequest(
-      `Cannot attach ${outOfScope.length} document(s) — outside this board's workstreams: ${outOfScope
+      `Cannot attach ${outOfScope.length} document(s) — outside this board's risk categories: ${outOfScope
         .map((d) => d.name)
         .join(', ')}`
     );

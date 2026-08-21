@@ -17,7 +17,7 @@ interface LinkDocumentModalProps {
   /**
    * Exactly the documents this board may attach, from the API. `undefined`/null
    * = unscoped. Takes precedence over boardFolderIds: scope runs on evidence
-   * now, and a document supplies evidence to workstreams regardless of which
+   * now, and a document supplies evidence to risk categories regardless of which
    * folder it happens to sit in.
    */
   allowedDocumentIds?: string[] | null;

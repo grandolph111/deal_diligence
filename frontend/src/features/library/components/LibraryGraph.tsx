@@ -21,7 +21,7 @@ const RISK_COLOR: Record<string, string> = {
 };
 
 const TYPE_COLOR: Record<string, string> = {
-  WORKSTREAM: '#334155', // slate hub
+  RISK_CATEGORY: '#334155', // slate hub
   SOURCE: '#7c3aed', // violet
   ENTITY: '#0891b2', // cyan
 };
@@ -40,7 +40,7 @@ const ACCENT = '#0f766e'; // teal selection highlight
 const MIN_READABLE_ZOOM = 0.7;
 
 const nodeColor = (n: LibraryGraphNode): string => {
-  if (n.type === 'CHECKLIST_ITEM') return STATUS_COLOR[n.status ?? 'OPEN'] ?? STATUS_COLOR.OPEN;
+  if (n.type === 'RISK_CATEGORY') return STATUS_COLOR[n.status ?? 'OPEN'] ?? STATUS_COLOR.OPEN;
   if (n.type === 'PROVISION' || n.type === 'RISK' || n.type === 'OBLIGATION')
     return RISK_COLOR[n.riskLevel ?? ''] ?? '#94a3b8';
   return TYPE_COLOR[n.type] ?? '#94a3b8';
@@ -48,7 +48,7 @@ const nodeColor = (n: LibraryGraphNode): string => {
 
 const nodeShape = (t: string): string => {
   switch (t) {
-    case 'WORKSTREAM':
+    case 'RISK_CATEGORY':
       return 'round-rectangle';
     case 'SOURCE':
       return 'rectangle';
@@ -57,14 +57,13 @@ const nodeShape = (t: string): string => {
     case 'OBLIGATION':
       return 'diamond';
     default:
-      return 'ellipse'; // CHECKLIST_ITEM, ENTITY
+      return 'ellipse'; // RISK_CATEGORY, ENTITY
   }
 };
 
 // Relative node size (mapped by cytoscape to px).
 const nodeSize = (n: LibraryGraphNode): number => {
-  if (n.type === 'WORKSTREAM') return 20;
-  if (n.type === 'CHECKLIST_ITEM') return Math.min(16, 6 + (n.evidenceCount ?? 0) * 2);
+  if (n.type === 'RISK_CATEGORY') return Math.min(22, 12 + (n.evidenceCount ?? 0) / 40);
   if (n.type === 'SOURCE') return 10;
   if (n.type === 'ENTITY') return 7;
   return 6; // provision
@@ -82,8 +81,8 @@ interface LibraryGraphProps {
 }
 
 /**
- * Grid-of-clusters positions for the base tree: each workstream hub sits in its
- * own cell with its checklist items ringed around it.
+ * Grid-of-clusters positions for the base tree: each risk category hub sits in its
+ * own cell.
  *
  * Neither stock layout serves this shape. A force layout ignores the hierarchy
  * and settles into a blob; `breadthfirst` honours it but packs every node of a
@@ -91,16 +90,16 @@ interface LibraryGraphProps {
  * of hubs was the next attempt and fails for a subtler reason: the hubs are wide
  * text pills, so thirteen of them force a circle big enough that `fit` zooms the
  * labels below legibility, and the middle of the circle goes to waste. A grid
- * spends the canvas evenly and keeps each workstream's items visibly its own.
+ * spends the canvas evenly and keeps each risk category's items visibly its own.
  */
 function clusterPositions(
   nodes: LibraryGraphNode[],
   edges: LibraryGraphData['edges']
 ): Record<string, { x: number; y: number }> {
-  const hubs = nodes.filter((n) => n.type === 'WORKSTREAM');
+  const hubs = nodes.filter((n) => n.type === 'RISK_CATEGORY');
   if (hubs.length === 0) return {};
 
-  // workstream node id → its checklist items, via CONTAINS edges.
+  // risk category node id → its evidence, via CONTAINS edges.
   const childrenByHub = new Map<string, string[]>();
   const hubIds = new Set(hubs.map((h) => h.id));
   for (const e of edges) {
@@ -205,7 +204,7 @@ export function LibraryGraph({
         {
           // Hubs are labelled pills: size the node to its text rather than
           // clipping "Regulatory & Compliance" down to "gulatory &".
-          selector: 'node[type="WORKSTREAM"]',
+          selector: 'node[type="RISK_CATEGORY"]',
           style: {
             color: '#ffffff',
             'font-size': '10px',
@@ -226,7 +225,7 @@ export function LibraryGraph({
         // selection, and the detail panel names whatever is selected anyway.
         {
           selector:
-            'node[type="CHECKLIST_ITEM"], node[type="PROVISION"], node[type="RISK"], node[type="OBLIGATION"], node[type="ENTITY"], node[type="SOURCE"]',
+            'node[type="RISK_CATEGORY"], node[type="PROVISION"], node[type="RISK"], node[type="OBLIGATION"], node[type="ENTITY"], node[type="SOURCE"]',
           style: { label: '' } as cytoscape.Css.Node,
         },
         {
@@ -319,7 +318,7 @@ export function LibraryGraph({
     for (const n of graph.nodes) {
       const data = {
         id: n.id,
-        label: n.type === 'WORKSTREAM' ? n.label : truncate(n.label),
+        label: n.type === 'RISK_CATEGORY' ? n.label : truncate(n.label),
         color: nodeColor(n),
         shape: nodeShape(n.type),
         size: nodeSize(n),
@@ -469,10 +468,10 @@ export function LibraryGraph({
       {showGraphChrome && (
       <div className="lib-graph-legend">
         <p className="lib-legend-caption">
-          Workstreams and checklist items · click an item to reveal its evidence
+          RiskCategories and risk category items · click an item to reveal its evidence
         </p>
         <div className="lib-legend-group">
-          <span className="lib-legend-title">Checklist items</span>
+          <span className="lib-legend-title">Risk categories</span>
           {(['OPEN', 'COVERED', 'FLAGGED'] as const).map((s) => (
             <span key={s} className="lib-legend-item">
               <span className="lib-legend-dot" style={{ background: STATUS_COLOR[s] }} />
@@ -481,13 +480,13 @@ export function LibraryGraph({
           ))}
         </div>
         {/* Only name node types actually on screen. The base view is the
-            checklist skeleton; sources, entities and provisions arrive as items
+            category spine; sources, entities and provisions arrive as categories
             are expanded, and legending them before they exist just asks the
             reader to hunt for shapes that are not there. */}
         <div className="lib-legend-group">
           <span className="lib-legend-title">Nodes</span>
           <span className="lib-legend-item">
-            <span className="lib-legend-dot square" style={{ background: TYPE_COLOR.WORKSTREAM }} /> Workstream
+            <span className="lib-legend-dot square" style={{ background: TYPE_COLOR.RISK_CATEGORY }} /> Risk category
           </span>
           {present.has('SOURCE') && (
             <span className="lib-legend-item">

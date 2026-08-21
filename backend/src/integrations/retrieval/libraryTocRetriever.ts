@@ -2,8 +2,8 @@
  * Library ToC retriever — the "read the index, follow the links" retrieval.
  *
  * Instead of stuffing every in-scope fact sheet, this navigates the diligence
- * checklist:
- *   1. Build the scoped checklist index (items with evidence, their status +
+ * risk categories:
+ *   1. Build the scoped category index (categories with evidence, their status +
  *      clause types).
  *   2. Route the question to the relevant items (Haiku; keyword fallback in mock
  *      mode).
@@ -18,8 +18,8 @@
 
 import { prisma } from '../../config/database';
 import { s3Service } from '../../services/s3.service';
-import { routeLibraryItems, rerankProvisions, isMock, type RouteItem } from '../claude';
-import { getItem } from '../library/checklist';
+import { routeRiskCategories, rerankProvisions, isMock, type RouteCategory } from '../claude';
+import { getRiskCategory } from '../library/risk-categories';
 import type { Retriever, DocRef, RetrievalScope } from './index';
 
 const MAX_DOCS = 12;
@@ -27,7 +27,7 @@ const RERANK_CANDIDATES = 50; // cap on clauses the Haiku reranker reads per que
 const RISK_RANK: Record<string, number> = { HIGH: 2, MEDIUM: 1, LOW: 0 };
 const COVERAGE_DOC_ID = 'library-coverage';
 
-interface ScopedItem extends RouteItem {
+interface ScopedCategory extends RouteCategory {
   docIds: Set<string>;
   evidenceCount: number;
 }
@@ -43,7 +43,7 @@ async function scopedDocIds(scope: RetrievalScope): Promise<Set<string> | null> 
 }
 
 /** Keyword fallback routing when Claude isn't available or LLM routing is empty. */
-function keywordRoute(query: string | null, items: ScopedItem[]): string[] {
+function keywordRoute(query: string | null, items: ScopedCategory[]): string[] {
   if (!query) {
     // No query → the notable items: flagged/thin first, then some covered.
     return [...items]
@@ -71,7 +71,7 @@ function keywordRoute(query: string | null, items: ScopedItem[]): string[] {
 const rank = (status: string): number =>
   status === 'FLAGGED' ? 3 : status === 'THIN' ? 2 : status === 'COVERED' ? 1 : 0;
 
-function renderCoverage(selected: ScopedItem[]): string {
+function renderCoverage(selected: ScopedCategory[]): string {
   const lines = ['# Diligence coverage relevant to this question', ''];
   for (const it of selected) {
     if (it.status === 'OPEN' || it.evidenceCount === 0) {
@@ -90,33 +90,33 @@ export const libraryTocRetriever: Retriever = {
     const inScope = (docId: string | null): boolean =>
       allowedDocs === null || (docId != null && allowedDocs.has(docId));
 
-    // 1. Provisions → per-item index (scoped).
+    // 1. Provisions → per-category index (scoped).
     const provisions = await prisma.libraryNode.findMany({
       where: { projectId: scope.projectId, type: { in: ['PROVISION', 'RISK', 'OBLIGATION'] } },
-      select: { itemId: true, sourceDocumentId: true, clauseType: true },
+      select: { riskCategoryId: true, sourceDocumentId: true, clauseType: true },
     });
-    const byItem = new Map<string, { docIds: Set<string>; clauseTypes: Set<string>; count: number }>();
+    const byCategory = new Map<string, { docIds: Set<string>; clauseTypes: Set<string>; count: number }>();
     for (const p of provisions) {
       if (!inScope(p.sourceDocumentId)) continue;
-      const entry = byItem.get(p.itemId) ?? { docIds: new Set(), clauseTypes: new Set(), count: 0 };
+      const entry = byCategory.get(p.riskCategoryId) ?? { docIds: new Set(), clauseTypes: new Set(), count: 0 };
       if (p.sourceDocumentId) entry.docIds.add(p.sourceDocumentId);
       if (p.clauseType) entry.clauseTypes.add(p.clauseType);
       entry.count += 1;
-      byItem.set(p.itemId, entry);
+      byCategory.set(p.riskCategoryId, entry);
     }
-    if (byItem.size === 0) return []; // no library evidence in scope → caller falls back to the brief
+    if (byCategory.size === 0) return []; // no library evidence in scope → caller falls back to the brief
 
     // Item status/title from CHECKLIST_ITEM nodes.
-    const itemNodes = await prisma.libraryNode.findMany({
-      where: { projectId: scope.projectId, type: 'CHECKLIST_ITEM', itemId: { in: [...byItem.keys()] } },
-      select: { itemId: true, title: true, status: true },
+    const categoryNodes = await prisma.libraryNode.findMany({
+      where: { projectId: scope.projectId, type: 'RISK_CATEGORY', riskCategoryId: { in: [...byCategory.keys()] } },
+      select: { riskCategoryId: true, title: true, status: true },
     });
-    const statusByItem = new Map(itemNodes.map((n) => [n.itemId, { title: n.title, status: n.status ?? 'OPEN' }]));
+    const statusByCategory = new Map(categoryNodes.map((n) => [n.riskCategoryId, { title: n.title, status: n.status ?? 'OPEN' }]));
 
-    const items: ScopedItem[] = [...byItem.entries()].map(([itemId, e]) => ({
-      id: itemId,
-      title: statusByItem.get(itemId)?.title ?? getItem(itemId)?.title ?? itemId,
-      status: statusByItem.get(itemId)?.status ?? 'OPEN',
+    const items: ScopedCategory[] = [...byCategory.entries()].map(([riskCategoryId, e]) => ({
+      id: riskCategoryId,
+      title: statusByCategory.get(riskCategoryId)?.title ?? getRiskCategory(riskCategoryId)?.title ?? riskCategoryId,
+      status: statusByCategory.get(riskCategoryId)?.status ?? 'OPEN',
       clauseTypes: [...e.clauseTypes],
       docIds: e.docIds,
       evidenceCount: e.count,
@@ -126,7 +126,7 @@ export const libraryTocRetriever: Retriever = {
     let selectedIds: string[] = [];
     if (query && !isMock()) {
       try {
-        selectedIds = await routeLibraryItems({
+        selectedIds = await routeRiskCategories({
           query,
           items: items.map((i) => ({ id: i.id, title: i.title, status: i.status, clauseTypes: i.clauseTypes })),
         });
@@ -147,10 +147,10 @@ export const libraryTocRetriever: Retriever = {
       [...new Set(selected.flatMap((i) => [...i.docIds]))].slice(0, MAX_DOCS);
 
     let docIds: string[];
-    const selectedItemIds = selected.map((i) => i.id);
+    const selectedCategoryIds = selected.map((i) => i.id);
     const sliceProvs = (
       await prisma.libraryNode.findMany({
-        where: { projectId: scope.projectId, type: 'PROVISION', itemId: { in: selectedItemIds } },
+        where: { projectId: scope.projectId, type: 'PROVISION', riskCategoryId: { in: selectedCategoryIds } },
         select: { id: true, sourceDocumentId: true, clauseType: true, title: true, content: true, riskLevel: true },
       })
     ).filter((p) => inScope(p.sourceDocumentId) && p.sourceDocumentId);

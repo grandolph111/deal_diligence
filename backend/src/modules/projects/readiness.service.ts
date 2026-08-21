@@ -14,7 +14,7 @@
  * partial answer with no indication it is partial is the worst outcome in
  * diligence, where the whole question is what you might have missed.
  *
- * Everything here is workstream-scoped, so a specialist granted two workstreams sees
+ * Everything here is risk category-scoped, so a specialist granted two risk categories sees
  * readiness for the deal they can actually see, not the deal as a whole.
  */
 
@@ -100,7 +100,7 @@ export const readinessService = {
     // A member with no grants has nothing to be ready about. This is a
     // permissions state, not a processing state, and must not read as "still
     // loading" — the wait would never end.
-    if (!scope.isFullAccess && scope.allowedWorkstreamIds.length === 0) {
+    if (!scope.isFullAccess && scope.allowedRiskCategoryIds.length === 0) {
       return {
         total: 0,
         complete: 0,
@@ -112,13 +112,13 @@ export const readinessService = {
         partial: false,
         state: 'NO_ACCESS',
         message:
-          "You haven't been granted access to any workstreams in this deal yet. Ask your Customer Admin to share the workstreams you need.",
+          "You haven't been granted access to any risk categories in this deal yet. Ask your Customer Admin to share the risk categories you need.",
       };
     }
 
     // Ingest progress is counted deal-wide, on purpose.
     //
-    // Scoping it by workstream cannot work: a document only acquires evidence
+    // Scoping it by risk category cannot work: a document only acquires evidence
     // AFTER extraction succeeds, so a scoped query structurally never sees a
     // pending, processing or failed document. `total` would always equal
     // `complete`, PARTIAL and PROCESSING would be unreachable, and a specialist
@@ -144,7 +144,7 @@ export const readinessService = {
           // knows.
           ...(scope.isFullAccess
             ? {}
-            : { workstreamId: { in: scope.allowedWorkstreamIds } }),
+            : { riskCategoryId: { in: scope.allowedRiskCategoryIds } }),
         },
       }),
     ]);

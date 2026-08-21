@@ -8,13 +8,13 @@ export interface ProjectScope {
   // [] + isFullAccess=false → user has been added but holds no grants yet,
   // callers must return empty lists, not everything.
   //
-  // Folders are dormant: retired from the UI in favour of workstreams, kept
+  // Folders are dormant: retired from the UI in favour of risk categories, kept
   // here so the un-migrated read paths keep behaving until they are removed.
   allowedFolderIds: string[];
-  // Checklist workstream slugs (see integrations/library/checklist.ts) the
-  // caller can see. Flat — workstreams have no hierarchy, so unlike folders
+  // Checklist risk category slugs (see integrations/library/risk-categories.ts) the
+  // caller can see. Flat — risk categories have no hierarchy, so unlike folders
   // there is no descendant cascade to expand.
-  allowedWorkstreamIds: string[];
+  allowedRiskCategoryIds: string[];
 }
 
 /** @deprecated Folder scoping is dormant — use {@link ProjectScope}. */
@@ -23,12 +23,12 @@ export type FolderScope = ProjectScope;
 const FULL_ACCESS: ProjectScope = {
   isFullAccess: true,
   allowedFolderIds: [],
-  allowedWorkstreamIds: [],
+  allowedRiskCategoryIds: [],
 };
 const NO_ACCESS: ProjectScope = {
   isFullAccess: false,
   allowedFolderIds: [],
-  allowedWorkstreamIds: [],
+  allowedRiskCategoryIds: [],
 };
 
 /**
@@ -41,15 +41,15 @@ const NO_ACCESS: ProjectScope = {
  *   2. CUSTOMER_ADMIN whose companyId === project.companyId → full access
  *   3. ProjectMember with role OWNER or ADMIN              → full access
  *   4. ProjectMember with role MEMBER/VIEWER               → whatever grants
- *      the row carries: `restrictedWorkstreams` verbatim, and (dormant)
+ *      the row carries: `restrictedRiskCategories` verbatim, and (dormant)
  *      `restrictedFolders` expanded to descendants
  *   5. Anything else                                        → NO_ACCESS
  *      (no ProjectMember row; or row with no/empty grants)
  *
- * Folder grants do NOT imply workstream grants — the two taxonomies have no
+ * Folder grants do NOT imply risk category grants — the two taxonomies have no
  * mapping between them (a document lives in one folder but supplies evidence
- * to ~8 workstreams). A member holding only legacy `restrictedFolders` gets an
- * empty workstream scope, i.e. sees nothing on workstream-scoped paths, until
+ * to ~8 risk categories). A member holding only legacy `restrictedFolders` gets an
+ * empty risk category scope, i.e. sees nothing on risk category-scoped paths, until
  * an admin re-grants. That fails closed rather than over-granting.
  */
 export async function resolveProjectScope(
@@ -81,11 +81,11 @@ export async function resolveProjectScope(
 
   const permissions = membership.permissions as Record<string, unknown> | null;
   const folderGrants = permissions?.restrictedFolders as string[] | undefined;
-  const workstreamGrants = permissions?.restrictedWorkstreams as string[] | undefined;
+  const riskCategoryGrants = permissions?.restrictedRiskCategories as string[] | undefined;
 
   const hasFolderGrants = Array.isArray(folderGrants) && folderGrants.length > 0;
-  const hasWorkstreamGrants = Array.isArray(workstreamGrants) && workstreamGrants.length > 0;
-  if (!hasFolderGrants && !hasWorkstreamGrants) {
+  const hasRiskCategoryGrants = Array.isArray(riskCategoryGrants) && riskCategoryGrants.length > 0;
+  if (!hasFolderGrants && !hasRiskCategoryGrants) {
     return NO_ACCESS;
   }
 
@@ -94,16 +94,16 @@ export async function resolveProjectScope(
     allowedFolderIds: hasFolderGrants
       ? await expandFoldersToDescendants(projectId, folderGrants)
       : [],
-    allowedWorkstreamIds: hasWorkstreamGrants ? [...new Set(workstreamGrants)] : [],
+    allowedRiskCategoryIds: hasRiskCategoryGrants ? [...new Set(riskCategoryGrants)] : [],
   };
 }
 
 /**
- * Check a specific workstream against a scope. Flat membership — no cascade.
+ * Check a specific risk category against a scope. Flat membership — no cascade.
  */
-export function workstreamIsInScope(scope: ProjectScope, workstreamId: string): boolean {
+export function riskCategoryIsInScope(scope: ProjectScope, riskCategoryId: string): boolean {
   if (scope.isFullAccess) return true;
-  return scope.allowedWorkstreamIds.includes(workstreamId);
+  return scope.allowedRiskCategoryIds.includes(riskCategoryId);
 }
 
 /**

@@ -61,7 +61,7 @@ export function BoardsIndexPage() {
     user?.platformRole === 'SUPER_ADMIN' || user?.platformRole === 'CUSTOMER_ADMIN';
   // Naming someone else's board is an admin act. A plain MEMBER may still
   // create one, but the API pins it to them — so it can only ever cover the
-  // workstreams they already hold.
+  // risk categories they already hold.
   const canAssignSme =
     isPlatformAdmin || currentUserRole === 'OWNER' || currentUserRole === 'ADMIN';
   const canCreate = canAssignSme || currentUserRole === 'MEMBER';
@@ -100,10 +100,10 @@ export function BoardsIndexPage() {
       <div>
         <h1 style={{ margin: 0 }}>Kanban Boards</h1>
         <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--space-2)', maxWidth: 720 }}>
-          Each board belongs to one specialist and covers exactly the workstreams they have been
+          Each board belongs to one specialist and covers exactly the risk categories they have been
           granted — the way a deal is split between the people working it. Only its specialist and
           project admins can open a board, and its tasks reach any document with evidence in those
-          workstreams.
+          risk categories.
         </p>
       </div>
 
@@ -120,7 +120,7 @@ export function BoardsIndexPage() {
           <p>
             {canCreate
               ? 'Create a board to hand a specialist their slice of the deal.'
-              : 'Ask an admin to create a board for the workstreams you work on.'}
+              : 'Ask an admin to create a board for the risk categories you work on.'}
           </p>
           {canCreate && (
             <button className="button primary" onClick={() => setShowCreate(true)}>
@@ -221,10 +221,10 @@ export function BoardsIndexPage() {
               )}
 
               <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'center' }}>
-                {board.workstreams && board.workstreams.length > 0 ? (
-                  <span className="chip" title={board.workstreams.map((w) => w.title).join(', ')}>
-                    <Layers size={11} /> {board.workstreams.length} workstream
-                    {board.workstreams.length === 1 ? '' : 's'}
+                {board.riskCategories && board.riskCategories.length > 0 ? (
+                  <span className="chip" title={board.riskCategories.map((w) => w.title).join(', ')}>
+                    <Layers size={11} /> {board.riskCategories.length} riskCategory
+                    {board.riskCategories.length === 1 ? '' : 's'}
                   </span>
                 ) : (
                   <span className="chip" title="Covers every document in the deal">

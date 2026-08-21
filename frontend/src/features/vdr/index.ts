@@ -2,7 +2,7 @@
 export { LibraryTree } from './components/LibraryTree';
 export type { LibrarySelection } from './components/LibraryTree';
 // Folder components — dormant. Retired from data-room navigation in favour of
-// the checklist tree; kept for uploads and the legacy permission paths.
+// the risk-category tree; kept for uploads and the legacy permission paths.
 export { FolderTree } from './components/FolderTree';
 export { DocumentList } from './components/DocumentList';
 export { Breadcrumb } from './components/Breadcrumb';

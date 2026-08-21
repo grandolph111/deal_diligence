@@ -10,7 +10,7 @@ import { extractionQueue } from '../../services/extraction-queue.service';
 import { libraryWriterService } from '../../services/library-writer.service';
 import { triageService } from '../../services/triage.service';
 import { resolveProjectScope } from '../../services/scope.service';
-import { EVIDENCE_TYPES, primaryWorkstreamByDocument } from '../library/library.service';
+import { EVIDENCE_TYPES, primaryRiskCategoryByDocument } from '../library/library.service';
 
 export interface DocumentUploadResult {
   documentId: string;
@@ -86,7 +86,7 @@ export const documentsService = {
    *
    * `requirePermission('canAccessVDR')` is a boolean flag — it says whether a
    * member may open the data room at all, not which documents they may open.
-   * Without this check a member scoped to one workstream could fetch any
+   * Without this check a member scoped to one risk category could fetch any
    * document in the deal by id, including its fact sheet and a presigned S3
    * URL for the raw source. The list endpoint scoped correctly; the
    * single-document path did not.
@@ -389,11 +389,11 @@ export const documentsService = {
   },
 
   /**
-   * Distinct documents supplying evidence to the given workstreams / item.
+   * Distinct documents supplying evidence to the given risk categories.
    * Omitting both returns every document that has any evidence at all.
    */
   /**
-   * Documents whose PRIMARY workstream is one of the given ones.
+   * Documents whose PRIMARY risk category is one of the given ones.
    *
    * Navigation places each document once, so the tree's counts and the list it
    * opens have to agree; filtering on "has any evidence here" would show a
@@ -405,15 +405,15 @@ export const documentsService = {
    */
   async allowedDocumentIds(
     projectId: string,
-    scope: { isFullAccess: boolean; allowedWorkstreamIds: string[] }
+    scope: { isFullAccess: boolean; allowedRiskCategoryIds: string[] }
   ): Promise<Set<string> | null> {
     if (scope.isFullAccess) return null;
-    if (scope.allowedWorkstreamIds.length === 0) return new Set();
+    if (scope.allowedRiskCategoryIds.length === 0) return new Set();
     const rows = await prisma.libraryNode.findMany({
       where: {
         projectId,
         type: { in: [...EVIDENCE_TYPES] },
-        workstreamId: { in: scope.allowedWorkstreamIds },
+        riskCategoryId: { in: scope.allowedRiskCategoryIds },
         sourceDocumentId: { not: null },
       },
       select: { sourceDocumentId: true },
@@ -422,27 +422,27 @@ export const documentsService = {
     return new Set(rows.map((r) => r.sourceDocumentId as string));
   },
 
-  async documentIdsInWorkstreams(
+  async documentIdsInRiskCategories(
     projectId: string,
-    workstreamIds: string[],
+    riskCategoryIds: string[],
     allowed: Set<string> | null,
     granted: Set<string> | null
   ): Promise<string[]> {
-    const placement = await primaryWorkstreamByDocument(projectId, allowed, granted);
-    const wanted = new Set(workstreamIds);
+    const placement = await primaryRiskCategoryByDocument(projectId, allowed, granted);
+    const wanted = new Set(riskCategoryIds);
     return [...placement.entries()].filter(([, ws]) => wanted.has(ws)).map(([id]) => id);
   },
 
   async documentIdsWithEvidence(
     projectId: string,
-    filter: { workstreamIds?: string[]; itemId?: string } = {}
+    filter: { riskCategoryIds?: string[]; itemId?: string } = {}
   ): Promise<string[]> {
     const rows = await prisma.libraryNode.findMany({
       where: {
         projectId,
         type: { in: [...EVIDENCE_TYPES] },
         sourceDocumentId: { not: null },
-        ...(filter.workstreamIds ? { workstreamId: { in: filter.workstreamIds } } : {}),
+        ...(filter.riskCategoryIds ? { riskCategoryId: { in: filter.riskCategoryIds } } : {}),
         ...(filter.itemId ? { itemId: filter.itemId } : {}),
       },
       select: { sourceDocumentId: true },
@@ -453,7 +453,7 @@ export const documentsService = {
 
   /**
    * Documents carrying no evidence — queued, still processing, or failed
-   * extraction. These belong to no workstream, so the tree would drop them
+   * extraction. These belong to no risk category, so the tree would drop them
    * entirely without an explicit bucket.
    */
   async documentIdsWithoutEvidence(projectId: string): Promise<string[]> {
@@ -467,19 +467,19 @@ export const documentsService = {
 
   /**
    * List documents accessible to a user, scoped and filtered by checklist
-   * workstream.
+   * risk category.
    *
-   * A document is reachable through every workstream it supplies evidence to,
-   * so `workstreamId`/`itemId` are filters over the evidence graph rather than
+   * A document is reachable through every risk category it supplies evidence to,
+   * so `riskCategoryId`/`itemId` are filters over the evidence graph rather than
    * a column on Document. `unfiled` selects the complement: documents carrying
-   * no evidence at all, which no workstream filter could ever surface.
+   * no evidence at all, which no risk category filter could ever surface.
    */
   async listAccessibleDocuments(
     projectId: string,
     userId: string,
     query: ListDocumentsQuery
   ) {
-    const { workstreamId, itemId, unfiled, documentType, status, page, limit } = query;
+    const { riskCategoryId, itemId, unfiled, documentType, status, page, limit } = query;
     const skip = (page - 1) * limit;
 
     const user = await prisma.user.findUnique({
@@ -496,10 +496,10 @@ export const documentsService = {
     };
 
     // Zero-grant SMEs and non-members see nothing.
-    if (!scope.isFullAccess && scope.allowedWorkstreamIds.length === 0) return empty;
+    if (!scope.isFullAccess && scope.allowedRiskCategoryIds.length === 0) return empty;
 
-    if (!scope.isFullAccess && workstreamId && !scope.allowedWorkstreamIds.includes(workstreamId)) {
-      throw ApiError.forbidden('You do not have access to this workstream');
+    if (!scope.isFullAccess && riskCategoryId && !scope.allowedRiskCategoryIds.includes(riskCategoryId)) {
+      throw ApiError.forbidden('You do not have access to this risk category');
     }
 
     // Narrow to an explicit id set whenever scope or filters constrain which
@@ -508,27 +508,27 @@ export const documentsService = {
 
     if (unfiled) {
       // Unfiled is a full-access notion — a document with no evidence sits in
-      // no workstream, so no grant can reach it.
+      // no risk category, so no grant can reach it.
       if (!scope.isFullAccess) return empty;
       idFilter = await this.documentIdsWithoutEvidence(projectId);
     } else {
-      const granted = scope.isFullAccess ? null : new Set(scope.allowedWorkstreamIds);
+      const granted = scope.isFullAccess ? null : new Set(scope.allowedRiskCategoryIds);
       if (itemId) {
         // An explicit checklist item still means "documents with evidence here",
         // which is the right reading for a question rather than a container.
         idFilter = await this.documentIdsWithEvidence(projectId, { itemId });
       } else {
-        const filterWorkstreams = workstreamId
-          ? [workstreamId]
+        const filterRiskCategories = riskCategoryId
+          ? [riskCategoryId]
           : scope.isFullAccess
             ? null
-            : scope.allowedWorkstreamIds;
-        if (filterWorkstreams) {
+            : scope.allowedRiskCategoryIds;
+        if (filterRiskCategories) {
           // Placement, not evidence — so the branch matches its count and the
           // map node sits in the same place the list shows it.
-          idFilter = await this.documentIdsInWorkstreams(
+          idFilter = await this.documentIdsInRiskCategories(
             projectId,
-            filterWorkstreams,
+            filterRiskCategories,
             await this.allowedDocumentIds(projectId, scope),
             granted
           );

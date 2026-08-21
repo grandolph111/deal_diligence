@@ -27,7 +27,7 @@ function toTitle(question: string | undefined, content: string): string {
  *
  * The suggestions come from the evidence in the documents the answer actually
  * cited, but a person picks. Silently auto-filing a written conclusion into a
- * diligence checklist would put a claim in the record that no one signed off
+ * diligence record would put a claim in the record that no one signed off
  * on, and mis-filed is worse than unfiled.
  */
 export function SaveAnswerModal({
@@ -56,10 +56,10 @@ export function SaveAnswerModal({
     }
     setLoading(true);
     try {
-      const items = await libraryService.suggestNoteItems(projectId, documentIds);
+      const items = await libraryService.suggestNoteCategories(projectId, documentIds);
       setSuggestions(items);
       // Pre-select the strongest matches; the user trims rather than hunts.
-      setSelected(new Set(items.slice(0, 3).map((i) => i.itemId)));
+      setSelected(new Set(items.slice(0, 3).map((i) => i.riskCategoryId)));
     } catch {
       setSuggestions([]);
     } finally {
@@ -100,7 +100,7 @@ export function SaveAnswerModal({
       await libraryService.createNote(projectId, {
         title: title.trim(),
         content,
-        itemIds: [...selected],
+        riskCategoryIds: [...selected],
         documentIds,
       });
       onSaved();
@@ -182,10 +182,10 @@ export function SaveAnswerModal({
                 }}
               >
                 {suggestions.map((s) => {
-                  const checked = selected.has(s.itemId);
+                  const checked = selected.has(s.riskCategoryId);
                   return (
                     <label
-                      key={s.itemId}
+                      key={s.riskCategoryId}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -199,7 +199,7 @@ export function SaveAnswerModal({
                       <input
                         type="checkbox"
                         checked={checked}
-                        onChange={() => toggle(s.itemId)}
+                        onChange={() => toggle(s.riskCategoryId)}
                         style={{ width: 'auto' }}
                       />
                       <span style={{ flex: 1, minWidth: 0 }}>
@@ -209,7 +209,7 @@ export function SaveAnswerModal({
                         <span
                           style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}
                         >
-                          {s.workstreamTitle}
+                          {s.riskCategoryTitle}
                         </span>
                       </span>
                       <span

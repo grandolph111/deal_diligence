@@ -45,12 +45,10 @@ export interface InitiateUploadInput {
 }
 
 export interface ListDocumentsParams {
-  /** @deprecated dormant — the data room navigates by workstream. */
+  /** @deprecated dormant — the data room navigates by risk category. */
   folderId?: string | null;
-  /** Checklist workstream slug, e.g. 04-intellectual-property. */
-  workstreamId?: string;
-  /** Checklist item slug — narrower than a workstream. */
-  itemId?: string;
+  /** Risk category slug, e.g. 14-intellectual-property. */
+  riskCategoryId?: string;
   /** Documents with no evidence yet (queued, processing, or failed). */
   unfiled?: boolean;
   documentType?: string;
@@ -152,11 +150,11 @@ export const documentsService = {
     if (params.folderId) {
       searchParams.set('folderId', params.folderId);
     }
-    if (params.workstreamId) {
-      searchParams.set('workstreamId', params.workstreamId);
+    if (params.riskCategoryId) {
+      searchParams.set('riskCategoryId', params.riskCategoryId);
     }
-    if (params.itemId) {
-      searchParams.set('itemId', params.itemId);
+    if (params.riskCategoryId) {
+      searchParams.set('riskCategoryId', params.riskCategoryId);
     }
     if (params.unfiled) {
       searchParams.set('unfiled', 'true');

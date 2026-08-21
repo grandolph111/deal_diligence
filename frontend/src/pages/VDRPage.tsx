@@ -39,13 +39,13 @@ export function VDRPage() {
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
 
-  // Checklist navigation. The data room is scoped by workstream / checklist
+  // Risk-category navigation. The data room is scoped by risk category
   // item; `null` means the whole deal.
   const [searchParams, setSearchParams] = useSearchParams();
   const [selection, setSelection] = useState<LibrarySelection | null>(() => {
-    // Deep link from the deal map: ?workstream=<id> or ?unfiled=1.
-    const ws = searchParams.get('workstream');
-    if (ws) return { workstreamId: ws };
+    // Deep link from the deal map: ?risk category=<id> or ?unfiled=1.
+    const ws = searchParams.get('riskCategory');
+    if (ws) return { riskCategoryId: ws };
     if (searchParams.get('unfiled') === '1') return { unfiled: true };
     return null;
   });
@@ -163,7 +163,7 @@ export function VDRPage() {
     fetchMembers();
   }, [projectId, authLoading]);
 
-  // Fetch the checklist + folders after members are loaded (to check permissions)
+  // Fetch the risk category + folders after members are loaded (to check permissions)
   useEffect(() => {
     if (!membersLoading && canAccessVDR && projectId) {
       refreshToc();
@@ -171,13 +171,13 @@ export function VDRPage() {
     }
   }, [membersLoading, canAccessVDR, projectId, refreshToc, fetchFolders]);
 
-  // Fetch documents when the checklist scope changes
+  // Fetch documents when the risk category scope changes
   useEffect(() => {
     if (!membersLoading && canAccessVDR && projectId) {
       // Load up to the API's max page size (100) so the list isn't silently capped
       // at the default 20. Data rooms above 100 docs need real pagination — follow-up.
       fetchDocuments({
-        workstreamId: selection?.workstreamId,
+        riskCategoryId: selection?.riskCategoryId,
         unfiled: selection?.unfiled,
         limit: 100,
       });
@@ -189,9 +189,9 @@ export function VDRPage() {
       setSelection(next);
       // Keep the scope in the URL so the view is linkable and survives reload.
       const params = new URLSearchParams(searchParams);
-      params.delete('workstream');
+      params.delete('riskCategory');
       params.delete('unfiled');
-      if (next?.workstreamId) params.set('workstream', next.workstreamId);
+      if (next?.riskCategoryId) params.set('riskCategory', next.riskCategoryId);
       if (next?.unfiled) params.set('unfiled', '1');
       setSearchParams(params, { replace: true });
     },
@@ -201,7 +201,7 @@ export function VDRPage() {
   // The active tab already names the scope; the list heading just echoes it.
   const scopeLabel = useMemo(() => {
     if (selection?.unfiled) return 'Not yet analyzed';
-    const ws = toc?.workstreams.find((w) => w.id === selection?.workstreamId);
+    const ws = toc?.riskCategories.find((w) => w.id === selection?.riskCategoryId);
     return ws?.title ?? 'All Documents';
   }, [selection, toc]);
 
@@ -371,7 +371,7 @@ export function VDRPage() {
   /**
    * Open a document by id, wherever it lives.
    *
-   * Citations and search results routinely point outside the active checklist
+   * Citations and search results routinely point outside the active risk category
    * scope, and a document has no single home to navigate to any more. So fetch
    * it directly rather than trying to move the tree to it — the viewer works
    * off the document itself, not the current scope.

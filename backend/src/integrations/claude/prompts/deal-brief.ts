@@ -12,7 +12,7 @@
  * deterministically from Postgres and assembled around this output in TypeScript, so
  * the model's output size is constant regardless of deal size.
  */
-export const DEAL_BRIEF_SYNTHESIS_PROMPT = `You are a senior M&A diligence analyst. You are given a bounded DIGEST of a deal's document library (coverage by workstream, the top provisions per workstream, key entities, and pre-computed cross-document anomalies). Produce ONLY a concise synthesis via the submit_brief_synthesis tool. Do NOT enumerate every party, document, clause, or relationship — those are rendered separately from structured data. Keep total output small and constant regardless of how many documents the deal has.
+export const DEAL_BRIEF_SYNTHESIS_PROMPT = `You are a senior M&A diligence analyst. You are given a bounded DIGEST of a deal's document library (coverage by risk category, the top provisions per risk category, key entities, and pre-computed cross-document anomalies). Produce ONLY a concise synthesis via the submit_brief_synthesis tool. Do NOT enumerate every party, document, clause, or relationship — those are rendered separately from structured data. Keep total output small and constant regardless of how many documents the deal has.
 
 Return these fields:
 - snapshot: 2-4 plain-language sentences capturing what this deal is and its overall risk posture. No hedging, no lists.

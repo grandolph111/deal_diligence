@@ -19,7 +19,7 @@ type TabType = 'general' | 'team' | 'playbook';
 
 const TAB_SUBTITLE: Record<TabType, string> = {
   general: 'Name this deal, and control archiving, ownership and deletion.',
-  team: 'Who can open this deal, what they can do, and which workstreams they see.',
+  team: 'Who can open this deal, what they can do, and which risk categories they see.',
   playbook: 'The positions your firm accepts. Extractions score risk against these.',
 };
 

@@ -15,7 +15,7 @@ interface UseLibraryTocReturn {
 }
 
 /**
- * Loads the checklist tree that drives data-room navigation.
+ * Loads the risk categories that drive data-room navigation.
  *
  * Counts move as extraction lands, so this is refreshed alongside the document
  * list rather than cached for the session.
@@ -35,7 +35,7 @@ export function useLibraryToc({
     try {
       setToc(await libraryService.getToc(projectId));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load the deal checklist');
+      setError(err instanceof Error ? err.message : 'Failed to load the deal.s risk categories');
       setToc(null);
     } finally {
       setLoading(false);

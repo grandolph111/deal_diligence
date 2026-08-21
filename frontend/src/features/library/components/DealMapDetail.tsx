@@ -8,7 +8,7 @@ interface Props {
   /** Open the document's extracted fact sheet. */
   onOpenFactSheet: (documentId: string, documentName: string) => void;
   /** Open the data room, scoped to this node. `null` = all documents. */
-  onOpenDataRoom: (workstreamId: string | null) => void;
+  onOpenDataRoom: (riskCategoryId: string | null) => void;
 }
 
 /**
@@ -23,7 +23,7 @@ export function DealMapDetail({ node, onClose, onOpenFactSheet, onOpenDataRoom }
     <aside className="dmd">
       <div className="dmd__head">
         <span className="dmd__kind">
-          {node.type === 'DOCUMENT' ? 'Document' : node.type === 'WORKSTREAM' ? 'Workstream' : 'Deal'}
+          {node.type === 'DOCUMENT' ? 'Document' : node.type === 'RISK_CATEGORY' ? 'Risk category' : 'Deal'}
         </span>
         <button className="dmd__close" onClick={onClose} aria-label="Close">
           <X size={15} />
@@ -74,16 +74,16 @@ export function DealMapDetail({ node, onClose, onOpenFactSheet, onOpenDataRoom }
         </>
       )}
 
-      {node.type === 'WORKSTREAM' && (
+      {node.type === 'RISK_CATEGORY' && (
         <>
           <p className="dmd__note">
             {node.documentCount} document{node.documentCount === 1 ? '' : 's'}{' '}
-            {node.documentCount === 1 ? 'sits' : 'sit'} primarily in this workstream.
+            {node.documentCount === 1 ? 'sits' : 'sit'} primarily in this riskCategory.
           </p>
           {node.documentCount > 0 && (
             <button
               className="dmd__action dmd__action--spaced"
-              onClick={() => onOpenDataRoom(node.workstreamId)}
+              onClick={() => onOpenDataRoom(node.riskCategoryId)}
             >
               <FolderOpen size={14} aria-hidden="true" /> Open in Data Room
             </button>

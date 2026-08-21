@@ -57,27 +57,27 @@ export function MemberRow({
         {member.role}
       </span>
       {member.role !== 'OWNER' && member.role !== 'ADMIN' && (() => {
-        const workstreams = member.permissions?.restrictedWorkstreams?.length ?? 0;
+        const riskCategories = member.permissions?.restrictedRiskCategories?.length ?? 0;
         const legacyFolders = member.permissions?.restrictedFolders?.length ?? 0;
-        if (workstreams > 0) {
+        if (riskCategories > 0) {
           return (
             <span
               className="member-scope-chip"
-              title={`Restricted to ${workstreams} workstream(s)`}
+              title={`Restricted to ${riskCategories} riskCategory(s)`}
             >
               <FolderLock size={12} />
-              {workstreams} workstream{workstreams === 1 ? '' : 's'}
+              {riskCategories} riskCategory{riskCategories === 1 ? '' : 's'}
             </span>
           );
         }
         // A member carrying only pre-migration folder grants can no longer see
-        // anything: folder grants do not translate to workstreams, and nothing
+        // anything: folder grants do not translate to risk categories, and nothing
         // infers them. Say so here rather than letting it read as a bug.
         if (legacyFolders > 0) {
           return (
             <span
               className="member-scope-chip is-stale"
-              title="This member's access was granted by folder, which is no longer used for scoping. Re-grant workstreams to restore their access."
+              title="This member's access was granted by folder, which is no longer used for scoping. Re-grant risk categories to restore their access."
             >
               <FolderLock size={12} />
               Needs re-grant

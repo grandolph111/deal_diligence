@@ -1,11 +1,11 @@
 /**
- * Document placement: the workstream tree the Data Room navigates.
+ * Document placement: the risk category tree the Data Room navigates.
  *
  * The property that matters is that placement PARTITIONS the deal. A document
- * supplies evidence to ~8 workstreams, and an earlier version counted it under
+ * supplies evidence to ~8 risk categories, and an earlier version counted it under
  * every one — the counts then summed to several times the document total and
  * the same contract appeared everywhere. Each document now sits in exactly one
- * workstream: the one it contributes the most evidence to.
+ * risk category: the one it contributes the most evidence to.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -33,15 +33,15 @@ vi.mock('../../src/services/library-writer.service', () => ({
 
 import {
   libraryService,
-  primaryWorkstreamByDocument,
+  primaryRiskCategoryByDocument,
 } from '../../src/modules/library/library.service';
 
 const USER = { id: 'u1', platformRole: 'MEMBER', companyId: 'c1' } as never;
-const FULL = { isFullAccess: true, allowedFolderIds: [], allowedWorkstreamIds: [] };
+const FULL = { isFullAccess: true, allowedFolderIds: [], allowedRiskCategoryIds: [] };
 
 /** One evidence row. */
-const ev = (workstreamId: string, sourceDocumentId: string, riskLevel: string | null = null) => ({
-  workstreamId,
+const ev = (riskCategoryId: string, sourceDocumentId: string, riskLevel: string | null = null) => ({
+  riskCategoryId,
   sourceDocumentId,
   riskLevel,
 });
@@ -51,59 +51,59 @@ beforeEach(() => {
   resolveProjectScope.mockResolvedValue(FULL);
 });
 
-describe('primaryWorkstreamByDocument', () => {
+describe('primaryRiskCategoryByDocument', () => {
   it('places a document where it contributes the most evidence', async () => {
     nodeFindMany.mockResolvedValue([
-      ev('01-corporate-org', 'doc1'),
-      ev('05-liability-risk', 'doc1'),
-      ev('05-liability-risk', 'doc1'),
-      ev('05-liability-risk', 'doc1'),
-      ev('04-intellectual-property', 'doc1'),
+      ev('01-corporate-formation', 'doc1'),
+      ev('20-employees-contractors', 'doc1'),
+      ev('20-employees-contractors', 'doc1'),
+      ev('20-employees-contractors', 'doc1'),
+      ev('14-intellectual-property', 'doc1'),
     ]);
 
-    const placement = await primaryWorkstreamByDocument('p1', null, null);
+    const placement = await primaryRiskCategoryByDocument('p1', null, null);
 
-    expect(placement.get('doc1')).toBe('05-liability-risk');
-    // One document, one home — not one entry per workstream it touches.
+    expect(placement.get('doc1')).toBe('20-employees-contractors');
+    // One document, one home — not one entry per risk category it touches.
     expect(placement.size).toBe(1);
   });
 
   it('breaks an evidence tie on high-risk density', async () => {
     nodeFindMany.mockResolvedValue([
-      ev('01-corporate-org', 'doc1'),
-      ev('01-corporate-org', 'doc1'),
-      ev('05-liability-risk', 'doc1', 'HIGH'),
-      ev('05-liability-risk', 'doc1'),
+      ev('01-corporate-formation', 'doc1'),
+      ev('01-corporate-formation', 'doc1'),
+      ev('20-employees-contractors', 'doc1', 'HIGH'),
+      ev('20-employees-contractors', 'doc1'),
     ]);
 
-    const placement = await primaryWorkstreamByDocument('p1', null, null);
+    const placement = await primaryRiskCategoryByDocument('p1', null, null);
 
-    // Equal counts, but the workstream carrying the high-risk clause is the
+    // Equal counts, but the risk category carrying the high-risk clause is the
     // more useful home for a document a reviewer is trying to find.
-    expect(placement.get('doc1')).toBe('05-liability-risk');
+    expect(placement.get('doc1')).toBe('20-employees-contractors');
   });
 
-  it('places a restricted caller’s documents inside a granted workstream', async () => {
+  it('places a restricted caller’s documents inside a granted risk category', async () => {
     nodeFindMany.mockResolvedValue([
-      ev('05-liability-risk', 'doc1'),
-      ev('05-liability-risk', 'doc1'),
-      ev('04-intellectual-property', 'doc1'),
+      ev('20-employees-contractors', 'doc1'),
+      ev('20-employees-contractors', 'doc1'),
+      ev('14-intellectual-property', 'doc1'),
     ]);
 
-    const placement = await primaryWorkstreamByDocument(
+    const placement = await primaryRiskCategoryByDocument(
       'p1',
       null,
-      new Set(['04-intellectual-property'])
+      new Set(['14-intellectual-property'])
     );
 
-    // Liability wins on volume but is not granted; the document must still land
+    // Employees wins on volume but is not granted; the document must still land
     // somewhere the caller can actually navigate to.
-    expect(placement.get('doc1')).toBe('04-intellectual-property');
+    expect(placement.get('doc1')).toBe('14-intellectual-property');
   });
 
   it('omits a document with no evidence at all', async () => {
-    nodeFindMany.mockResolvedValue([ev('05-liability-risk', 'doc1')]);
-    const placement = await primaryWorkstreamByDocument('p1', null, null);
+    nodeFindMany.mockResolvedValue([ev('20-employees-contractors', 'doc1')]);
+    const placement = await primaryRiskCategoryByDocument('p1', null, null);
     expect(placement.has('never-extracted')).toBe(false);
   });
 });
@@ -111,29 +111,29 @@ describe('primaryWorkstreamByDocument', () => {
 describe('libraryService.getToc', () => {
   it('partitions the deal — counts sum to the placed total, never past it', async () => {
     nodeFindMany.mockResolvedValue([
-      ev('03-commercial-contracts', 'doc1'),
-      ev('03-commercial-contracts', 'doc1'),
-      ev('05-liability-risk', 'doc1'),
-      ev('05-liability-risk', 'doc2'),
-      ev('05-liability-risk', 'doc2'),
-      ev('03-commercial-contracts', 'doc3'),
+      ev('15-material-contracts', 'doc1'),
+      ev('15-material-contracts', 'doc1'),
+      ev('20-employees-contractors', 'doc1'),
+      ev('20-employees-contractors', 'doc2'),
+      ev('20-employees-contractors', 'doc2'),
+      ev('15-material-contracts', 'doc3'),
     ]);
     documentFindMany.mockResolvedValue([{ id: 'doc1' }, { id: 'doc2' }, { id: 'doc3' }]);
 
     const toc = await libraryService.getToc('p1', USER);
-    const summed = toc.workstreams.reduce((n, w) => n + w.documentCount, 0);
+    const summed = toc.riskCategories.reduce((n, w) => n + w.documentCount, 0);
 
     expect(summed).toBe(3);
     expect(toc.totals.placed).toBe(3);
     expect(toc.totals.documents).toBe(3);
 
-    const byId = Object.fromEntries(toc.workstreams.map((w) => [w.id, w.documentCount]));
-    expect(byId['03-commercial-contracts']).toBe(2);
-    expect(byId['05-liability-risk']).toBe(1);
+    const byId = Object.fromEntries(toc.riskCategories.map((w) => [w.id, w.documentCount]));
+    expect(byId['15-material-contracts']).toBe(2);
+    expect(byId['20-employees-contractors']).toBe(1);
   });
 
   it('counts documents with no evidence as unfiled rather than dropping them', async () => {
-    nodeFindMany.mockResolvedValue([ev('05-liability-risk', 'doc1')]);
+    nodeFindMany.mockResolvedValue([ev('20-employees-contractors', 'doc1')]);
     documentFindMany.mockResolvedValue([
       { id: 'doc1' },
       { id: 'failed-doc' },
@@ -149,32 +149,32 @@ describe('libraryService.getToc', () => {
     expect(toc.totals.placed).toBe(1);
   });
 
-  it('lists only granted workstreams, so the tree cannot offer a 403', async () => {
+  it('lists only granted risk categories, so the tree cannot offer a 403', async () => {
     resolveProjectScope.mockResolvedValue({
       isFullAccess: false,
       allowedFolderIds: [],
-      allowedWorkstreamIds: ['04-intellectual-property'],
+      allowedRiskCategoryIds: ['14-intellectual-property'],
     });
     // allowedDocIds runs first, then placement.
     nodeFindMany
       .mockResolvedValueOnce([{ sourceDocumentId: 'ip-doc' }])
-      .mockResolvedValueOnce([ev('04-intellectual-property', 'ip-doc')]);
+      .mockResolvedValueOnce([ev('14-intellectual-property', 'ip-doc')]);
     documentFindMany.mockResolvedValue([{ id: 'ip-doc' }, { id: 'other-doc' }]);
 
     const toc = await libraryService.getToc('p1', USER);
 
-    expect(toc.workstreams.map((w) => w.id)).toEqual(['04-intellectual-property']);
-    expect(toc.workstreams[0].documentCount).toBe(1);
+    expect(toc.riskCategories.map((w) => w.id)).toEqual(['14-intellectual-property']);
+    expect(toc.riskCategories[0].documentCount).toBe(1);
     // Unfiled is a full-access notion — no grant can reach a document that
-    // belongs to no workstream.
+    // belongs to no risk category.
     expect(toc.unfiled.documentCount).toBe(0);
   });
 
-  it('hides the internal triage workstream until something lands there', async () => {
-    nodeFindMany.mockResolvedValue([ev('05-liability-risk', 'doc1')]);
+  it('hides the internal triage risk category until something lands there', async () => {
+    nodeFindMany.mockResolvedValue([ev('20-employees-contractors', 'doc1')]);
     documentFindMany.mockResolvedValue([{ id: 'doc1' }]);
 
     const toc = await libraryService.getToc('p1', USER);
-    expect(toc.workstreams.map((w) => w.id)).not.toContain('99-to-triage');
+    expect(toc.riskCategories.map((w) => w.id)).not.toContain('99-to-triage');
   });
 });

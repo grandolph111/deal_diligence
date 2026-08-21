@@ -70,7 +70,7 @@ const prettyDate = (raw: string): string => {
 const cleanDocName = (name: string): string => name.replace(/\.pdf$/i, '').replace(/_/g, ' ');
 
 /* ---------------------------------------------------------------- */
-/* Workflow (workstream) rollup from the deal map                    */
+/* Workflow (riskCategory) rollup from the deal map                    */
 /* ---------------------------------------------------------------- */
 
 interface WorkflowRow {
@@ -86,18 +86,18 @@ const buildWorkflows = (map: DealMap | null): { rows: WorkflowRow[]; maxDocs: nu
   const docsByWs = new Map<string, { risks: number[]; high: number }>();
   for (const n of map.nodes) {
     if (n.type !== 'DOCUMENT') continue;
-    const entry = docsByWs.get(n.workstreamId) ?? { risks: [], high: 0 };
+    const entry = docsByWs.get(n.riskCategoryId) ?? { risks: [], high: 0 };
     if (n.riskScore != null) entry.risks.push(n.riskScore);
     if ((n.riskScore ?? 0) >= 7 || n.riskLevel === 'HIGH') entry.high += 1;
-    docsByWs.set(n.workstreamId, entry);
+    docsByWs.set(n.riskCategoryId, entry);
   }
   const rows: WorkflowRow[] = [];
   for (const n of map.nodes) {
-    if (n.type !== 'WORKSTREAM') continue;
-    const agg = docsByWs.get(n.workstreamId) ?? { risks: [], high: 0 };
+    if (n.type !== 'RISK_CATEGORY') continue;
+    const agg = docsByWs.get(n.riskCategoryId) ?? { risks: [], high: 0 };
     if (n.documentCount === 0) continue;
     rows.push({
-      id: n.workstreamId,
+      id: n.riskCategoryId,
       title: n.label,
       docCount: n.documentCount,
       highCount: agg.high,
@@ -404,7 +404,7 @@ export function DealBriefPage() {
                         <span className="memo-section__rule" />
                       </div>
                       <p className="memo-section__note">
-                        Diligence workstreams ranked by concentration of high-risk documents. Bar length shows how the {docCount ?? ''} documents distribute across workflows.
+                        Risk categories ranked by concentration of high-risk documents. Bar length shows how the {docCount ?? ''} documents distribute across categories.
                       </p>
                       <div className="memo-flow">
                         {workflows.map((w) => (
@@ -442,7 +442,7 @@ export function DealBriefPage() {
                         <div className="memo-glance__label">High-risk docs</div>
                       </div>
                       <div className="memo-glance__cell">
-                        <div className="memo-glance__value">{dealMap?.stats.workstreams || workflows.length || '—'}</div>
+                        <div className="memo-glance__value">{dealMap?.stats.riskCategories || workflows.length || '—'}</div>
                         <div className="memo-glance__label">Workflows</div>
                       </div>
                       <div className="memo-glance__cell">

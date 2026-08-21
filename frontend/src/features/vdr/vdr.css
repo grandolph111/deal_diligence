@@ -100,8 +100,8 @@
   flex-shrink: 0;
 }
 
-/* Active checklist scope. Names what the list below is showing — a document
-   appears under every workstream it has evidence in, so without this the same
+/* Active risk-category scope. Names what the list below is showing — a document
+   appears under every risk category it has evidence in, so without this the same
    file surfacing in several places reads as duplication rather than coverage. */
 /* Column layout: without min-width the wide document table forces the whole
    column — and so the page — wider than the viewport, which pushed the header
@@ -131,7 +131,7 @@
   color: var(--text-tertiary);
 }
 
-/* The sidebar holds a long checklist — let it scroll independently. */
+/* The sidebar holds a long list — let it scroll independently. */
 .vdr-sidebar > .lib-tree {
   overflow-y: auto;
   flex: 1;

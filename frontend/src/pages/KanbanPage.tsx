@@ -155,7 +155,7 @@ export function KanbanPage() {
               </span>
             )
           )}
-          {board.workstreams.map((w) => (
+          {board.riskCategories.map((w) => (
             <span key={w.id} className="chip">
               <Layers size={11} /> {w.title}
             </span>

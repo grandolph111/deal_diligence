@@ -3,8 +3,7 @@ import type { LibraryGraphNode } from '../../../api/services/library.service';
 import { STATUS_COLOR } from './LibraryGraph';
 
 const TYPE_LABEL: Record<string, string> = {
-  WORKSTREAM: 'Workstream',
-  CHECKLIST_ITEM: 'Checklist item',
+  RISK_CATEGORY: 'Risk category',
   PROVISION: 'Provision',
   RISK: 'Risk',
   OBLIGATION: 'Obligation',
@@ -21,7 +20,7 @@ interface LibraryNodeDetailProps {
   expanding: boolean;
   error?: string | null;
   onClose: () => void;
-  onToggleExpand: (itemId: string) => void;
+  onToggleExpand: (riskCategoryId: string) => void;
 }
 
 export function LibraryNodeDetail({
@@ -32,7 +31,7 @@ export function LibraryNodeDetail({
   onClose,
   onToggleExpand,
 }: LibraryNodeDetailProps) {
-  const isItem = node.type === 'CHECKLIST_ITEM';
+  const isItem = node.type === 'RISK_CATEGORY';
   const status = node.status ?? 'OPEN';
 
   return (
@@ -64,7 +63,7 @@ export function LibraryNodeDetail({
             <>
               <button
                 className="button secondary lib-expand-btn"
-                onClick={() => onToggleExpand(node.itemId ?? '')}
+                onClick={() => onToggleExpand(node.riskCategoryId ?? '')}
                 disabled={expanding}
               >
                 {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -104,7 +103,7 @@ export function LibraryNodeDetail({
       )}
 
       {node.type === 'SOURCE' && (
-        <p className="lib-detail-hint">A source document. Its provisions link out to the checklist items they answer.</p>
+        <p className="lib-detail-hint">A source document. Its provisions link out to the risk categories they belong to.</p>
       )}
       {node.type === 'ENTITY' && (
         <p className="lib-detail-hint">A canonical entity referenced across the deal's documents.</p>

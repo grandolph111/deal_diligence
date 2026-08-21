@@ -12,20 +12,20 @@ export const libraryRoutes = Router({ mergeParams: true });
 libraryRoutes.use(requireAuth);
 libraryRoutes.use(loadProjectMembership);
 
-// GET /library/toc — workstream → checklist item tree (the Data Room navigation)
+// GET /library/toc — risk category → checklist item tree (the Data Room navigation)
 libraryRoutes.get('/toc', requirePermission('canAccessVDR'), libraryController.getToc);
 
-// GET /library/map — the deal map: root → workstreams → documents + peer links
+// GET /library/map — the deal map: root → risk categories → documents + peer links
 libraryRoutes.get('/map', requirePermission('canAccessVDR'), libraryController.getDealMap);
 
-// GET /library/graph — tiered base graph (workstreams → items → sources + entities)
+// GET /library/graph — base graph (risk categories → sources + entities)
 libraryRoutes.get('/graph', requirePermission('canAccessVDR'), libraryController.getGraph);
 
-// GET /library/items/:itemId/evidence — provision nodes under one checklist item
+// GET /library/items/:riskCategoryId/evidence — provision nodes under one checklist item
 libraryRoutes.get(
-  '/items/:itemId/evidence',
+  '/items/:riskCategoryId/evidence',
   requirePermission('canAccessVDR'),
-  libraryController.getItemEvidence
+  libraryController.getCategoryEvidence
 );
 
 // GET /library/documents/:documentId/backlinks — checklist items, peer docs,
@@ -47,7 +47,7 @@ libraryRoutes.get(
 libraryRoutes.post(
   '/notes/suggest',
   requirePermission('canAccessVDR'),
-  libraryController.suggestNoteItems
+  libraryController.suggestNoteCategories
 );
 
 // POST /library/notes — file an answer back into the library

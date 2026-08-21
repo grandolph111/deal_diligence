@@ -20,10 +20,10 @@ interface Props {
 /**
  * Create a board for a specialist.
  *
- * You choose a person, not a set of workstreams. A board is one specialist's
+ * You choose a person, not a set of risk categories. A board is one specialist's
  * slice of the deal, so its scope IS their access — which means there is no way
  * to build a board that reaches past what its owner is allowed to see, and
- * re-granting them workstreams later re-scopes the board with no action here.
+ * re-granting them risk categories later re-scopes the board with no action here.
  * The list below the picker is therefore a readout, not an input.
  */
 export function CreateBoardModal({
@@ -38,7 +38,7 @@ export function CreateBoardModal({
   const [description, setDescription] = useState('');
   const [smes, setSmes] = useState<BoardSmeOption[]>([]);
   const [selectedSmeId, setSelectedSmeId] = useState('');
-  const [ownWorkstreams, setOwnWorkstreams] = useState<Array<{ id: string; title: string }>>([]);
+  const [ownRiskCategories, setOwnWorkstreams] = useState<Array<{ id: string; title: string }>>([]);
   const [toc, setToc] = useState<TocWorkstream[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -55,10 +55,10 @@ export function CreateBoardModal({
           boardsService.listSmes(projectId),
           tocPromise,
         ]);
-        // Only members who actually hold workstreams can own a board.
-        const eligible = roster.filter((s) => s.workstreams.length > 0);
+        // Only members who actually hold risk categories can own a board.
+        const eligible = roster.filter((s) => s.riskCategories.length > 0);
         setSmes(eligible);
-        setToc(tocRes.workstreams);
+        setToc(tocRes.riskCategories);
         if (eligible.length === 1) setSelectedSmeId(eligible[0].userId);
       } else {
         const [members, tocRes] = await Promise.all([
@@ -66,18 +66,18 @@ export function CreateBoardModal({
           tocPromise,
         ]);
         const me = members.find((m) => m.user?.id === currentUserId);
-        const ids = me?.permissions?.restrictedWorkstreams ?? [];
-        setToc(tocRes.workstreams);
+        const ids = me?.permissions?.restrictedRiskCategories ?? [];
+        setToc(tocRes.riskCategories);
         setOwnWorkstreams(
           ids.map((id) => ({
             id,
-            title: tocRes.workstreams.find((w) => w.id === id)?.title ?? id,
+            title: tocRes.riskCategories.find((w) => w.id === id)?.title ?? id,
           }))
         );
       }
     } catch (err) {
       console.error('Failed to load board scope options:', err);
-      setError('Could not load the deal checklist');
+      setError('Could not load the deal.s risk categories');
     } finally {
       setLoading(false);
     }
@@ -94,16 +94,16 @@ export function CreateBoardModal({
   }, [isOpen, load]);
 
   const selectedSme = smes.find((s) => s.userId === selectedSmeId);
-  const scope = canAssignSme ? (selectedSme?.workstreams ?? []) : ownWorkstreams;
-  const hasScope = canAssignSme ? Boolean(selectedSme) : ownWorkstreams.length > 0;
+  const scope = canAssignSme ? (selectedSme?.riskCategories ?? []) : ownRiskCategories;
+  const hasScope = canAssignSme ? Boolean(selectedSme) : ownRiskCategories.length > 0;
 
-  const docCount = (workstreamId: string) =>
-    toc.find((w) => w.id === workstreamId)?.documentCount ?? 0;
+  const docCount = (riskCategoryId: string) =>
+    toc.find((w) => w.id === riskCategoryId)?.documentCount ?? 0;
 
   // Deliberately NOT summed into a total. A document supplies evidence to
-  // roughly eight workstreams and is counted under each, so adding these up
-  // overstates the reach — badly, once a scope covers several workstreams. The
-  // per-workstream figures are each correct; only their sum is a lie.
+  // roughly eight risk categories and is counted under each, so adding these up
+  // overstates the reach — badly, once a scope covers several risk categories. The
+  // per-risk category figures are each correct; only their sum is a lie.
 
   const handleCreate = async () => {
     if (!name.trim()) {
@@ -204,7 +204,7 @@ export function CreateBoardModal({
                 }}
               >
                 This board is theirs — only they and project admins can open it, and it
-                covers exactly the workstreams they have been granted.
+                covers exactly the risk categories they have been granted.
               </p>
             </div>
           )}
@@ -224,7 +224,7 @@ export function CreateBoardModal({
               <div style={{ fontSize: 'var(--text-sm)', lineHeight: 1.6 }}>
                 <strong style={{ display: 'block' }}>No specialists yet</strong>
                 <span style={{ color: 'var(--text-secondary)' }}>
-                  Invite a member and grant them workstreams in{' '}
+                  Invite a member and grant them risk categories in{' '}
                   <Link to={`/projects/${projectId}/settings?tab=team`}>Admin → Team</Link>, then
                   come back to give them a board.
                 </span>
@@ -236,9 +236,9 @@ export function CreateBoardModal({
                 <Layers size={13} />
                 {canAssignSme
                   ? selectedSme
-                    ? `Workstreams ${selectedSme.name ?? selectedSme.email} can access`
-                    : 'Workstreams this board will cover'
-                  : 'Workstreams you can access'}
+                    ? `RiskCategories ${selectedSme.name ?? selectedSme.email} can access`
+                    : 'RiskCategories this board will cover'
+                  : 'RiskCategories you can access'}
                 {hasScope && (
                   <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>
                     ({scope.length})
@@ -264,7 +264,7 @@ export function CreateBoardModal({
                   >
                     {canAssignSme
                       ? 'Choose a specialist to see the scope their board will cover.'
-                      : 'You have not been granted any workstreams yet. Ask an admin for access.'}
+                      : 'You have not been granted any risk categories yet. Ask an admin for access.'}
                   </div>
                 ) : (
                   scope.map((ws, i) => (
@@ -307,7 +307,7 @@ export function CreateBoardModal({
                   }}
                 >
                   Counts overlap — a document usually supplies evidence to several
-                  workstreams. Change this scope in{' '}
+                  riskCategories. Change this scope in{' '}
                   <Link to={`/projects/${projectId}/settings?tab=team`}>Admin → Team</Link> and the
                   board follows.
                 </p>

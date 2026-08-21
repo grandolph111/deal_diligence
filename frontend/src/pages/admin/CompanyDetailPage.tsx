@@ -495,13 +495,13 @@ export function CompanyDetailPage({
               </div>
               <div className="form-group">
                 <label>Playbook</label>
-                <p className="form-hint">Deal checklist or instructions for this company's deals. Markdown supported.</p>
+                <p className="form-hint">Deal risk category or instructions for this company's deals. Markdown supported.</p>
                 <textarea
                   value={settingsPlaybook}
                   onChange={(e) => setSettingsPlaybook(e.target.value)}
                   rows={10}
                   maxLength={50000}
-                  placeholder="## Due Diligence Checklist&#10;&#10;- [ ] Review financials&#10;- [ ] Legal review"
+                  placeholder="## Due Diligence Risk category&#10;&#10;- [ ] Review financials&#10;- [ ] Legal review"
                 />
               </div>
               {settingsError && <p className="error-message">{settingsError}</p>}

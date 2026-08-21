@@ -13,12 +13,12 @@ import {
   testPrisma,
 } from '../utils';
 
-const IP = '04-intellectual-property';
-const TAX = '11-tax';
+const IP = '14-intellectual-property';
+const TAX = '07-tax-matters';
 
 /**
  * Boards are per-specialist: one SME owns a board, and its scope is that
- * member's workstream grants rather than a separate per-board selection.
+ * member's risk category grants rather than a separate per-board selection.
  */
 describe('Kanban boards — SME scoping', () => {
   beforeEach(async () => {
@@ -43,11 +43,11 @@ describe('Kanban boards — SME scoping', () => {
     const project = await createTestProject(owner.id);
     await addProjectMember(project.id, smeA.id, ProjectRole.MEMBER, {
       canAccessKanban: true,
-      restrictedWorkstreams: [IP],
+      restrictedRiskCategories: [IP],
     });
     await addProjectMember(project.id, smeB.id, ProjectRole.MEMBER, {
       canAccessKanban: true,
-      restrictedWorkstreams: [IP],
+      restrictedRiskCategories: [IP],
     });
     return { owner, smeA, smeB, project };
   };
@@ -75,11 +75,11 @@ describe('Kanban boards — SME scoping', () => {
       });
 
       expect(res.body.sme.id).toBe(smeA.id);
-      expect(res.body.workstreams).toHaveLength(1);
-      expect(res.body.workstreams[0].id).toBe(IP);
+      expect(res.body.riskCategories).toHaveLength(1);
+      expect(res.body.riskCategories[0].id).toBe(IP);
     });
 
-    it('rejects an SME who holds no workstreams', async () => {
+    it('rejects an SME who holds no risk categories', async () => {
       const { project } = await setup();
       const outsider = await createTestUser(testUsers.admin);
       await addProjectMember(project.id, outsider.id, ProjectRole.MEMBER, {
@@ -92,7 +92,7 @@ describe('Kanban boards — SME scoping', () => {
         { name: 'Empty', smeUserId: outsider.id },
         400
       );
-      expect(res.body.error?.message ?? res.body.message).toMatch(/no workstreams/i);
+      expect(res.body.error?.message ?? res.body.message).toMatch(/no risk categories/i);
     });
 
     it('rejects a board with no SME at all', async () => {
@@ -193,7 +193,7 @@ describe('Kanban boards — SME scoping', () => {
       // Admin → Team: grant Tax as well. Nothing touches the board.
       await testPrisma.projectMember.update({
         where: { projectId_userId: { projectId: project.id, userId: smeA.id } },
-        data: { permissions: { canAccessKanban: true, restrictedWorkstreams: [IP, TAX] } },
+        data: { permissions: { canAccessKanban: true, restrictedRiskCategories: [IP, TAX] } },
       });
 
       const res = await createTestApp()
@@ -201,7 +201,7 @@ describe('Kanban boards — SME scoping', () => {
         .set('Authorization', 'Bearer test-token')
         .expect(200);
 
-      expect(res.body.workstreams.map((w: { id: string }) => w.id).sort()).toEqual(
+      expect(res.body.riskCategories.map((w: { id: string }) => w.id).sort()).toEqual(
         [IP, TAX].sort()
       );
     });

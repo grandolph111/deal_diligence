@@ -1,5 +1,5 @@
 /*
- * LibraryTree — checklist navigation for the data room.
+ * LibraryTree — risk category navigation for the data room.
  * Navy/brass system from index.css; two tiers, quiet until hovered.
  */
 
@@ -103,7 +103,7 @@
   position: relative;
 }
 
-/* Each workstream is its own bounded surface — a plain hover tint left them
+/* Each risk category is its own bounded surface — a plain hover tint left them
    reading as one long list rather than distinct sections of the deal. */
 .lib-tree__row--ws-flat {
   padding: var(--space-3);
@@ -156,7 +156,7 @@
   color: var(--color-warning);
 }
 
-/* Workstream row is a flex shell holding the twisty + the label button. */
+/* Risk category row is a flex shell holding the twisty + the label button. */
 .lib-tree__row--ws {
   padding: 0;
   gap: 0;
@@ -287,7 +287,7 @@
   padding: 0;
 }
 
-/* Hairline guide connecting an item back to its workstream. */
+/* Hairline guide connecting an entry back to its risk category. */
 .lib-tree__items {
   margin-left: calc(var(--space-2) + 10px);
   padding-left: var(--space-2);

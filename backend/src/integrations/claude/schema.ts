@@ -259,11 +259,11 @@ export const chatResponseSchema = z.object({
 export type ChatResponse = z.infer<typeof chatResponseSchema>;
 
 // ============================================================
-// Library ToC routing (Haiku) — pick relevant checklist items for a query
+// Library ToC routing (Haiku) — pick relevant risk categories for a query
 // ============================================================
 
 export const libraryRouteResponseSchema = z.object({
-  itemIds: z.preprocess(jsonArrayPreprocessor, z.array(z.string()).default([])),
+  riskCategoryIds: z.preprocess(jsonArrayPreprocessor, z.array(z.string()).default([])),
 });
 export type LibraryRouteResponse = z.infer<typeof libraryRouteResponseSchema>;
 
@@ -299,7 +299,7 @@ export type AdjudicateResponse = z.infer<typeof adjudicateResponseSchema>;
 // ============================================================
 
 export const LINT_FINDING_TYPES = [
-  'GAP', // material checklist item with no/insufficient evidence
+  'GAP', // material risk category with no/insufficient evidence
   'THIN', // has evidence but likely incomplete
   'RISK', // flagged item to escalate
   'INCONSISTENCY', // conflicting evidence across documents
@@ -315,7 +315,7 @@ export const lintResponseSchema = z.object({
         z.object({
           type: z.enum(LINT_FINDING_TYPES),
           severity: z.enum(['LOW', 'MEDIUM', 'HIGH']),
-          itemId: z.string().nullable().optional(), // related checklist item slug
+          riskCategoryId: z.string().nullable().optional(), // related risk category slug
           title: z.string(),
           detail: z.string(),
           suggestedAction: z.string().nullable().optional(),

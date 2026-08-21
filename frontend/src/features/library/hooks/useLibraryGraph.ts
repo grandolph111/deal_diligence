@@ -3,7 +3,7 @@ import { libraryService } from '../../../api/services/library.service';
 import type { LibraryGraph, LibraryGraphNode } from '../../../api/services/library.service';
 
 export interface ExpandError {
-  itemId: string;
+  riskCategoryId: string;
   message: string;
 }
 
@@ -18,8 +18,8 @@ interface UseLibraryGraphReturn {
   selectedNode: LibraryGraphNode | null;
   statusCounts: { open: number; covered: number; flagged: number; thin: number; total: number };
   truncated: { sources: number; entities: number } | null;
-  expandItem: (itemId: string) => Promise<void>;
-  toggleExpandItem: (itemId: string) => Promise<void>;
+  expandItem: (riskCategoryId: string) => Promise<void>;
+  toggleExpandItem: (riskCategoryId: string) => Promise<void>;
   setSelectedNodeId: (id: string | null) => void;
   refresh: () => Promise<void>;
 }
@@ -27,7 +27,7 @@ interface UseLibraryGraphReturn {
 const EMPTY: LibraryGraph = { nodes: [], edges: [] };
 
 /**
- * Loads the tiered base graph and lets checklist items be expanded to reveal
+ * Loads the tiered base graph and lets risk categories be expanded to reveal
  * their provision evidence (fetched on demand and merged into the view).
  */
 export function useLibraryGraph(projectId: string): UseLibraryGraphReturn {
@@ -70,21 +70,21 @@ export function useLibraryGraph(projectId: string): UseLibraryGraphReturn {
   // Fetch + cache an item's evidence once. Returns true if evidence is available
   // (already cached or fetched now). Surfaces a per-item error on failure.
   const ensureEvidence = useCallback(
-    async (itemId: string): Promise<boolean> => {
-      if (evidence.has(itemId)) return true;
-      if (inFlight.current.has(itemId)) return false; // fetch already running
-      inFlight.current.add(itemId);
-      setExpandingItemId(itemId);
+    async (riskCategoryId: string): Promise<boolean> => {
+      if (evidence.has(riskCategoryId)) return true;
+      if (inFlight.current.has(riskCategoryId)) return false; // fetch already running
+      inFlight.current.add(riskCategoryId);
+      setExpandingItemId(riskCategoryId);
       setExpandError(null);
       try {
-        const data = await libraryService.getItemEvidence(projectId, itemId);
-        setEvidence((prev) => new Map(prev).set(itemId, data));
+        const data = await libraryService.getCategoryEvidence(projectId, riskCategoryId);
+        setEvidence((prev) => new Map(prev).set(riskCategoryId, data));
         return true;
       } catch (err) {
-        setExpandError({ itemId, message: err instanceof Error ? err.message : 'Failed to load evidence' });
+        setExpandError({ riskCategoryId, message: err instanceof Error ? err.message : 'Failed to load evidence' });
         return false;
       } finally {
-        inFlight.current.delete(itemId);
+        inFlight.current.delete(riskCategoryId);
         setExpandingItemId(null);
       }
     },
@@ -93,27 +93,27 @@ export function useLibraryGraph(projectId: string): UseLibraryGraphReturn {
 
   // Expand only — never collapses (used for graph node taps).
   const expandItem = useCallback(
-    async (itemId: string) => {
-      if (expandedItems.has(itemId)) return;
-      const ok = await ensureEvidence(itemId);
-      if (ok) setExpandedItems((prev) => new Set(prev).add(itemId));
+    async (riskCategoryId: string) => {
+      if (expandedItems.has(riskCategoryId)) return;
+      const ok = await ensureEvidence(riskCategoryId);
+      if (ok) setExpandedItems((prev) => new Set(prev).add(riskCategoryId));
     },
     [expandedItems, ensureEvidence]
   );
 
   // Expand or collapse (used for the detail-panel button).
   const toggleExpandItem = useCallback(
-    async (itemId: string) => {
-      if (expandedItems.has(itemId)) {
+    async (riskCategoryId: string) => {
+      if (expandedItems.has(riskCategoryId)) {
         setExpandedItems((prev) => {
           const next = new Set(prev);
-          next.delete(itemId);
+          next.delete(riskCategoryId);
           return next;
         });
         return;
       }
-      const ok = await ensureEvidence(itemId);
-      if (ok) setExpandedItems((prev) => new Set(prev).add(itemId));
+      const ok = await ensureEvidence(riskCategoryId);
+      if (ok) setExpandedItems((prev) => new Set(prev).add(riskCategoryId));
     },
     [expandedItems, ensureEvidence]
   );
@@ -124,8 +124,8 @@ export function useLibraryGraph(projectId: string): UseLibraryGraphReturn {
     const edgeById = new Map<string, LibraryGraph['edges'][number]>();
     for (const n of base.nodes) nodeById.set(n.id, n);
     for (const e of base.edges) edgeById.set(e.id, e);
-    for (const itemId of expandedItems) {
-      const ev = evidence.get(itemId);
+    for (const riskCategoryId of expandedItems) {
+      const ev = evidence.get(riskCategoryId);
       if (!ev) continue;
       for (const n of ev.nodes) nodeById.set(n.id, n);
       for (const e of ev.edges) edgeById.set(e.id, e);
@@ -152,8 +152,8 @@ export function useLibraryGraph(projectId: string): UseLibraryGraphReturn {
     let thin = 0;
     let total = 0;
     for (const n of base.nodes) {
-      if (n.type !== 'CHECKLIST_ITEM') continue;
-      if (n.status === 'NA') continue; // not applicable — not a diligence question
+      if (n.type !== 'RISK_CATEGORY') continue;
+      if (n.status === 'NA') continue; // not applicable, or delegated to another adviser
       total += 1;
       if (n.status === 'FLAGGED') flagged += 1;
       else if (n.status === 'COVERED') covered += 1;

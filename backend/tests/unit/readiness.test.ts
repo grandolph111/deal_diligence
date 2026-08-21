@@ -107,11 +107,11 @@ describe('readiness states', () => {
     expect(r.state).toBe('PROCESSING');
   });
 
-  it('NO_ACCESS for a member with no workstream grants', async () => {
+  it('NO_ACCESS for a member with no risk category grants', async () => {
     resolveProjectScope.mockResolvedValue({
       isFullAccess: false,
       allowedFolderIds: [],
-      allowedWorkstreamIds: [],
+      allowedRiskCategoryIds: [],
     });
     const r = await read();
     expect(r.state).toBe('NO_ACCESS');
@@ -124,7 +124,7 @@ describe('readiness states', () => {
     resolveProjectScope.mockResolvedValue({
       isFullAccess: false,
       allowedFolderIds: [],
-      allowedWorkstreamIds: ['04-intellectual-property'],
+      allowedRiskCategoryIds: ['14-intellectual-property'],
     });
     groupBy.mockResolvedValue(statuses({ COMPLETE: 2, PROCESSING: 3 }));
 
@@ -132,7 +132,7 @@ describe('readiness states', () => {
 
     expect(r.state).not.toBe('NO_ACCESS');
     // Documents acquire evidence only AFTER extraction succeeds, so scoping the
-    // status counts by workstream would make processing/pending/failed
+    // status counts by risk category would make processing/pending/failed
     // structurally zero — PARTIAL and PROCESSING become unreachable and a
     // mid-ingest deal reports itself finished.
     expect(r.processing).toBe(3);
@@ -143,7 +143,7 @@ describe('readiness states', () => {
     expect(nodeCount).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          workstreamId: { in: ['04-intellectual-property'] },
+          riskCategoryId: { in: ['14-intellectual-property'] },
         }),
       })
     );

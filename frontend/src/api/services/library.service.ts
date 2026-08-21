@@ -3,11 +3,10 @@ import { apiClient } from '../client';
 /** A node in the knowledge-library graph. Mirrors backend library.service GraphNode. */
 export interface LibraryGraphNode {
   id: string;
-  type: 'WORKSTREAM' | 'CHECKLIST_ITEM' | 'PROVISION' | 'RISK' | 'OBLIGATION' | 'ENTITY' | 'SOURCE';
+  type: 'RISK_CATEGORY' | 'PROVISION' | 'RISK' | 'OBLIGATION' | 'ENTITY' | 'SOURCE';
   label: string;
   status?: string | null;
-  workstreamId?: string;
-  itemId?: string;
+  riskCategoryId?: string;
   clauseType?: string | null;
   riskLevel?: string | null;
   page?: number | null;
@@ -33,7 +32,7 @@ export type LintFindingType = 'GAP' | 'THIN' | 'RISK' | 'INCONSISTENCY' | 'SUGGE
 export interface LintFinding {
   type: LintFindingType;
   severity: 'LOW' | 'MEDIUM' | 'HIGH';
-  itemId?: string | null;
+  riskCategoryId?: string | null;
   title: string;
   detail: string;
   suggestedAction?: string | null;
@@ -54,7 +53,7 @@ export interface TocWorkstream {
 }
 
 export interface LibraryToc {
-  workstreams: TocWorkstream[];
+  riskCategories: TocWorkstream[];
   unfiled: { documentCount: number };
   totals: { documents: number; placed: number };
 }
@@ -63,9 +62,9 @@ export type DealMapNode =
   | { id: string; type: 'ROOT'; label: string; documentCount: number }
   | {
       id: string;
-      type: 'WORKSTREAM';
+      type: 'RISK_CATEGORY';
       label: string;
-      workstreamId: string;
+      riskCategoryId: string;
       documentCount: number;
       order: number;
     }
@@ -74,7 +73,7 @@ export type DealMapNode =
       type: 'DOCUMENT';
       label: string;
       documentId: string;
-      workstreamId: string;
+      riskCategoryId: string;
       riskScore: number | null;
       riskLevel: string | null;
       documentType: string | null;
@@ -94,17 +93,15 @@ export interface DealMapEdge {
 export interface DealMap {
   nodes: DealMapNode[];
   edges: DealMapEdge[];
-  stats: { documents: number; workstreams: number };
+  stats: { documents: number; riskCategories: number };
 }
 
 export interface DocumentBacklinks {
   document: { id: string; name: string };
-  checklistItems: Array<{
-    itemId: string;
+  riskCategories: Array<{
+    riskCategoryId: string;
     title: string;
     status: string;
-    workstreamId: string;
-    workstreamTitle: string;
     evidenceCount: number;
     highRiskCount: number;
   }>;
@@ -117,12 +114,12 @@ export interface DocumentBacklinks {
     sharedClauseTypes: string[];
   }>;
   entities: Array<{ id: string; title: string; mentionCount: number }>;
-  notes: Array<{ id: string; title: string; itemId: string; createdAt: string }>;
+  notes: Array<{ id: string; title: string; riskCategoryId: string; createdAt: string }>;
 }
 
 export interface ClauseComparison {
   clauseType: string;
-  itemId: string | null;
+  riskCategoryId: string | null;
   provisions: Array<{
     id: string;
     documentId: string | null;
@@ -132,7 +129,7 @@ export interface ClauseComparison {
     riskLevel: string | null;
     confidence: number | null;
     pageNumber: number | null;
-    itemId: string;
+    riskCategoryId: string;
   }>;
   stats: {
     total: number;
@@ -142,39 +139,39 @@ export interface ClauseComparison {
 }
 
 export interface SuggestedNoteItem {
-  itemId: string;
+  riskCategoryId: string;
   title: string;
-  workstreamTitle: string;
+  riskCategoryTitle: string;
   documentCount: number;
 }
 
 export interface CreateNoteInput {
   title: string;
   content: string;
-  /** Checklist items this answer addresses. */
-  itemIds?: string[];
+  /** Risk categories this answer addresses. */
+  riskCategoryIds?: string[];
   /** Documents the answer cited. */
   documentIds?: string[];
 }
 
 /**
- * Knowledge-library API. `getToc` is the checklist tree the Data Room
+ * Knowledge-library API. `getToc` is the risk-category tree the Data Room
  * navigates; `getGraph` is the same skeleton drawn as a graph, with sources and
  * entities opt-in. Item evidence is fetched on expand.
  */
 export const libraryService = {
   /**
-   * Workstream → checklist item tree with document counts.
+   * Risk category → risk category item tree with document counts.
    *
    * Counts sum to more than `totals.documents` by design: a document supplies
-   * evidence to ~8 workstreams, so it is counted under each.
+   * evidence to ~8 risk categories, so it is counted under each.
    */
   async getToc(projectId: string): Promise<LibraryToc> {
     return apiClient.get<LibraryToc>(`/projects/${projectId}/library/toc`);
   },
 
   /**
-   * The base graph is workstreams + checklist items only. Pass
+   * The base graph is risk categories only. Pass
    * `{ includeSources: true }` / `{ includeEntities: true }` to opt the heavier
    * tiers back in — at 100 documents that is ~180 nodes and reads as a hairball,
    * which is why it is off by default.
@@ -191,7 +188,7 @@ export const libraryService = {
     return apiClient.get<LibraryGraph>(`/projects/${projectId}/library/graph${qs}`);
   },
 
-  /** The deal as a network: root → workstreams → documents, plus peer links. */
+  /** The deal as a network: root → risk categories → documents, plus peer links. */
   async getDealMap(projectId: string): Promise<DealMap> {
     return apiClient.get<DealMap>(`/projects/${projectId}/library/map`);
   },
@@ -210,8 +207,8 @@ export const libraryService = {
     );
   },
 
-  /** Checklist items the cited documents speak to — suggestions for filing. */
-  async suggestNoteItems(projectId: string, documentIds: string[]): Promise<SuggestedNoteItem[]> {
+  /** Risk categories the cited documents speak to — suggestions for filing. */
+  async suggestNoteCategories(projectId: string, documentIds: string[]): Promise<SuggestedNoteItem[]> {
     const res = await apiClient.post<{ items: SuggestedNoteItem[] }>(
       `/projects/${projectId}/library/notes/suggest`,
       { documentIds }
@@ -223,13 +220,13 @@ export const libraryService = {
   async createNote(
     projectId: string,
     input: CreateNoteInput
-  ): Promise<{ id: string; itemId: string; workstreamId: string; slug: string }> {
+  ): Promise<{ id: string; riskCategoryId: string; slug: string }> {
     return apiClient.post(`/projects/${projectId}/library/notes`, input);
   },
 
-  async getItemEvidence(projectId: string, itemId: string): Promise<LibraryGraph> {
+  async getCategoryEvidence(projectId: string, riskCategoryId: string): Promise<LibraryGraph> {
     return apiClient.get<LibraryGraph>(
-      `/projects/${projectId}/library/items/${encodeURIComponent(itemId)}/evidence`
+      `/projects/${projectId}/library/items/${encodeURIComponent(riskCategoryId)}/evidence`
     );
   },
 

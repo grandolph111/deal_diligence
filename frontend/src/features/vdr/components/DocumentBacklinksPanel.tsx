@@ -54,9 +54,9 @@ export function DocumentBacklinksPanel({
   if (error) return <div className="backlinks__state backlinks__state--error">{error}</div>;
   if (!data) return null;
 
-  const { checklistItems, clauseTypes, relatedDocuments, entities, notes } = data;
+  const { riskCategories, clauseTypes, relatedDocuments, entities, notes } = data;
   const nothing =
-    checklistItems.length === 0 && clauseTypes.length === 0 && relatedDocuments.length === 0;
+    riskCategories.length === 0 && clauseTypes.length === 0 && relatedDocuments.length === 0;
 
   if (nothing) {
     return (
@@ -68,21 +68,23 @@ export function DocumentBacklinksPanel({
 
   return (
     <div className="backlinks">
-      {checklistItems.length > 0 && (
+      {riskCategories.length > 0 && (
         <section className="backlinks__section">
           <h4 className="backlinks__heading">
             <Layers size={13} aria-hidden="true" />
-            Answers {checklistItems.length} diligence question
-            {checklistItems.length === 1 ? '' : 's'}
+            Answers {riskCategories.length} diligence question
+            {riskCategories.length === 1 ? '' : 's'}
           </h4>
-          <ScrollList total={checklistItems.length} cap={8} rowHeight={44} noun="question">
+          <ScrollList total={riskCategories.length} cap={8} rowHeight={44} noun="risk category">
             <ul className="backlinks__list">
-              {checklistItems.map((i) => (
-                <li key={i.itemId} className="backlinks__row">
+              {riskCategories.map((i) => (
+                <li key={i.riskCategoryId} className="backlinks__row">
                   <span className={`backlinks__dot is-${i.status.toLowerCase()}`} aria-hidden="true" />
                   <span className="backlinks__row-main">
                     <span className="backlinks__row-title">{i.title}</span>
-                    <span className="backlinks__row-sub">{i.workstreamTitle}</span>
+                    <span className="backlinks__row-sub">
+                      {i.evidenceCount} {i.evidenceCount === 1 ? 'finding' : 'findings'}
+                    </span>
                   </span>
                   {i.highRiskCount > 0 && (
                     <span
