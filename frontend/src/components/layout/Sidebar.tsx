@@ -1,6 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
+  ClipboardList,
   FileText,
   Kanban,
   Settings,
@@ -101,6 +102,16 @@ export function Sidebar({ projectId }: SidebarProps) {
             >
               <BookOpen className="icon" size={20} />
               <span>Deal Brief</span>
+            </NavLink>
+
+            <NavLink
+              to={`/projects/${projectId}/report`}
+              className={({ isActive }) =>
+                `sidebar-link ${isActive ? 'active' : ''}`
+              }
+            >
+              <ClipboardList className="icon" size={20} />
+              <span>Deal Report</span>
             </NavLink>
 
             <NavLink

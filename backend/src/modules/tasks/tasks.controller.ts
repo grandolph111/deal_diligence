@@ -321,12 +321,33 @@ export const tasksController = {
 
   /**
    * POST /projects/:id/tasks/:taskId/ai-approve
-   * Approve the report → move task to COMPLETE.
+   * Approve the report → move task to COMPLETE and file it into the deal report.
+   *
+   * Approval is the moment a finding becomes something the firm stands behind,
+   * so it records who approved it and files the write-up under the task's risk
+   * category. Filing is best-effort: a task that has been approved must not be
+   * left un-approved because the report write failed.
    */
   approveAi: asyncHandler(async (req: Request, res: Response) => {
     const { id: projectId, taskId } = req.params as Record<string, string>;
     await assertTaskAccess(projectId, taskId, req.projectMember);
+    if (!req.user) throw ApiError.unauthorized('Not authenticated');
+
     await tasksService.updateTaskStatus(taskId as string, 'COMPLETE');
+    const { prisma } = await import('../../config/database');
+    await prisma.task.update({
+      where: { id: taskId },
+      data: { aiApprovedById: req.user.id, aiApprovedAt: new Date() },
+    });
+    try {
+      const { reportService } = await import('../report/report.service');
+      await reportService.fileFromTask(taskId as string, { id: req.user.id });
+    } catch (err) {
+      console.warn(
+        `[report] could not file task ${String(taskId).slice(0, 8)}:`,
+        err instanceof Error ? err.message : err
+      );
+    }
     const task = await tasksService.getTaskById(taskId as string);
     res.json(task);
   }),
@@ -347,9 +368,22 @@ export const tasksController = {
         aiReportSummary: null,
         aiCompletedAt: null,
         aiError: null,
+        aiApprovedById: null,
+        aiApprovedAt: null,
         status: 'IN_PROGRESS',
       },
     });
+    // The draft this task filed is now withdrawn by its own author. Leaving it
+    // in a client-facing report would leave text standing that nobody backs.
+    try {
+      const { reportService } = await import('../report/report.service');
+      await reportService.retractFromTask(taskId as string);
+    } catch (err) {
+      console.warn(
+        `[report] could not retract task ${String(taskId).slice(0, 8)}:`,
+        err instanceof Error ? err.message : err
+      );
+    }
     const task = await tasksService.getTaskById(taskId as string);
     res.json(task);
   }),

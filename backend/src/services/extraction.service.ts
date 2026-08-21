@@ -38,6 +38,7 @@ import { reconciliationService } from './reconciliation.service';
 import { libraryWriterService } from './library-writer.service';
 import { extractPdfPages, validateCitations, type CitationIssue } from '../utils/citation-validator';
 import { renderFactSheet } from '../utils/fact-sheet-renderer';
+import { isAbsentMarkerClause } from '../utils/absent-marker';
 
 /**
  * Adjudicate the low-precision HALLUCINATED_QUOTE flags with Haiku verdicts:
@@ -302,18 +303,6 @@ const deriveRiskLevel = (score: number): 'LOW' | 'MEDIUM' | 'HIGH' => {
  * Requires an absence phrasing AND a provision/clause word AND an absence verb to
  * avoid dropping genuine operative clauses that merely begin with "No".
  */
-const isAbsentMarkerClause = (content: string | null | undefined): boolean => {
-  const t = (content ?? '').trim();
-  if (t.length < 3) return true;
-  if (/^present:\s*no\b/i.test(t)) return true;
-  if (/^not\s+(present|found|applicable|specified|included|disclosed)\b/i.test(t)) return true;
-  const head = t.slice(0, 180);
-  return (
-    /^(no\b|there (is|are) no\b)/i.test(head) &&
-    /\b(provision|clause|language|section)\b/i.test(head) &&
-    /\b(present|found|exist|appears?|applicable|contained|anywhere|in this (agreement|contract))\b/i.test(head)
-  );
-};
 
 const buildExtractionHash = (etag: string | null, modelId: string): string =>
   `${etag ?? 'no-etag'}::${modelId}`;

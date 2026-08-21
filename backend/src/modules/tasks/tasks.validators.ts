@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isRiskCategoryId } from '../../integrations/library/risk-categories';
 import { TaskStatus, TaskPriority } from '@prisma/client';
 
 export const createTaskSchema = z.object({
@@ -6,7 +7,12 @@ export const createTaskSchema = z.object({
   description: z.string().max(10000).optional(),
   status: z.nativeEnum(TaskStatus).default(TaskStatus.TODO),
   priority: z.nativeEnum(TaskPriority).default(TaskPriority.MEDIUM),
-  riskCategory: z.string().max(100).optional(),
+  // One of the 26 risk categories — an AI task's findings file under it in
+  // the deal report, so a free-text label would have nowhere to land.
+  riskCategory: z
+    .string()
+    .refine(isRiskCategoryId, { message: 'Unknown risk category' })
+    .optional(),
   assignedDate: z.string().datetime().optional(),
   dueDate: z.string().datetime().optional(),
   timeEstimate: z.number().int().positive().optional(),
@@ -23,7 +29,11 @@ export const updateTaskSchema = z.object({
   description: z.string().max(10000).nullable().optional(),
   status: z.nativeEnum(TaskStatus).optional(),
   priority: z.nativeEnum(TaskPriority).optional(),
-  riskCategory: z.string().max(100).nullable().optional(),
+  riskCategory: z
+    .string()
+    .refine(isRiskCategoryId, { message: 'Unknown risk category' })
+    .nullable()
+    .optional(),
   assignedDate: z.string().datetime().nullable().optional(),
   dueDate: z.string().datetime().nullable().optional(),
   timeEstimate: z.number().int().positive().nullable().optional(),

@@ -15,6 +15,7 @@ import {
   GraphExplorerPage,
   LibraryGraphPage,
   DealBriefPage,
+  DealReportPage,
   BoardsIndexPage,
   AdminCompaniesPage,
   CreateCompanyPage,
@@ -109,6 +110,10 @@ export const router = createBrowserRouter([
           {
             path: 'brief',
             element: <DealBriefPage />,
+          },
+          {
+            path: 'report',
+            element: <DealReportPage />,
           },
           {
             // Legacy single-board URL: redirect to the boards index which

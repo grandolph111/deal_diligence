@@ -55,6 +55,7 @@ model User {
   createdBoards    KanbanBoard[]   @relation("BoardCreator")
   smeBoards        KanbanBoard[]   @relation("BoardSme")
   comments         TaskComment[]   @relation("CommentAuthor")
+  verifiedEntries  ReportEntry[]   @relation("ReportVerifier")
   assignedSubtasks Subtask[]       @relation("SubtaskAssignee")
 
   // VDR Relations
@@ -116,6 +117,7 @@ model Project {
 
   // Knowledge library (checklist ToC + evidence nodes)
   libraryNodes LibraryNode[]
+  reportEntries ReportEntry[]
   libraryEdges LibraryEdge[]
 }
 
@@ -237,6 +239,9 @@ model Task {
   description  String?
   status       TaskStatus   @default(TODO)
   priority     TaskPriority @default(MEDIUM)
+  // One of the 26 risk-category slugs (see integrations/library/risk-categories).
+  // Repurposed from a free-text label: the term now names the deal's organizing
+  // axis, and an AI task's findings have to file somewhere in the issues report.
   riskCategory String?
 
   assignedDate DateTime?
@@ -254,6 +259,11 @@ model Task {
   aiStartedAt        DateTime?
   aiCompletedAt      DateTime?
   aiError            String?       @db.Text
+  // Who signed the report off, and when. Approval used to only move the task to
+  // COMPLETE, which left the report with no way to say who stands behind a
+  // finding — the one thing a client-facing document has to be able to say.
+  aiApprovedById     String?
+  aiApprovedAt       DateTime?
 
   createdById String
   createdAt   DateTime @default(now())
@@ -263,6 +273,7 @@ model Task {
   project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   board         KanbanBoard?     @relation(fields: [boardId], references: [id], onDelete: SetNull)
   createdBy     User             @relation("TaskCreator", fields: [createdById], references: [id])
+  reportEntries ReportEntry[]
   assignees     TaskAssignee[]
   tags          TaskTag[]
   attachments   TaskAttachment[]
@@ -886,6 +897,52 @@ model LibraryEdge {
   @@index([projectId])
   @@index([fromNodeId])
   @@index([toNodeId])
+}
+
+// One row of the due-diligence issues report: a finding under a risk category.
+//
+// Flagged provisions are already in the library and are rendered live, so this
+// table holds only what a person has to stand behind — the AI's draft write-up
+// and the reviewer's version of it. Keeping both is the point: the draft is the
+// audit record of what the model said, the human text is what ships to a client.
+model ReportEntry {
+  id             String @id @default(uuid())
+  projectId      String
+  riskCategoryId String
+
+  /// The Kanban task whose approved AI report produced this, when there was one.
+  taskId String?
+
+  title String
+  /// What Claude wrote. Never edited in place — an edit becomes humanText.
+  aiDraft             String  @db.Text
+  /// The reviewer's version. Null until someone edits; export prefers this.
+  humanText           String? @db.Text
+  nextSteps           String? @db.Text
+  supplementalRequest String? @db.Text
+  severity            String? // HIGH | MEDIUM | LOW
+
+  status ReportEntryStatus @default(AI_DRAFT)
+
+  verifiedById String?
+  verifiedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task       Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  verifiedBy User?   @relation("ReportVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  @@index([projectId, riskCategoryId])
+  @@index([projectId, status])
+  @@index([taskId])
+}
+
+enum ReportEntryStatus {
+  AI_DRAFT // written by Claude, nobody has looked at it
+  IN_REVIEW // a person has it open / has edited but not signed off
+  VERIFIED // signed off — the only status that exports by default
 }
 
 enum LibraryNodeType {

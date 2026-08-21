@@ -18,9 +18,9 @@ type SeedUser = {
 const STATIC_USERS: SeedUser[] = [
   {
     auth0Id: 'dev|super-admin',
-    email: 'alan@dealdiligence.com',
+    email: 'alan.lewis@dealdiligence.ai',
     name: 'Alan',
-    devPassword: 'dealdone198cdx4',
+    devPassword: 'LuckyMe327!$!',
     platformRole: PlatformRole.SUPER_ADMIN,
     companyId: null,
   },
@@ -163,7 +163,7 @@ async function main() {
   }
 
   console.log('Seed complete.');
-  console.log('  alan@dealdiligence.com       / dealdone198cdx4           (SUPER_ADMIN)');
+  console.log('  alan.lewis@dealdiligence.ai  / LuckyMe327!$!             (SUPER_ADMIN)');
   console.log('  admin@dealdiligence.com      / Adm!n-9fK2pQzR7vLx        (CUSTOMER_ADMIN @ Demo Company)');
   console.log('  demo@dealdiligence.com       / Dem0-3hT8wYbN5qJe         (MEMBER @ Demo Company)');
   console.log(`  acme-admin@dealdiligence.com / ${acmeAdminPassword}  (CUSTOMER_ADMIN @ Acme Holdings)`);

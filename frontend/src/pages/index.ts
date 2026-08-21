@@ -11,6 +11,7 @@ export { EntitiesPage } from './EntitiesPage';
 export { GraphExplorerPage } from './GraphExplorerPage';
 export { LibraryGraphPage } from './LibraryGraphPage';
 export { DealBriefPage } from './DealBriefPage';
+export { DealReportPage } from './DealReportPage';
 export { BoardsIndexPage } from './BoardsIndexPage';
 export { AdminCompaniesPage } from './admin/AdminCompaniesPage';
 export { CreateCompanyPage } from './admin/CreateCompanyPage';
