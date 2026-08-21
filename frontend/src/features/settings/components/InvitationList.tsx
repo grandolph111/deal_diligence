@@ -40,11 +40,6 @@ export function InvitationList({
 
   return (
     <div className="invitation-list">
-      <div className="invitation-list-header">
-        <h4 className="invitation-list-title">
-          Pending Invitations ({invitations.length})
-        </h4>
-      </div>
       {invitations.map((invitation) => (
         <InvitationRow
           key={invitation.id}

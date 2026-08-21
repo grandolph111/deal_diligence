@@ -65,7 +65,7 @@ export function TransferOwnershipModal({
         <div className="modal-header">
           <h3>
             <UserCheck size={20} />
-            Transfer Ownership
+            Transfer ownership
           </h3>
           <button
             className="icon-button"
@@ -151,7 +151,7 @@ export function TransferOwnershipModal({
             onClick={handleConfirm}
             disabled={!selectedMember || transferring}
           >
-            {transferring ? 'Transferring...' : 'Transfer Ownership'}
+            {transferring ? 'Transferring…' : 'Transfer ownership'}
           </button>
         </div>
       </div>

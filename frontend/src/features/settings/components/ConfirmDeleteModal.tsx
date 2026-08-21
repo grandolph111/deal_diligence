@@ -44,7 +44,7 @@ export function ConfirmDeleteModal({
             <div className="confirm-dialog-icon">
               <AlertTriangle size={48} />
             </div>
-            <h3 className="confirm-dialog-title">Delete Project</h3>
+            <h3 className="confirm-dialog-title">Delete deal</h3>
             <p className="confirm-dialog-message">
               This action cannot be undone. All data including tasks, documents,
               and members will be permanently deleted.
@@ -76,7 +76,7 @@ export function ConfirmDeleteModal({
               className="button danger"
               disabled={!isValid || deleting}
             >
-              {deleting ? 'Deleting...' : 'Delete Project'}
+              {deleting ? 'Deleting…' : 'Delete deal'}
             </button>
           </div>
         </form>

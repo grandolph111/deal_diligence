@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Save, Trash2, Plus, X } from 'lucide-react';
+import {
+  Save,
+  Trash2,
+  Plus,
+  X,
+  Flag,
+  BookOpen,
+  Sparkles,
+  AlertCircle,
+} from 'lucide-react';
 import { playbookService } from '../../../api';
 import type { Playbook, PlaybookStandardPosition } from '../../../types/api';
 
@@ -23,6 +32,22 @@ const CUAD_CLAUSE_TYPES = [
   'WARRANTY_DURATION',
   'PAYMENT_TERMS',
 ];
+
+/** CUAD stores clause types as SCREAMING_SNAKE; nobody wants to read that in a select. */
+const CLAUSE_LABEL_OVERRIDES: Record<string, string> = {
+  IP_OWNERSHIP_ASSIGNMENT: 'IP ownership / assignment',
+  MOST_FAVORED_NATION: 'Most favoured nation',
+  NO_SOLICIT_EMPLOYEES: 'No-solicit — employees',
+  NO_SOLICIT_CUSTOMERS: 'No-solicit — customers',
+  REPRESENTATIONS_AND_WARRANTIES: 'Representations and warranties',
+};
+
+function humanizeClauseType(clauseType: string): string {
+  const override = CLAUSE_LABEL_OVERRIDES[clauseType];
+  if (override) return override;
+  const words = clauseType.toLowerCase().replace(/_/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
 
 interface Props {
   projectId: string;
@@ -143,160 +168,275 @@ export function PlaybookTab({ projectId, canEdit }: Props) {
     setPlaybook({ ...playbook, redFlags: [...playbook.redFlags, ''] });
   };
 
-  if (loading) return <div className="loading-container"><div className="loading-spinner" /></div>;
+
+  if (loading) {
+    return (
+      <div className="settings-section">
+        <div className="settings-loading">
+          <div className="spinner" />
+          <span>Loading playbook…</span>
+        </div>
+      </div>
+    );
+  }
   if (!playbook) return null;
 
   const disabled = !canEdit;
+  const isEmpty =
+    playbook.standardPositions.length === 0 && playbook.redFlags.length === 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Playbook</h2>
-          <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--space-2)', maxWidth: 720 }}>
-            Standard positions your firm prefers for this deal. Every extraction scores risk as
-            <em> deviation from the playbook</em>, not an absolute rubric. Red flags force HIGH risk on any match.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-          {savedAt && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', alignSelf: 'center' }}>Saved at {savedAt}</span>}
-          {canEdit && playbook.standardPositions.length === 0 && playbook.redFlags.length === 0 && (
-            <button className="button secondary sm" onClick={handleUseTemplate} disabled={saving}>
-              Use template
-            </button>
-          )}
-          {canEdit && (
-            <button className="button ghost sm" onClick={handleClear} disabled={saving}>
-              <Trash2 size={14} /> Clear
-            </button>
-          )}
-          <button className="button primary sm" onClick={handleSave} disabled={disabled || saving}>
-            <Save size={14} /> {saving ? 'Saving…' : 'Save'}
+    <div className="settings-stack">
+      <div className="playbook-toolbar">
+        {savedAt && <span className="playbook-saved">Saved {savedAt}</span>}
+        {canEdit && isEmpty && (
+          <button className="button secondary sm" onClick={handleUseTemplate} disabled={saving}>
+            <Sparkles size={14} /> Use template
           </button>
+        )}
+        {canEdit && (
+          <button className="button ghost sm" onClick={handleClear} disabled={saving}>
+            <Trash2 size={14} /> Clear
+          </button>
+        )}
+        <button className="button primary sm" onClick={handleSave} disabled={disabled || saving}>
+          <Save size={14} /> {saving ? 'Saving…' : 'Save playbook'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="playbook-error">
+          <AlertCircle size={16} />
+          {error}
+        </div>
+      )}
+
+      {/* Deal context */}
+      <div className="settings-section">
+        <div className="settings-section-header">
+          <div>
+            <h3 className="settings-section-title">Deal context</h3>
+            <p className="settings-section-description">
+              A one-paragraph brief on the deal and your firm's posture. Claude uses it to frame
+              every extraction.
+            </p>
+          </div>
+        </div>
+        <div className="settings-section-body">
+          <div className="form-group">
+            <label htmlFor="dealContext" className="sr-only">
+              Deal context
+            </label>
+            <textarea
+              id="dealContext"
+              value={playbook.dealContext ?? ''}
+              disabled={disabled}
+              onChange={(e) => setPlaybook({ ...playbook, dealContext: e.target.value })}
+              rows={3}
+              placeholder="E.g. Acme is a strategic acquirer focused on SaaS; we will walk away from uncapped IP indemnity."
+            />
+          </div>
         </div>
       </div>
 
-      {error && <div className="error-container"><span className="error-message">{error}</span></div>}
-
-      <div className="card" style={{ padding: 'var(--space-5)' }}>
-        <label htmlFor="dealContext" style={{ fontWeight: 500 }}>Deal context</label>
-        <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-xs)', marginTop: 0 }}>
-          One-paragraph brief on the deal and the firm's posture. The AI uses this to frame every extraction.
-        </p>
-        <textarea
-          id="dealContext"
-          value={playbook.dealContext ?? ''}
-          disabled={disabled}
-          onChange={(e) => setPlaybook({ ...playbook, dealContext: e.target.value })}
-          rows={3}
-          placeholder="E.g. Acme is a strategic acquirer focused on SaaS; we will walk away from uncapped IP indemnity."
-          style={{ width: '100%', fontFamily: 'var(--font-sans)', fontSize: 'var(--text-sm)' }}
-        />
-      </div>
-
-      <div className="card" style={{ padding: 'var(--space-5)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <h3 style={{ margin: 0 }}>Red flags</h3>
+      {/* Red flags */}
+      <div className="settings-section">
+        <div className="settings-section-header">
+          <div>
+            <h3 className="settings-section-title">
+              Red flags{playbook.redFlags.length > 0 ? ` · ${playbook.redFlags.length}` : ''}
+            </h3>
+            <p className="settings-section-description">
+              Any clause matching one of these is forced to HIGH risk automatically.
+            </p>
+          </div>
           {canEdit && (
-            <button className="button ghost sm" onClick={addRedFlag}>
-              <Plus size={14} /> Add
+            <button className="button secondary sm" onClick={addRedFlag}>
+              <Plus size={14} /> Add flag
             </button>
           )}
         </div>
-        <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-xs)', marginTop: 'var(--space-1)' }}>
-          Any clause matching these triggers HIGH risk automatically.
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
-          {playbook.redFlags.map((f, i) => (
-            <div key={i} style={{ display: 'flex', gap: 'var(--space-2)' }}>
-              <input
-                value={f}
-                disabled={disabled}
-                onChange={(e) => updateRedFlag(i, e.target.value)}
-                placeholder="E.g. change of control on any equity transfer"
-                style={{ flex: 1 }}
-              />
+        <div className={playbook.redFlags.length ? 'settings-section-body' : 'settings-section-body flush'}>
+          {playbook.redFlags.length === 0 ? (
+            <div className="settings-empty">
+              <span className="settings-empty-icon">
+                <Flag size={18} />
+              </span>
+              <h4>No red flags</h4>
+              <p>
+                Add the terms your firm will not accept — an uncapped indemnity, a change of
+                control on any equity transfer.
+              </p>
               {canEdit && (
-                <button className="button ghost sm" onClick={() => removeRedFlag(i)}>
-                  <X size={14} />
+                <button className="button secondary sm" onClick={addRedFlag}>
+                  <Plus size={14} /> Add the first flag
                 </button>
               )}
             </div>
-          ))}
-          {playbook.redFlags.length === 0 && (
-            <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>No red flags yet.</p>
+          ) : (
+            <div className="redflag-list">
+              {playbook.redFlags.map((f, i) => (
+                <div key={i} className="redflag-row">
+                  <span className="redflag-marker">
+                    <Flag size={13} />
+                  </span>
+                  <input
+                    value={f}
+                    disabled={disabled}
+                    onChange={(e) => updateRedFlag(i, e.target.value)}
+                    placeholder="E.g. change of control on any equity transfer"
+                    aria-label={`Red flag ${i + 1}`}
+                  />
+                  {canEdit && (
+                    <button
+                      className="icon-button destructive"
+                      onClick={() => removeRedFlag(i)}
+                      title="Remove red flag"
+                      aria-label={`Remove red flag ${i + 1}`}
+                    >
+                      <X size={15} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
 
-      <div className="card" style={{ padding: 'var(--space-5)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <h3 style={{ margin: 0 }}>Standard positions</h3>
+      {/* Standard positions */}
+      <div className="settings-section">
+        <div className="settings-section-header">
+          <div>
+            <h3 className="settings-section-title">
+              Standard positions
+              {playbook.standardPositions.length > 0
+                ? ` · ${playbook.standardPositions.length}`
+                : ''}
+            </h3>
+            <p className="settings-section-description">
+              The language you prefer per clause type, the fallbacks you will live with, and how
+              badly a deviation reads.
+            </p>
+          </div>
           {canEdit && (
-            <button className="button ghost sm" onClick={addPosition}>
-              <Plus size={14} /> Add
+            <button className="button secondary sm" onClick={addPosition}>
+              <Plus size={14} /> Add position
             </button>
           )}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', marginTop: 'var(--space-3)' }}>
-          {playbook.standardPositions.map((p, i) => (
-            <div key={i} style={{ border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', padding: 'var(--space-4)' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: 'var(--space-3)', alignItems: 'center' }}>
-                <select
-                  value={p.clauseType}
-                  disabled={disabled}
-                  onChange={(e) => updatePosition(i, { clauseType: e.target.value })}
-                >
-                  {CUAD_CLAUSE_TYPES.map((ct) => (
-                    <option key={ct} value={ct}>{ct}</option>
-                  ))}
-                </select>
-                <select
-                  value={p.riskIfDeviates}
-                  disabled={disabled}
-                  onChange={(e) => updatePosition(i, { riskIfDeviates: e.target.value as 'LOW' | 'MEDIUM' | 'HIGH' })}
-                >
-                  <option value="LOW">Risk if deviates: LOW</option>
-                  <option value="MEDIUM">Risk if deviates: MEDIUM</option>
-                  <option value="HIGH">Risk if deviates: HIGH</option>
-                </select>
-                {canEdit && (
-                  <button className="button ghost sm" onClick={() => removePosition(i)}>
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-              <label style={{ display: 'block', marginTop: 'var(--space-3)', fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>Preferred language</label>
-              <textarea
-                value={p.preferredLanguage ?? ''}
-                disabled={disabled}
-                onChange={(e) => updatePosition(i, { preferredLanguage: e.target.value })}
-                rows={2}
-                style={{ width: '100%', marginTop: 'var(--space-1)' }}
-              />
-              <label style={{ display: 'block', marginTop: 'var(--space-3)', fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
-                Fallbacks (one per line — acceptable variations)
-              </label>
-              <textarea
-                value={p.fallbacks.join('\n')}
-                disabled={disabled}
-                onChange={(e) => updatePosition(i, { fallbacks: e.target.value.split('\n').filter((l) => l.trim()) })}
-                rows={2}
-                style={{ width: '100%', marginTop: 'var(--space-1)' }}
-              />
-              <label style={{ display: 'block', marginTop: 'var(--space-3)', fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>Notes</label>
-              <input
-                value={p.notes ?? ''}
-                disabled={disabled}
-                onChange={(e) => updatePosition(i, { notes: e.target.value })}
-                style={{ width: '100%', marginTop: 'var(--space-1)' }}
-              />
+        <div
+          className={
+            playbook.standardPositions.length
+              ? 'settings-section-body'
+              : 'settings-section-body flush'
+          }
+        >
+          {playbook.standardPositions.length === 0 ? (
+            <div className="settings-empty">
+              <span className="settings-empty-icon">
+                <BookOpen size={18} />
+              </span>
+              <h4>No standard positions</h4>
+              <p>
+                Start from the firm template, or add clause types one at a time. Until then,
+                extractions fall back to the absolute risk rubric.
+              </p>
+              {canEdit && (
+                <button className="button secondary sm" onClick={handleUseTemplate}>
+                  <Sparkles size={14} /> Use template
+                </button>
+              )}
             </div>
-          ))}
-          {playbook.standardPositions.length === 0 && (
-            <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>
-              No standard positions yet. Add one or click "Use template" above.
-            </p>
+          ) : (
+            <div className="position-list">
+              {playbook.standardPositions.map((p, i) => (
+                <div key={i} className="position-card">
+                  <div className="position-head">
+                    <div className="position-clause">
+                      <span className="position-index">{i + 1}</span>
+                      <select
+                        value={p.clauseType}
+                        disabled={disabled}
+                        aria-label={`Clause type for position ${i + 1}`}
+                        onChange={(e) => updatePosition(i, { clauseType: e.target.value })}
+                      >
+                        {CUAD_CLAUSE_TYPES.map((ct) => (
+                          <option key={ct} value={ct}>
+                            {humanizeClauseType(ct)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <select
+                      value={p.riskIfDeviates}
+                      disabled={disabled}
+                      aria-label={`Risk if the deal deviates on position ${i + 1}`}
+                      onChange={(e) =>
+                        updatePosition(i, {
+                          riskIfDeviates: e.target.value as 'LOW' | 'MEDIUM' | 'HIGH',
+                        })
+                      }
+                    >
+                      <option value="LOW">Deviation → Low risk</option>
+                      <option value="MEDIUM">Deviation → Medium risk</option>
+                      <option value="HIGH">Deviation → High risk</option>
+                    </select>
+                    {canEdit && (
+                      <button
+                        className="icon-button destructive"
+                        onClick={() => removePosition(i)}
+                        title="Remove position"
+                        aria-label={`Remove position ${i + 1}`}
+                      >
+                        <X size={15} />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="position-body">
+                    <div className="position-field">
+                      <label htmlFor={`pref-${i}`}>Preferred language</label>
+                      <textarea
+                        id={`pref-${i}`}
+                        value={p.preferredLanguage ?? ''}
+                        disabled={disabled}
+                        onChange={(e) => updatePosition(i, { preferredLanguage: e.target.value })}
+                        rows={2}
+                        placeholder="The wording your firm asks for."
+                      />
+                    </div>
+
+                    <div className="position-field">
+                      <label htmlFor={`fallback-${i}`}>Fallbacks</label>
+                      <p className="field-hint">One per line — variations you would still sign.</p>
+                      <textarea
+                        id={`fallback-${i}`}
+                        value={p.fallbacks.join('\n')}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          updatePosition(i, {
+                            fallbacks: e.target.value.split('\n').filter((l) => l.trim()),
+                          })
+                        }
+                        rows={2}
+                      />
+                    </div>
+
+                    <div className="position-field">
+                      <label htmlFor={`notes-${i}`}>Notes</label>
+                      <input
+                        id={`notes-${i}`}
+                        value={p.notes ?? ''}
+                        disabled={disabled}
+                        onChange={(e) => updatePosition(i, { notes: e.target.value })}
+                        placeholder="Context for the reviewer."
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>

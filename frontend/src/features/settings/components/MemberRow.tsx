@@ -48,15 +48,11 @@ export function MemberRow({
       <div className="member-info">
         <p className="member-name">
           {member.user.name || member.user.email}
-          {isCurrentUser && (
-            <span style={{ color: 'var(--text-muted)', fontWeight: 'normal' }}>
-              {' '}
-              (you)
-            </span>
-          )}
+          {isCurrentUser && <span className="member-you"> (you)</span>}
         </p>
         <p className="member-email">{member.user.email}</p>
       </div>
+      <div className="member-meta">
       <span className={`member-role ${member.role.toLowerCase()}`}>
         {member.role}
       </span>
@@ -90,24 +86,30 @@ export function MemberRow({
         }
         return null;
       })()}
-      {canModify && !isCurrentUser && (
-        <div className="member-actions">
-          <button
-            className="icon-button"
-            title="Edit member"
-            onClick={() => onEdit(member)}
-          >
-            <Edit2 size={16} />
-          </button>
-          <button
-            className="icon-button"
-            title="Remove member"
-            onClick={() => onRemove(member)}
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
-      )}
+      </div>
+      {/* Always rendered so every row keeps the same right-hand column. */}
+      <div className="member-actions">
+        {canModify && !isCurrentUser && (
+          <>
+            <button
+              className="icon-button"
+              title="Edit member"
+              aria-label={`Edit ${member.user.name || member.user.email}`}
+              onClick={() => onEdit(member)}
+            >
+              <Edit2 size={15} />
+            </button>
+            <button
+              className="icon-button destructive"
+              title="Remove member"
+              aria-label={`Remove ${member.user.name || member.user.email}`}
+              onClick={() => onRemove(member)}
+            >
+              <Trash2 size={15} />
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

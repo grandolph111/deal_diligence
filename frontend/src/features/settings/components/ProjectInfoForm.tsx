@@ -45,13 +45,13 @@ export function ProjectInfoForm({ project, saving, onSave }: ProjectInfoFormProp
   return (
     <form className="project-info-form" onSubmit={handleSubmit}>
       <div className="form-group">
-        <label htmlFor="project-name">Project Name</label>
+        <label htmlFor="project-name">Deal name</label>
         <input
           id="project-name"
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Enter project name"
+          placeholder="e.g. Project Meridian — Acme acquisition"
           required
           maxLength={255}
           disabled={saving}
@@ -64,29 +64,33 @@ export function ProjectInfoForm({ project, saving, onSave }: ProjectInfoFormProp
           id="project-description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Enter project description (optional)"
+          placeholder="One or two lines on the transaction — shown on the dashboard."
           maxLength={2000}
           disabled={saving}
         />
+        <p className="field-hint">Optional. {2000 - description.length} characters left.</p>
       </div>
 
       <div className="form-actions">
         {hasChanges && (
-          <button
-            type="button"
-            className="button secondary"
-            onClick={handleReset}
-            disabled={saving}
-          >
-            Cancel
-          </button>
+          <>
+            <span className="form-dirty-note">Unsaved changes</span>
+            <button
+              type="button"
+              className="button secondary"
+              onClick={handleReset}
+              disabled={saving}
+            >
+              Discard
+            </button>
+          </>
         )}
         <button
           type="submit"
-          className="button primary"
+          className={hasChanges ? 'button primary' : 'button secondary'}
           disabled={!hasChanges || saving}
         >
-          {saving ? 'Saving...' : 'Save Changes'}
+          {saving ? 'Saving…' : 'Save changes'}
         </button>
       </div>
     </form>

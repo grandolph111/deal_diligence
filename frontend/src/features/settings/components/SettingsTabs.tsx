@@ -2,6 +2,12 @@ import { Settings, Users, BookOpen } from 'lucide-react';
 
 type TabType = 'general' | 'team' | 'playbook';
 
+const TABS = [
+  { id: 'general' as const, label: 'General', Icon: Settings },
+  { id: 'team' as const, label: 'Team', Icon: Users },
+  { id: 'playbook' as const, label: 'Playbook', Icon: BookOpen },
+];
+
 interface SettingsTabsProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
@@ -9,28 +15,20 @@ interface SettingsTabsProps {
 
 export function SettingsTabs({ activeTab, onTabChange }: SettingsTabsProps) {
   return (
-    <div className="settings-tabs">
-      <button
-        className={`settings-tab ${activeTab === 'general' ? 'active' : ''}`}
-        onClick={() => onTabChange('general')}
-      >
-        <Settings size={16} />
-        General
-      </button>
-      <button
-        className={`settings-tab ${activeTab === 'team' ? 'active' : ''}`}
-        onClick={() => onTabChange('team')}
-      >
-        <Users size={16} />
-        Team
-      </button>
-      <button
-        className={`settings-tab ${activeTab === 'playbook' ? 'active' : ''}`}
-        onClick={() => onTabChange('playbook')}
-      >
-        <BookOpen size={16} />
-        Playbook
-      </button>
+    <div className="settings-tabs" role="tablist" aria-label="Project admin sections">
+      {TABS.map(({ id, label, Icon }) => (
+        <button
+          key={id}
+          role="tab"
+          type="button"
+          aria-selected={activeTab === id}
+          className={`settings-tab ${activeTab === id ? 'active' : ''}`}
+          onClick={() => onTabChange(id)}
+        >
+          <Icon size={15} />
+          {label}
+        </button>
+      ))}
     </div>
   );
 }

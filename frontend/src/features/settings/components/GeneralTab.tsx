@@ -1,3 +1,4 @@
+import { Clock } from 'lucide-react';
 import { ProjectInfoForm } from './ProjectInfoForm';
 import { DangerZone } from './DangerZone';
 import type { Project, ProjectMember, UpdateProjectDto, Role } from '../../../types/api';
@@ -26,57 +27,34 @@ export function GeneralTab({
   onTransferOwnership,
 }: GeneralTabProps) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
+    <div className="settings-stack">
       {/* Project Info Section */}
       <div className="settings-section">
         <div className="settings-section-header">
           <div>
-            <h3 className="settings-section-title">Project Information</h3>
+            <h3 className="settings-section-title">Project details</h3>
             <p className="settings-section-description">
-              Basic information about your project
+              How this deal is labelled everywhere in the platform.
             </p>
           </div>
-          {project.isArchived && (
-            <span className="archived-badge">Archived</span>
-          )}
+          {project.isArchived && <span className="archived-badge">Archived</span>}
         </div>
-        <ProjectInfoForm
-          project={project}
-          saving={saving}
-          onSave={onUpdateProject}
-        />
-      </div>
-
-      {/* Notifications Section (Placeholder) */}
-      <div className="settings-section">
-        <div className="settings-section-header">
-          <div>
-            <h3 className="settings-section-title">Notifications</h3>
-            <p className="settings-section-description">
-              Configure how you receive notifications
-            </p>
-          </div>
-        </div>
-        <div className="placeholder-section">
-          <h4>Coming Soon</h4>
-          <p>Notification preferences will be available in a future update.</p>
+        <div className="settings-section-body">
+          <ProjectInfoForm
+            project={project}
+            saving={saving}
+            onSave={onUpdateProject}
+          />
         </div>
       </div>
 
-      {/* Integrations Section (Placeholder) */}
-      <div className="settings-section">
-        <div className="settings-section-header">
-          <div>
-            <h3 className="settings-section-title">Integrations</h3>
-            <p className="settings-section-description">
-              Connect external services
-            </p>
-          </div>
-        </div>
-        <div className="placeholder-section">
-          <h4>Coming Soon</h4>
-          <p>Integration options will be available in a future update.</p>
-        </div>
+      {/* Not built yet — stated once, quietly, instead of two empty cards. */}
+      <div className="settings-soon">
+        <Clock size={16} />
+        <span>
+          <strong>Notifications and integrations</strong> are not configurable yet — they
+          land in a future release.
+        </span>
       </div>
 
       {/* Danger Zone */}

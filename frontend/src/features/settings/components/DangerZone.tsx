@@ -47,12 +47,12 @@ export function DangerZone({
 
   return (
     <>
-      <div className="settings-section danger-zone">
+      <div className="settings-section settings-danger">
         <div className="settings-section-header">
           <div>
-            <h3 className="settings-section-title">Danger Zone</h3>
+            <h3 className="settings-section-title">Danger zone</h3>
             <p className="settings-section-description">
-              Irreversible and destructive actions
+              Irreversible actions. Only owners can transfer or delete a deal.
             </p>
           </div>
         </div>
@@ -61,22 +61,26 @@ export function DangerZone({
           {/* Archive Project */}
           <div className="danger-action">
             <div className="danger-action-info">
-              <h4 className="danger-action-title">
-                <Archive size={16} style={{ marginRight: '8px' }} />
-                {isArchived ? 'Unarchive Project' : 'Archive Project'}
-              </h4>
-              <p className="danger-action-description">
-                {isArchived
-                  ? 'Restore this project to active status'
-                  : 'Archive this project. Members can still view but not edit.'}
-              </p>
+              <span className="danger-action-icon">
+                <Archive size={16} />
+              </span>
+              <div className="danger-action-text">
+                <h4 className="danger-action-title">
+                  {isArchived ? 'Unarchive deal' : 'Archive deal'}
+                </h4>
+                <p className="danger-action-description">
+                  {isArchived
+                    ? 'Restore this deal to active status.'
+                    : 'Members keep read access; nobody can edit until it is restored.'}
+                </p>
+              </div>
             </div>
             <button
               className="button secondary"
               onClick={handleArchive}
               disabled={saving}
             >
-              {saving ? 'Saving...' : isArchived ? 'Unarchive' : 'Archive'}
+              {saving ? 'Saving…' : isArchived ? 'Unarchive' : 'Archive'}
             </button>
           </div>
 
@@ -84,13 +88,15 @@ export function DangerZone({
           {isOwner && (
             <div className="danger-action">
               <div className="danger-action-info">
-                <h4 className="danger-action-title">
-                  <UserCheck size={16} style={{ marginRight: '8px' }} />
-                  Transfer Ownership
-                </h4>
-                <p className="danger-action-description">
-                  Transfer this project to another member. You will become an Admin.
-                </p>
+                <span className="danger-action-icon">
+                  <UserCheck size={16} />
+                </span>
+                <div className="danger-action-text">
+                  <h4 className="danger-action-title">Transfer ownership</h4>
+                  <p className="danger-action-description">
+                    Hand this deal to another member. You stay on as an Admin.
+                  </p>
+                </div>
               </div>
               <button
                 className="button secondary"
@@ -104,15 +110,17 @@ export function DangerZone({
 
           {/* Delete Project - Owner Only */}
           {isOwner && (
-            <div className="danger-action">
+            <div className="danger-action is-destructive">
               <div className="danger-action-info">
-                <h4 className="danger-action-title">
-                  <Trash2 size={16} style={{ marginRight: '8px' }} />
-                  Delete Project
-                </h4>
-                <p className="danger-action-description">
-                  Permanently delete this project and all its data. This cannot be undone.
-                </p>
+                <span className="danger-action-icon">
+                  <Trash2 size={16} />
+                </span>
+                <div className="danger-action-text">
+                  <h4 className="danger-action-title">Delete deal</h4>
+                  <p className="danger-action-description">
+                    Removes every document, fact sheet, task and report. Cannot be undone.
+                  </p>
+                </div>
               </div>
               <button
                 className="button danger"

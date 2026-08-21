@@ -87,8 +87,8 @@ export function MemberEditModal({
       >
         <div className="modal-header">
           <h3>
-            <UserCog size={20} />
-            Edit Member
+            <UserCog size={18} />
+            Edit member
           </h3>
           <button
             className="icon-button"
@@ -101,7 +101,7 @@ export function MemberEditModal({
 
         <div className="modal-content">
           {/* Member Info */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
+          <div className="modal-identity">
             <div className="member-avatar">
               {member.user.avatarUrl ? (
                 <img src={member.user.avatarUrl} alt={member.user.name || ''} />
@@ -109,18 +109,16 @@ export function MemberEditModal({
                 getInitials(member.user.name, member.user.email)
               )}
             </div>
-            <div>
-              <p style={{ fontWeight: 500, margin: 0 }}>
+            <div className="modal-identity-text">
+              <p className="modal-identity-name">
                 {member.user.name || member.user.email}
               </p>
-              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', margin: 0 }}>
-                {member.user.email}
-              </p>
+              <p className="modal-identity-email">{member.user.email}</p>
             </div>
           </div>
 
           {/* Role Selection */}
-          <div className="form-group" style={{ marginBottom: 'var(--space-4)' }}>
+          <div className="form-group">
             <label htmlFor="member-role">Role</label>
             <select
               id="member-role"
@@ -134,7 +132,7 @@ export function MemberEditModal({
               <option value="VIEWER">Viewer</option>
             </select>
             {!canChangeRole && (
-              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 'var(--space-1)' }}>
+              <p className="field-hint">
                 Admins cannot change other admins' roles
               </p>
             )}
@@ -147,7 +145,7 @@ export function MemberEditModal({
 
               <div className="permission-toggle">
                 <div className="permission-label">
-                  <span className="permission-title">Access Kanban Board</span>
+                  <span className="permission-title">Access Kanban boards</span>
                   <span className="permission-description">View and manage tasks</span>
                 </div>
                 <label className="toggle-switch">
@@ -163,7 +161,7 @@ export function MemberEditModal({
 
               <div className="permission-toggle">
                 <div className="permission-label">
-                  <span className="permission-title">Access Data Room</span>
+                  <span className="permission-title">Access the data room</span>
                   <span className="permission-description">View documents in VDR</span>
                 </div>
                 <label className="toggle-switch">
@@ -179,7 +177,7 @@ export function MemberEditModal({
 
               <div className="permission-toggle">
                 <div className="permission-label">
-                  <span className="permission-title">Upload Documents</span>
+                  <span className="permission-title">Upload documents</span>
                   <span className="permission-description">Upload files to VDR</span>
                 </div>
                 <label className="toggle-switch">
@@ -193,15 +191,14 @@ export function MemberEditModal({
                 </label>
               </div>
 
-              <div className="permission-label" style={{ marginTop: 'var(--space-2)' }}>
-                <span className="permission-title">Folder Access</span>
-                <span
-                  className="permission-description"
-                  style={{ marginBottom: 'var(--space-2)', display: 'block' }}
-                >
+              <div className="permission-label permission-label--stacked">
+                <span className="permission-title">Workstream access</span>
+                <span className="permission-description permission-description--block">
                   Pick the diligence workstreams this user can see. They get every document with
                     evidence in those workstreams, and Kanban, Chat and the Dashboard are
-                    limited to the same scope. Leave blank to lock them out until you grant access.
+                    limited to the same scope. Any Kanban board they own re-scopes to match —
+                    this is the one place their access is set. Leave blank to lock them out until
+                    you grant access.
                 </span>
                 <WorkstreamScopePicker
                   projectId={projectId}

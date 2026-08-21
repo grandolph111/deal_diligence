@@ -19,12 +19,12 @@ export function MemberList({
 }: MemberListProps) {
   if (members.length === 0) {
     return (
-      <div className="empty-state">
-        <Users size={48} className="empty-state-icon" />
-        <h4 className="empty-state-title">No Members</h4>
-        <p className="empty-state-description">
-          This project has no members yet. Invite team members to get started.
-        </p>
+      <div className="settings-empty">
+        <span className="settings-empty-icon">
+          <Users size={18} />
+        </span>
+        <h4>No members yet</h4>
+        <p>Invite the bankers, counsel and specialists who will work this deal.</p>
       </div>
     );
   }

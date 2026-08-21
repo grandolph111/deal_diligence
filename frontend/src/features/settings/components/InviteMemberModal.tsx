@@ -94,8 +94,8 @@ export function InviteMemberModal({
       >
         <div className="modal-header">
           <h3>
-            <UserPlus size={20} />
-            Invite Team Member
+            <UserPlus size={18} />
+            Invite team member
           </h3>
           <button
             className="icon-button"
@@ -112,22 +112,12 @@ export function InviteMemberModal({
               <div className="form-error">{error}</div>
             )}
             {success && (
-              <div
-                style={{
-                  padding: 'var(--space-3)',
-                  backgroundColor: 'var(--color-success-light)',
-                  color: 'var(--color-success)',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: 'var(--text-sm)',
-                }}
-              >
-                {success}
-              </div>
+              <div className="form-success">{success}</div>
             )}
 
             {/* Email Input */}
             <div className="form-group">
-              <label htmlFor="invite-email">Email Address</label>
+              <label htmlFor="invite-email">Email address</label>
               <input
                 id="invite-email"
                 type="email"
@@ -154,7 +144,7 @@ export function InviteMemberModal({
                 <option value="MEMBER">Member</option>
                 <option value="VIEWER">Viewer</option>
               </select>
-              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 'var(--space-1)' }}>
+              <p className="field-hint">
                 {role === 'ADMIN' && 'Full access to manage project and team'}
                 {role === 'MEMBER' && 'Can work on tasks with configured permissions'}
                 {role === 'VIEWER' && 'Read-only access with configured permissions'}
@@ -168,7 +158,7 @@ export function InviteMemberModal({
 
                 <div className="permission-toggle">
                   <div className="permission-label">
-                    <span className="permission-title">Access Kanban Board</span>
+                    <span className="permission-title">Access Kanban boards</span>
                     <span className="permission-description">View and manage tasks</span>
                   </div>
                   <label className="toggle-switch">
@@ -184,7 +174,7 @@ export function InviteMemberModal({
 
                 <div className="permission-toggle">
                   <div className="permission-label">
-                    <span className="permission-title">Access Data Room</span>
+                    <span className="permission-title">Access the data room</span>
                     <span className="permission-description">View documents in VDR</span>
                   </div>
                   <label className="toggle-switch">
@@ -203,7 +193,7 @@ export function InviteMemberModal({
 
                 <div className="permission-toggle">
                   <div className="permission-label">
-                    <span className="permission-title">Upload Documents</span>
+                    <span className="permission-title">Upload documents</span>
                     <span className="permission-description">Upload files to VDR</span>
                   </div>
                   <label className="toggle-switch">
@@ -217,12 +207,9 @@ export function InviteMemberModal({
                   </label>
                 </div>
 
-                <div className="permission-label" style={{ marginTop: 'var(--space-2)' }}>
-                  <span className="permission-title">Folder Access</span>
-                  <span
-                    className="permission-description"
-                    style={{ marginBottom: 'var(--space-2)', display: 'block' }}
-                  >
+                <div className="permission-label permission-label--stacked">
+                  <span className="permission-title">Workstream access</span>
+                  <span className="permission-description permission-description--block">
                     Pick the diligence workstreams this user can see. They get every document with
                     evidence in those workstreams, and Kanban, Chat and the Dashboard are
                     limited to the same scope. Leave blank to lock them out until you grant access.
@@ -252,7 +239,7 @@ export function InviteMemberModal({
               className="button primary"
               disabled={inviting || !email.trim()}
             >
-              {inviting ? 'Sending...' : 'Send Invitation'}
+              {inviting ? 'Sending…' : 'Send invitation'}
             </button>
           </div>
         </form>

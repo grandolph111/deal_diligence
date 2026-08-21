@@ -92,33 +92,37 @@ export function TeamTab({
 
   const isLoading = membersLoading || invitationsLoading;
 
+  const memberCount = members.length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
+    <div className="settings-stack">
       {/* Team Members Section */}
       <div className="settings-section">
         <div className="settings-section-header">
           <div>
-            <h3 className="settings-section-title">Team Members</h3>
+            <h3 className="settings-section-title">
+              Members{!isLoading && memberCount > 0 ? ` · ${memberCount}` : ''}
+            </h3>
             <p className="settings-section-description">
-              Manage who has access to this project
+              Everyone with access to this deal, and the workstreams they are scoped to.
             </p>
           </div>
           <button
             className="button primary"
             onClick={() => setShowInviteModal(true)}
           >
-            <UserPlus size={16} />
-            Invite Member
+            <UserPlus size={15} />
+            Invite member
           </button>
         </div>
 
         {isLoading ? (
           <div className="settings-loading">
             <div className="spinner"></div>
-            <span>Loading team...</span>
+            <span>Loading team…</span>
           </div>
         ) : (
-          <>
+          <div className="settings-section-body flush">
             <MemberList
               members={members}
               currentUserId={currentUserId}
@@ -126,15 +130,32 @@ export function TeamTab({
               onEditMember={handleEditMember}
               onRemoveMember={handleRemoveMember}
             />
+          </div>
+        )}
+      </div>
 
+      {/* Pending invitations — its own card so it never reads as a member */}
+      {!isLoading && invitations.length > 0 && (
+        <div className="settings-section">
+          <div className="settings-section-header">
+            <div>
+              <h3 className="settings-section-title">
+                Pending invitations · {invitations.length}
+              </h3>
+              <p className="settings-section-description">
+                Invited but not yet accepted. They have no access until they sign in.
+              </p>
+            </div>
+          </div>
+          <div className="settings-section-body flush">
             <InvitationList
               invitations={invitations}
               onResend={onResendInvitation}
               onCancel={onCancelInvitation}
             />
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Member Modal */}
       <MemberEditModal
@@ -168,7 +189,7 @@ export function TeamTab({
               <div className="confirm-dialog-icon warning">
                 <AlertTriangle size={48} />
               </div>
-              <h3 className="confirm-dialog-title">Remove Member</h3>
+              <h3 className="confirm-dialog-title">Remove member</h3>
               <p className="confirm-dialog-message">
                 Are you sure you want to remove{' '}
                 <strong>{memberToRemove.user.name || memberToRemove.user.email}</strong>{' '}
@@ -188,7 +209,7 @@ export function TeamTab({
                 onClick={confirmRemoveMember}
                 disabled={saving}
               >
-                {saving ? 'Removing...' : 'Remove Member'}
+                {saving ? 'Removing…' : 'Remove member'}
               </button>
             </div>
           </div>

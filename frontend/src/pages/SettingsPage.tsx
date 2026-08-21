@@ -17,6 +17,12 @@ import '../features/settings/settings.css';
 
 type TabType = 'general' | 'team' | 'playbook';
 
+const TAB_SUBTITLE: Record<TabType, string> = {
+  general: 'Name this deal, and control archiving, ownership and deletion.',
+  team: 'Who can open this deal, what they can do, and which workstreams they see.',
+  playbook: 'The positions your firm accepts. Extractions score risk against these.',
+};
+
 export function SettingsPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -117,7 +123,7 @@ export function SettingsPage() {
     return (
       <div className="loading-container">
         <div className="loading-spinner" />
-        <p>Loading settings...</p>
+        <p>Loading settings…</p>
       </div>
     );
   }
@@ -128,12 +134,12 @@ export function SettingsPage() {
       <div className="settings-page">
         <div className="empty-state">
           <AlertCircle size={48} className="empty-state-icon" />
-          <h4 className="empty-state-title">Project Not Found</h4>
+          <h4 className="empty-state-title">Project not found</h4>
           <p className="empty-state-description">
             The project you're looking for doesn't exist or you don't have access.
           </p>
           <Link to="/dashboard" className="button primary">
-            Go to Dashboard
+            Go to dashboard
           </Link>
         </div>
       </div>
@@ -146,12 +152,12 @@ export function SettingsPage() {
       <div className="settings-page">
         <div className="empty-state">
           <AlertCircle size={48} className="empty-state-icon" />
-          <h4 className="empty-state-title">Access Denied</h4>
+          <h4 className="empty-state-title">Access denied</h4>
           <p className="empty-state-description">
             You don't have permission to access project settings.
           </p>
           <Link to={`/projects/${projectId}`} className="button primary">
-            Go to Project
+            Go to project
           </Link>
         </div>
       </div>
@@ -161,13 +167,13 @@ export function SettingsPage() {
   return (
     <div className="settings-page">
       <div className="page-header">
-        <div>
-          <Link to={`/projects/${projectId}`} className="back-link">
-            <ArrowLeft size={16} />
-            Back to Project
-          </Link>
-          <h1>Project Admin</h1>
-        </div>
+        <Link to={`/projects/${projectId}`} className="back-link">
+          <ArrowLeft size={14} />
+          Back to project
+        </Link>
+        <span className="settings-eyebrow">{project.name}</span>
+        <h1>Project Admin</h1>
+        <p className="settings-subtitle">{TAB_SUBTITLE[activeTab]}</p>
       </div>
 
       <SettingsTabs activeTab={activeTab} onTabChange={handleTabChange} />

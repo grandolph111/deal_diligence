@@ -30,7 +30,7 @@ export function InvitationRow({
   return (
     <div className="invitation-row">
       <div className="invitation-icon">
-        <Mail size={20} />
+        <Mail size={16} />
       </div>
       <div className="invitation-info">
         <p className="invitation-email">{invitation.email}</p>
@@ -52,18 +52,20 @@ export function InvitationRow({
         <button
           className="icon-button"
           title="Resend invitation"
+          aria-label={`Resend invitation to ${invitation.email}`}
           onClick={() => onResend(invitation)}
           disabled={resending || cancelling}
         >
-          <RotateCcw size={16} className={resending ? 'spinning' : ''} />
+          <RotateCcw size={15} className={resending ? 'spinning' : ''} />
         </button>
         <button
-          className="icon-button"
+          className="icon-button destructive"
           title="Cancel invitation"
+          aria-label={`Cancel invitation to ${invitation.email}`}
           onClick={() => onCancel(invitation)}
           disabled={resending || cancelling}
         >
-          <X size={16} />
+          <X size={15} />
         </button>
       </div>
     </div>
