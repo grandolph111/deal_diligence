@@ -329,6 +329,13 @@ img {
 .chip.risk-high { color: var(--risk-high); background: var(--risk-high-bg); border-color: transparent; }
 .chip.accent { color: var(--color-gray-900); background: var(--color-accent-light); border-color: transparent; }
 .chip.primary { color: var(--color-primary); background: var(--color-primary-light); border-color: transparent; }
+/* A board whose specialist has left the project — it is inert until reassigned,
+   so it should read as needing attention rather than as a neutral fact. */
+.chip.is-stale {
+  color: var(--color-warning);
+  background: var(--color-warning-light);
+  border-color: color-mix(in srgb, var(--color-warning) 30%, transparent);
+}
 
 /* Card */
 .card {

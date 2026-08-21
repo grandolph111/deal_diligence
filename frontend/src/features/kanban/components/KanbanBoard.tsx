@@ -17,6 +17,10 @@ interface KanbanBoardProps {
   boardId?: string;
   /** Folder IDs this board covers — used to scope the task-attachment picker. */
   boardFolderIds?: string[];
+  /** Documents this board may attach (from the API). null = unscoped. */
+  allowedDocumentIds?: string[] | null;
+  /** Users assignable to tasks here: the board's SME plus project admins. */
+  assignableUserIds?: string[] | null;
   currentUserId: string | undefined;
   isAdmin: boolean;
   isMember: boolean;
@@ -31,10 +35,28 @@ const columns: { status: TaskStatus; title: string }[] = [
   { status: 'COMPLETE', title: 'Completed' },
 ];
 
-export function KanbanBoard({ projectId, boardId, boardFolderIds, currentUserId, isAdmin, isMember, members = [], onViewDocument }: KanbanBoardProps) {
+export function KanbanBoard({
+  projectId,
+  boardId,
+  boardFolderIds,
+  allowedDocumentIds,
+  assignableUserIds,
+  currentUserId,
+  isAdmin,
+  isMember,
+  members = [],
+  onViewDocument,
+}: KanbanBoardProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createStatus, setCreateStatus] = useState<TaskStatus>('TODO');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
+  // Tasks can only be handed to people who can open this board — its SME and
+  // the project admins. Filtering at the source keeps the create form and the
+  // detail drawer offering the same set.
+  const assignableMembers = assignableUserIds
+    ? members.filter((m) => m.user && assignableUserIds.includes(m.user.id))
+    : members;
 
   const { board, loading, error, fetchBoard, createTask, moveTask, deleteTask } = useKanbanBoard(projectId, boardId);
   const { task: taskDetail, loading: taskLoading, fetchTask, updateTask, clearTask, addAssignee, removeAssignee } = useTaskDetail(projectId);
@@ -161,7 +183,7 @@ export function KanbanBoard({ projectId, boardId, boardFolderIds, currentUserId,
         onClose={() => setShowCreateModal(false)}
         onCreate={createTask}
         initialStatus={createStatus}
-        members={members}
+        members={assignableMembers}
       />
 
       {selectedTask && (
@@ -170,6 +192,8 @@ export function KanbanBoard({ projectId, boardId, boardFolderIds, currentUserId,
           loading={taskLoading}
           projectId={projectId}
           boardFolderIds={boardFolderIds}
+          allowedDocumentIds={allowedDocumentIds}
+          assignableUserIds={assignableUserIds}
           currentUserId={currentUserId}
           isAdmin={isAdmin}
           isMember={isMember}

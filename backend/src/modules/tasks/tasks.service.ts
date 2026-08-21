@@ -1,13 +1,19 @@
 import { prisma } from '../../config/database';
 import { Task, TaskStatus, Prisma } from '@prisma/client';
+import type { ProjectMember } from '@prisma/client';
 import { CreateTaskInput, UpdateTaskInput, TaskFilters } from './tasks.validators';
 import { ApiError } from '../../utils/ApiError';
 import { boardsService } from '../../services/boards.service';
 
 /**
- * Verify every document the caller wants to attach to a task is in one of
- * the board's folders. Strict board-folder confinement — tasks never cross
- * board boundaries.
+ * Verify every document the caller wants to attach to a task is inside the
+ * board's scope — i.e. supplies evidence to one of the SME's workstreams.
+ * Strict confinement: tasks never reach documents their board does not cover.
+ *
+ * Documents are matched by evidence, not storage location. A single contract
+ * supplies evidence to roughly eight workstreams, so an IP board legitimately
+ * reaches a contract filed under "Commercial" — the folder it happens to sit
+ * in says nothing about which specialist needs it.
  */
 const verifyDocumentsInBoardScope = async (
   projectId: string,
@@ -22,25 +28,72 @@ const verifyDocumentsInBoardScope = async (
     select: { isDefault: true },
   });
   if (board?.isDefault) return;
-  const scopeFolderIds = await boardsService.expandedBoardFolderIds(
-    boardId,
-    projectId
-  );
-  if (scopeFolderIds.length === 0) return;
-  const docs = await prisma.document.findMany({
-    where: { id: { in: documentIds }, projectId },
-    select: { id: true, name: true, folderId: true },
+
+  // null = unscoped board (covers everything); [] = scoped but nothing in it
+  // yet, which must still reject rather than fall open.
+  const inScopeIds = await boardsService.boardDocumentIds(boardId, projectId);
+  if (inScopeIds === null) {
+    // Fall back to the dormant folder axis for legacy folder-scoped boards.
+    const scopeFolderIds = await boardsService.expandedBoardFolderIds(
+      boardId,
+      projectId
+    );
+    if (scopeFolderIds.length === 0) return;
+    const docs = await prisma.document.findMany({
+      where: { id: { in: documentIds }, projectId },
+      select: { id: true, name: true, folderId: true },
+    });
+    const outOfScope = docs.filter(
+      (d) => !d.folderId || !scopeFolderIds.includes(d.folderId)
+    );
+    if (outOfScope.length > 0) {
+      throw ApiError.badRequest(
+        `Cannot attach ${outOfScope.length} document(s) — outside this board's folder scope: ${outOfScope
+          .map((d) => d.name)
+          .join(', ')}`
+      );
+    }
+    return;
+  }
+
+  const allowed = new Set(inScopeIds);
+  const outOfScope = await prisma.document.findMany({
+    where: { id: { in: documentIds.filter((id) => !allowed.has(id)) }, projectId },
+    select: { name: true },
   });
-  const outOfScope = docs.filter(
-    (d) => !d.folderId || !scopeFolderIds.includes(d.folderId)
-  );
   if (outOfScope.length > 0) {
     throw ApiError.badRequest(
-      `Cannot attach ${outOfScope.length} document(s) — outside this board's folder scope: ${outOfScope
+      `Cannot attach ${outOfScope.length} document(s) — outside this board's workstreams: ${outOfScope
         .map((d) => d.name)
         .join(', ')}`
     );
   }
+};
+
+/**
+ * A task's assignees must be people who can actually open the board it lives
+ * on: its SME, or an OWNER/ADMIN. Without this an AI task could be routed to
+ * someone who cannot see the report they are meant to review.
+ */
+const verifyAssigneesOnBoard = async (
+  projectId: string,
+  boardId: string,
+  userIds: string[]
+): Promise<void> => {
+  if (!userIds.length) return;
+  const allowed = new Set(await boardsService.assignableUserIds(boardId, projectId));
+  const rejected = [...new Set(userIds)].filter((id) => !allowed.has(id));
+  if (rejected.length === 0) return;
+  const users = await prisma.user.findMany({
+    where: { id: { in: rejected } },
+    select: { name: true, email: true },
+  });
+  const names = users.map((u) => u.name ?? u.email).join(', ');
+  throw ApiError.badRequest(
+    names
+      ? `Cannot assign ${names} — only this board's specialist and project admins can be assigned to its tasks`
+      : 'Only this board’s specialist and project admins can be assigned to its tasks'
+  );
 };
 
 const taskInclude = {
@@ -145,12 +198,24 @@ export const tasksService = {
    */
   async getProjectTasks(
     projectId: string,
-    filters: TaskFilters & { boardId?: string } = {}
+    filters: TaskFilters & { boardId?: string; boardIdIn?: string[] | null } = {}
   ) {
     const where: Prisma.TaskWhereInput = { projectId };
 
     if (filters.boardId) {
       where.boardId = filters.boardId;
+    } else if (filters.boardIdIn) {
+      // Caller is scope-limited and asked for the whole project: return only
+      // the boards they can open. An empty grant list yields no boards' tasks,
+      // which is the correct answer — not "everything".
+      //
+      // Board-less tasks stay visible: they sit behind no board ACL at all
+      // (they predate boards, or their board was deleted), so hiding them here
+      // would strand work rather than protect anything. Composed under AND so
+      // the search filter's own OR cannot clobber it.
+      where.AND = [
+        { OR: [{ boardId: { in: filters.boardIdIn } }, { boardId: null }] },
+      ];
     }
 
     if (filters.status) {
@@ -212,8 +277,12 @@ export const tasksService = {
    * Get tasks grouped by status for a Kanban board. Pass `boardId` to
    * scope to a single board (preferred). Omit for project-wide view.
    */
-  async getTasksByStatus(projectId: string, boardId?: string) {
-    const tasks = await this.getProjectTasks(projectId, { boardId });
+  async getTasksByStatus(
+    projectId: string,
+    boardId?: string,
+    boardIdIn?: string[] | null
+  ) {
+    const tasks = await this.getProjectTasks(projectId, { boardId, boardIdIn });
 
     const grouped = {
       TODO: [] as typeof tasks,
@@ -255,7 +324,8 @@ export const tasksService = {
   async createTask(
     projectId: string,
     creatorId: string,
-    data: CreateTaskInput
+    data: CreateTaskInput,
+    actingMember?: ProjectMember
   ): Promise<Task> {
     const {
       assigneeIds,
@@ -291,9 +361,23 @@ export const tasksService = {
       boardId = defaultBoard.id;
     }
 
-    // Enforce: attached documents must be within this board's folder scope.
+    // Enforce: the caller can reach this board at all. Checked here rather than
+    // in the controller because this is where boardId stops being optional.
+    if (actingMember) {
+      const canAccess = await boardsService.canAccess(boardId, projectId, actingMember);
+      if (!canAccess) {
+        throw ApiError.forbidden('This board is outside your access scope');
+      }
+    }
+
+    // Enforce: attached documents must be within this board's scope.
     if (attachedDocumentIds && attachedDocumentIds.length > 0) {
       await verifyDocumentsInBoardScope(projectId, boardId, attachedDocumentIds);
+    }
+
+    // Enforce: assignees must be able to open the board.
+    if (assigneeIds && assigneeIds.length > 0) {
+      await verifyAssigneesOnBoard(projectId, boardId, assigneeIds);
     }
 
     const task = await prisma.task.create({
@@ -453,6 +537,11 @@ export const tasksService = {
 
     if (!membership) {
       throw ApiError.notFound('User is not a member of this project');
+    }
+
+    // Verify they can open the board this task lives on
+    if (task.boardId) {
+      await verifyAssigneesOnBoard(task.projectId, task.boardId, [userId]);
     }
 
     // Check if assignee already exists

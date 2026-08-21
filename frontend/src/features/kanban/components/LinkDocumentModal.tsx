@@ -14,6 +14,13 @@ interface LinkDocumentModalProps {
    * hidden. Backend enforces this too — frontend filter is a UX guardrail.
    */
   boardFolderIds?: string[];
+  /**
+   * Exactly the documents this board may attach, from the API. `undefined`/null
+   * = unscoped. Takes precedence over boardFolderIds: scope runs on evidence
+   * now, and a document supplies evidence to workstreams regardless of which
+   * folder it happens to sit in.
+   */
+  allowedDocumentIds?: string[] | null;
   onClose: () => void;
   onLink: (documentId: string) => Promise<void>;
 }
@@ -142,6 +149,7 @@ export function LinkDocumentModal({
   projectId,
   alreadyLinkedDocumentIds,
   boardFolderIds,
+  allowedDocumentIds,
   onClose,
   onLink,
 }: LinkDocumentModalProps) {
@@ -159,6 +167,11 @@ export function LinkDocumentModal({
   // tree has loaded) and add tree-walked descendants so that selecting a
   // parent folder also admits documents in its subfolders.
   // Returning null means "no scope restriction" — every doc passes.
+  const allowedDocs = useMemo(
+    () => (allowedDocumentIds ? new Set(allowedDocumentIds) : null),
+    [allowedDocumentIds]
+  );
+
   const allowedFolderIds = useMemo(() => {
     if (!boardFolderIds || boardFolderIds.length === 0) return null;
     const out = new Set<string>(boardFolderIds);
@@ -250,6 +263,8 @@ export function LinkDocumentModal({
   // Filter documents by board scope, then by search query.
   const filteredDocuments = documents
     .filter((doc) => {
+      // Evidence scope wins when the API supplied one.
+      if (allowedDocs) return allowedDocs.has(doc.id);
       if (!allowedFolderIds) return true;
       // Docs with no folder are ineligible when a board scope is active.
       if (!doc.folderId) return false;
@@ -309,7 +324,9 @@ export function LinkDocumentModal({
                         <FolderOpen size={16} />
                       </span>
                       <span className="picker-folder-name">
-                        {allowedFolderIds ? 'All Board Documents' : 'All Documents'}
+                        {allowedDocs || allowedFolderIds
+                          ? 'All Board Documents'
+                          : 'All Documents'}
                       </span>
                     </div>
                     {visibleFolders.map((folder) => (

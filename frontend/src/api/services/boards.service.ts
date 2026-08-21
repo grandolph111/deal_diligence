@@ -2,6 +2,7 @@ import { apiClient } from '../client';
 import type {
   KanbanBoardSummary,
   KanbanBoardDetail,
+  BoardSmeOption,
   CreateBoardDto,
   UpdateBoardDto,
 } from '../../types/api';
@@ -10,6 +11,13 @@ export const boardsService = {
   async list(projectId: string): Promise<{ boards: KanbanBoardSummary[] }> {
     return apiClient.get<{ boards: KanbanBoardSummary[] }>(
       `/projects/${projectId}/boards`
+    );
+  },
+
+  /** Members who can be named as a board's SME. Admin-only on the API. */
+  async listSmes(projectId: string): Promise<{ smes: BoardSmeOption[] }> {
+    return apiClient.get<{ smes: BoardSmeOption[] }>(
+      `/projects/${projectId}/boards/smes`
     );
   },
 

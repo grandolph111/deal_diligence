@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import type { ProjectMember } from '@prisma/client';
 import { tasksService } from './tasks.service';
 import { taskAiService } from './task-ai.service';
 import {
@@ -13,6 +14,38 @@ import {
 import { ApiError } from '../../utils/ApiError';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { generateReportExcel } from '../../utils/reportToExcel';
+import { boardsService } from '../../services/boards.service';
+
+/**
+ * Board access is the real permission boundary on the Kanban side — a board
+ * belongs to one specialist, and `canAccessKanban` alone only says the caller
+ * may use Kanban at all. Every route that reaches a board or a task on one goes
+ * through here, otherwise the board ACL would hold on the index and fall open
+ * to anyone who knows an id.
+ */
+const assertBoardAccess = async (
+  projectId: string,
+  boardId: string,
+  member: ProjectMember | undefined
+): Promise<void> => {
+  if (!member) throw ApiError.forbidden('Project membership required');
+  const allowed = await boardsService.canAccess(boardId, projectId, member);
+  if (!allowed) {
+    throw ApiError.forbidden('This board is outside your access scope');
+  }
+};
+
+/** Verify a task is in the project AND on a board the caller can open. */
+const assertTaskAccess = async (
+  projectId: string,
+  taskId: string,
+  member: ProjectMember | undefined
+): Promise<void> => {
+  const task = await tasksService.verifyTaskInProject(taskId, projectId);
+  if (task.boardId) {
+    await assertBoardAccess(projectId, task.boardId, member);
+  }
+};
 
 /**
  * If a status transition moves an AI-enabled task into IN_PROGRESS and it
@@ -21,7 +54,8 @@ import { generateReportExcel } from '../../utils/reportToExcel';
 const maybeTriggerAiRun = async (
   taskId: string,
   actingUserId: string | undefined,
-  nextStatus: string | undefined
+  nextStatus: string | undefined,
+  actingMembership: ProjectMember | undefined
 ) => {
   if (nextStatus !== 'IN_PROGRESS' || !actingUserId) return;
   const { prisma } = await import('../../config/database');
@@ -54,7 +88,7 @@ const maybeTriggerAiRun = async (
   console.log(
     `[task-ai ${taskId.slice(0, 8)}] IN_PROGRESS transition — dispatching AI run`
   );
-  taskAiService.runAiTask(taskId, actingUserId).catch((error) => {
+  taskAiService.runAiTask(taskId, actingUserId, actingMembership).catch((error) => {
     // eslint-disable-next-line no-console
     console.error(
       `[task-ai ${taskId.slice(0, 8)}] unhandled error from runAiTask:`,
@@ -74,9 +108,18 @@ export const tasksController = {
     const boardId =
       typeof req.query.boardId === 'string' ? req.query.boardId : undefined;
 
+    if (boardId) {
+      await assertBoardAccess(projectId, boardId, req.projectMember);
+    }
+
     const tasks = await tasksService.getProjectTasks(projectId, {
       ...filters,
       boardId,
+      boardIdIn: boardId
+        ? undefined
+        : req.projectMember
+          ? await boardsService.accessibleBoardIds(projectId, req.projectMember)
+          : [],
     });
 
     res.json(tasks);
@@ -93,7 +136,19 @@ export const tasksController = {
     const boardId =
       typeof req.query.boardId === 'string' ? req.query.boardId : undefined;
 
-    const board = await tasksService.getTasksByStatus(projectId, boardId);
+    if (boardId) {
+      await assertBoardAccess(projectId, boardId, req.projectMember);
+    }
+
+    const board = await tasksService.getTasksByStatus(
+      projectId,
+      boardId,
+      boardId
+        ? undefined
+        : req.projectMember
+          ? await boardsService.accessibleBoardIds(projectId, req.projectMember)
+          : []
+    );
 
     res.json(board);
   }),
@@ -106,7 +161,7 @@ export const tasksController = {
     const { id: projectId, taskId } = req.params as Record<string, string>;
 
     // Verify task belongs to this project (IDOR protection)
-    await tasksService.verifyTaskInProject(taskId, projectId);
+    await assertTaskAccess(projectId, taskId, req.projectMember);
 
     const task = await tasksService.getTaskById(taskId);
 
@@ -129,7 +184,12 @@ export const tasksController = {
     }
 
     const data = createTaskSchema.parse(req.body);
-    const task = await tasksService.createTask(projectId, req.user.id, data);
+    const task = await tasksService.createTask(
+      projectId,
+      req.user.id,
+      data,
+      req.projectMember
+    );
 
     // Fetch the full task with relations
     const fullTask = await tasksService.getTaskById(task.id);
@@ -145,12 +205,12 @@ export const tasksController = {
     const { id: projectId, taskId } = req.params as Record<string, string>;
 
     // Verify task belongs to this project (IDOR protection)
-    await tasksService.verifyTaskInProject(taskId, projectId);
+    await assertTaskAccess(projectId, taskId, req.projectMember);
 
     const data = updateTaskSchema.parse(req.body);
     await tasksService.updateTask(taskId, data);
 
-    await maybeTriggerAiRun(taskId as string, req.user?.id, data.status);
+    await maybeTriggerAiRun(taskId as string, req.user?.id, data.status, req.projectMember);
 
     // Fetch updated task with relations
     const task = await tasksService.getTaskById(taskId);
@@ -166,12 +226,12 @@ export const tasksController = {
     const { id: projectId, taskId } = req.params as Record<string, string>;
 
     // Verify task belongs to this project (IDOR protection)
-    await tasksService.verifyTaskInProject(taskId, projectId);
+    await assertTaskAccess(projectId, taskId, req.projectMember);
 
     const { status } = updateTaskStatusSchema.parse(req.body);
     await tasksService.updateTaskStatus(taskId, status);
 
-    await maybeTriggerAiRun(taskId as string, req.user?.id, status);
+    await maybeTriggerAiRun(taskId as string, req.user?.id, status, req.projectMember);
 
     // Fetch updated task with relations
     const task = await tasksService.getTaskById(taskId);
@@ -185,7 +245,7 @@ export const tasksController = {
    */
   getAiReport: asyncHandler(async (req: Request, res: Response) => {
     const { id: projectId, taskId } = req.params as Record<string, string>;
-    await tasksService.verifyTaskInProject(taskId, projectId);
+    await assertTaskAccess(projectId, taskId, req.projectMember);
     const markdown = await taskAiService.getReportMarkdown(taskId as string);
     if (!markdown) throw ApiError.notFound('No AI report for this task');
     res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
@@ -199,6 +259,7 @@ export const tasksController = {
   downloadAiReport: asyncHandler(async (req: Request, res: Response) => {
     const { id: projectId, taskId } = req.params as Record<string, string>;
     const format = (req.query.format as string) === 'xlsx' ? 'xlsx' : 'md';
+    await assertTaskAccess(projectId, taskId, req.projectMember);
     const task = await tasksService.verifyTaskInProject(taskId, projectId);
     const markdown = await taskAiService.getReportMarkdown(taskId);
     if (!markdown) throw ApiError.notFound('No AI report for this task');
@@ -232,7 +293,7 @@ export const tasksController = {
   runAi: asyncHandler(async (req: Request, res: Response) => {
     const { id: projectId, taskId } = req.params as Record<string, string>;
     if (!req.user) throw ApiError.unauthorized('User not found');
-    await tasksService.verifyTaskInProject(taskId, projectId);
+    await assertTaskAccess(projectId, taskId, req.projectMember);
     const { prisma } = await import('../../config/database');
     const task = await prisma.task.findUnique({
       where: { id: taskId },
@@ -248,7 +309,7 @@ export const tasksController = {
     console.log(
       `[task-ai ${taskId.slice(0, 8)}] explicit runAi endpoint — dispatching`
     );
-    taskAiService.runAiTask(taskId as string, req.user.id).catch((error) => {
+    taskAiService.runAiTask(taskId as string, req.user.id, req.projectMember).catch((error) => {
       // eslint-disable-next-line no-console
       console.error(
         `[task-ai ${taskId.slice(0, 8)}] unhandled error from runAiTask:`,
@@ -264,7 +325,7 @@ export const tasksController = {
    */
   approveAi: asyncHandler(async (req: Request, res: Response) => {
     const { id: projectId, taskId } = req.params as Record<string, string>;
-    await tasksService.verifyTaskInProject(taskId, projectId);
+    await assertTaskAccess(projectId, taskId, req.projectMember);
     await tasksService.updateTaskStatus(taskId as string, 'COMPLETE');
     const task = await tasksService.getTaskById(taskId as string);
     res.json(task);
@@ -276,7 +337,7 @@ export const tasksController = {
    */
   requestAiChanges: asyncHandler(async (req: Request, res: Response) => {
     const { id: projectId, taskId } = req.params as Record<string, string>;
-    await tasksService.verifyTaskInProject(taskId, projectId);
+    await assertTaskAccess(projectId, taskId, req.projectMember);
     const { prisma } = await import('../../config/database');
     await prisma.task.update({
       where: { id: taskId },
@@ -301,7 +362,7 @@ export const tasksController = {
     const { id: projectId, taskId } = req.params as Record<string, string>;
 
     // Verify task belongs to this project (IDOR protection)
-    await tasksService.verifyTaskInProject(taskId, projectId);
+    await assertTaskAccess(projectId, taskId, req.projectMember);
 
     await tasksService.deleteTask(taskId);
 
@@ -316,7 +377,7 @@ export const tasksController = {
     const { id: projectId, taskId } = req.params as Record<string, string>;
 
     // Verify task belongs to this project (IDOR protection)
-    await tasksService.verifyTaskInProject(taskId, projectId);
+    await assertTaskAccess(projectId, taskId, req.projectMember);
 
     const { userId } = addAssigneeSchema.parse(req.body);
 
@@ -336,7 +397,7 @@ export const tasksController = {
     const { id: projectId, taskId, userId } = req.params as Record<string, string>;
 
     // Verify task belongs to this project (IDOR protection)
-    await tasksService.verifyTaskInProject(taskId, projectId);
+    await assertTaskAccess(projectId, taskId, req.projectMember);
 
     await tasksService.removeAssignee(taskId, userId);
 
@@ -351,7 +412,7 @@ export const tasksController = {
     const { id: projectId, taskId } = req.params as Record<string, string>;
 
     // Verify task belongs to this project (IDOR protection)
-    await tasksService.verifyTaskInProject(taskId, projectId);
+    await assertTaskAccess(projectId, taskId, req.projectMember);
 
     const { tagId } = addTagToTaskSchema.parse(req.body);
 
@@ -374,7 +435,7 @@ export const tasksController = {
     const { id: projectId, taskId, tagId } = req.params as Record<string, string>;
 
     // Verify task belongs to this project (IDOR protection)
-    await tasksService.verifyTaskInProject(taskId, projectId);
+    await assertTaskAccess(projectId, taskId, req.projectMember);
 
     // Verify tag belongs to this project (IDOR protection)
     await tasksService.verifyTagInProject(tagId, projectId);

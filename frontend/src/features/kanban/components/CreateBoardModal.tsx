@@ -1,82 +1,117 @@
 import { useCallback, useEffect, useState } from 'react';
-import { X, Plus, Check } from 'lucide-react';
-import { boardsService } from '../../../api';
+import { Link } from 'react-router-dom';
+import { X, Plus, Layers, UserCog } from 'lucide-react';
+import { boardsService, membersService } from '../../../api';
 import { libraryService } from '../../../api/services/library.service';
 import type { TocWorkstream } from '../../../api/services/library.service';
-import type { KanbanBoardDetail } from '../../../types/api';
+import type { BoardSmeOption, KanbanBoardDetail } from '../../../types/api';
 
 interface Props {
   projectId: string;
   isOpen: boolean;
   onClose: () => void;
   onCreated: (board: KanbanBoardDetail) => void;
+  /** Admins pick who the board is for. Everyone else creates one for themselves. */
+  canAssignSme: boolean;
+  /** Current user's id — used to show their own scope in the non-admin case. */
+  currentUserId?: string;
 }
 
 /**
- * Carve a board out for a specialist.
+ * Create a board for a specialist.
  *
- * Scoping is by diligence workstream rather than folder, because that is the
- * axis a deal is actually divided along — an IP lawyer wants every contract
- * with IP evidence in it, not whichever files happened to be dropped in an "IP"
- * folder. Document counts are shown per workstream so the admin can see the
- * size of the slice they are handing over before they hand it over.
+ * You choose a person, not a set of workstreams. A board is one specialist's
+ * slice of the deal, so its scope IS their access — which means there is no way
+ * to build a board that reaches past what its owner is allowed to see, and
+ * re-granting them workstreams later re-scopes the board with no action here.
+ * The list below the picker is therefore a readout, not an input.
  */
-export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Props) {
+export function CreateBoardModal({
+  projectId,
+  isOpen,
+  onClose,
+  onCreated,
+  canAssignSme,
+  currentUserId,
+}: Props) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [workstreams, setWorkstreams] = useState<TocWorkstream[]>([]);
-  const [loadingToc, setLoadingToc] = useState(false);
+  const [smes, setSmes] = useState<BoardSmeOption[]>([]);
+  const [selectedSmeId, setSelectedSmeId] = useState('');
+  const [ownWorkstreams, setOwnWorkstreams] = useState<Array<{ id: string; title: string }>>([]);
+  const [toc, setToc] = useState<TocWorkstream[]>([]);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadToc = useCallback(async () => {
+  const load = useCallback(async () => {
     try {
-      setLoadingToc(true);
-      const toc = await libraryService.getToc(projectId);
-      setWorkstreams(toc.workstreams);
+      setLoading(true);
+      setError(null);
+      const tocPromise = libraryService.getToc(projectId);
+
+      if (canAssignSme) {
+        const [{ smes: roster }, tocRes] = await Promise.all([
+          boardsService.listSmes(projectId),
+          tocPromise,
+        ]);
+        // Only members who actually hold workstreams can own a board.
+        const eligible = roster.filter((s) => s.workstreams.length > 0);
+        setSmes(eligible);
+        setToc(tocRes.workstreams);
+        if (eligible.length === 1) setSelectedSmeId(eligible[0].userId);
+      } else {
+        const [members, tocRes] = await Promise.all([
+          membersService.getMembers(projectId),
+          tocPromise,
+        ]);
+        const me = members.find((m) => m.user?.id === currentUserId);
+        const ids = me?.permissions?.restrictedWorkstreams ?? [];
+        setToc(tocRes.workstreams);
+        setOwnWorkstreams(
+          ids.map((id) => ({
+            id,
+            title: tocRes.workstreams.find((w) => w.id === id)?.title ?? id,
+          }))
+        );
+      }
     } catch (err) {
-      console.error('Failed to load checklist:', err);
+      console.error('Failed to load board scope options:', err);
       setError('Could not load the deal checklist');
     } finally {
-      setLoadingToc(false);
+      setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, canAssignSme, currentUserId]);
 
   useEffect(() => {
     if (isOpen) {
       setName('');
       setDescription('');
-      setSelectedIds(new Set());
+      setSelectedSmeId('');
       setError(null);
-      loadToc();
+      load();
     }
-  }, [isOpen, loadToc]);
+  }, [isOpen, load]);
 
-  const toggle = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
+  const selectedSme = smes.find((s) => s.userId === selectedSmeId);
+  const scope = canAssignSme ? (selectedSme?.workstreams ?? []) : ownWorkstreams;
+  const hasScope = canAssignSme ? Boolean(selectedSme) : ownWorkstreams.length > 0;
 
-  const selectAll = () => setSelectedIds(new Set(workstreams.map((w) => w.id)));
-  const clearAll = () => setSelectedIds(new Set());
+  const docCount = (workstreamId: string) =>
+    toc.find((w) => w.id === workstreamId)?.documentCount ?? 0;
 
-  // Each document is placed in exactly one workstream, so the selection's reach
-  // is simply the sum.
-  const reach = workstreams
-    .filter((w) => selectedIds.has(w.id))
-    .reduce((n, w) => n + w.documentCount, 0);
+  // Deliberately NOT summed into a total. A document supplies evidence to
+  // roughly eight workstreams and is counted under each, so adding these up
+  // overstates the reach — badly, once a scope covers several workstreams. The
+  // per-workstream figures are each correct; only their sum is a lie.
 
   const handleCreate = async () => {
     if (!name.trim()) {
       setError('Board name is required');
       return;
     }
-    if (selectedIds.size === 0) {
-      setError('Select at least one workstream');
+    if (canAssignSme && !selectedSmeId) {
+      setError('Choose the specialist this board is for');
       return;
     }
     try {
@@ -85,7 +120,7 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
       const board = await boardsService.create(projectId, {
         name: name.trim(),
         description: description.trim() || null,
-        workstreamIds: [...selectedIds],
+        ...(canAssignSme ? { smeUserId: selectedSmeId } : {}),
       });
       onCreated(board);
       onClose();
@@ -97,6 +132,8 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
   };
 
   if (!isOpen) return null;
+
+  const noEligibleSmes = canAssignSme && !loading && smes.length === 0;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -140,75 +177,110 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
             />
           </div>
 
-          <div className="form-group">
-            <div
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}
-            >
-              <label>
-                Workstreams this board covers{' '}
-                <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>
-                  ({selectedIds.size} selected)
-                </span>
-              </label>
-              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                <button type="button" className="button ghost sm" onClick={selectAll}>
-                  Select all
-                </button>
-                <button type="button" className="button ghost sm" onClick={clearAll}>
-                  Clear
-                </button>
-              </div>
+          {canAssignSme && (
+            <div className="form-group">
+              <label htmlFor="board-sme">Subject-matter expert</label>
+              <select
+                id="board-sme"
+                value={selectedSmeId}
+                onChange={(e) => setSelectedSmeId(e.target.value)}
+                disabled={loading || noEligibleSmes}
+              >
+                <option value="">
+                  {loading ? 'Loading team…' : 'Choose a specialist…'}
+                </option>
+                {smes.map((s) => (
+                  <option key={s.userId} value={s.userId}>
+                    {s.name ? `${s.name} — ${s.email}` : s.email}
+                  </option>
+                ))}
+              </select>
+              <p
+                style={{
+                  color: 'var(--text-tertiary)',
+                  fontSize: 'var(--text-xs)',
+                  marginTop: 'var(--space-1)',
+                  lineHeight: 1.6,
+                }}
+              >
+                This board is theirs — only they and project admins can open it, and it
+                covers exactly the workstreams they have been granted.
+              </p>
             </div>
-            <p
-              style={{
-                color: 'var(--text-tertiary)',
-                fontSize: 'var(--text-xs)',
-                marginTop: 'var(--space-1)',
-                lineHeight: 1.6,
-              }}
-            >
-              Tasks on this board can attach the documents in these workstreams. Members see the
-              board only if all of them are within their access.
-            </p>
+          )}
+
+          {noEligibleSmes ? (
             <div
               style={{
-                marginTop: 'var(--space-2)',
                 border: '1px solid var(--border-primary)',
                 borderRadius: 'var(--radius-md)',
-                maxHeight: 280,
-                overflowY: 'auto',
+                padding: 'var(--space-4)',
+                display: 'flex',
+                gap: 'var(--space-3)',
+                alignItems: 'flex-start',
               }}
             >
-              {loadingToc ? (
-                <div style={{ padding: 'var(--space-4)', color: 'var(--text-tertiary)' }}>
-                  Loading checklist…
-                </div>
-              ) : workstreams.length === 0 ? (
-                <div style={{ padding: 'var(--space-4)', color: 'var(--text-tertiary)' }}>
-                  The checklist populates as documents are analyzed.
-                </div>
-              ) : (
-                workstreams.map((ws) => {
-                  const checked = selectedIds.has(ws.id);
-                  return (
-                    <label
+              <UserCog size={16} style={{ color: 'var(--text-tertiary)', flexShrink: 0, marginTop: 2 }} />
+              <div style={{ fontSize: 'var(--text-sm)', lineHeight: 1.6 }}>
+                <strong style={{ display: 'block' }}>No specialists yet</strong>
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  Invite a member and grant them workstreams in{' '}
+                  <Link to={`/projects/${projectId}/settings?tab=team`}>Admin → Team</Link>, then
+                  come back to give them a board.
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="form-group">
+              <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                <Layers size={13} />
+                {canAssignSme
+                  ? selectedSme
+                    ? `Workstreams ${selectedSme.name ?? selectedSme.email} can access`
+                    : 'Workstreams this board will cover'
+                  : 'Workstreams you can access'}
+                {hasScope && (
+                  <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>
+                    ({scope.length})
+                  </span>
+                )}
+              </label>
+              <div
+                style={{
+                  marginTop: 'var(--space-2)',
+                  border: '1px solid var(--border-primary)',
+                  borderRadius: 'var(--radius-md)',
+                  maxHeight: 240,
+                  overflowY: 'auto',
+                }}
+              >
+                {!hasScope ? (
+                  <div
+                    style={{
+                      padding: 'var(--space-4)',
+                      color: 'var(--text-tertiary)',
+                      fontSize: 'var(--text-sm)',
+                    }}
+                  >
+                    {canAssignSme
+                      ? 'Choose a specialist to see the scope their board will cover.'
+                      : 'You have not been granted any workstreams yet. Ask an admin for access.'}
+                  </div>
+                ) : (
+                  scope.map((ws, i) => (
+                    <div
                       key={ws.id}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
                         gap: 'var(--space-3)',
                         padding: 'var(--space-2) var(--space-3)',
-                        cursor: 'pointer',
-                        borderBottom: '1px solid var(--border-primary)',
-                        background: checked ? 'var(--color-primary-soft)' : 'transparent',
+                        borderBottom:
+                          i === scope.length - 1
+                            ? 'none'
+                            : '1px solid var(--border-primary)',
                       }}
                     >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggle(ws.id)}
-                        style={{ width: 'auto' }}
-                      />
                       <span style={{ flex: 1, minWidth: 0 }}>{ws.title}</span>
                       <span
                         style={{
@@ -219,26 +291,29 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
                           textAlign: 'right',
                         }}
                       >
-                        {ws.documentCount} doc{ws.documentCount === 1 ? '' : 's'}
+                        {docCount(ws.id)} doc{docCount(ws.id) === 1 ? '' : 's'}
                       </span>
-                      {checked && <Check size={14} style={{ color: 'var(--color-primary)' }} />}
-                    </label>
-                  );
-                })
+                    </div>
+                  ))
+                )}
+              </div>
+              {hasScope && (
+                <p
+                  style={{
+                    color: 'var(--text-tertiary)',
+                    fontSize: 'var(--text-xs)',
+                    marginTop: 'var(--space-2)',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  Counts overlap — a document usually supplies evidence to several
+                  workstreams. Change this scope in{' '}
+                  <Link to={`/projects/${projectId}/settings?tab=team`}>Admin → Team</Link> and the
+                  board follows.
+                </p>
               )}
             </div>
-            {selectedIds.size > 0 && (
-              <p
-                style={{
-                  color: 'var(--text-tertiary)',
-                  fontSize: 'var(--text-xs)',
-                  marginTop: 'var(--space-2)',
-                }}
-              >
-                {reach} document{reach === 1 ? '' : 's'} in scope.
-              </p>
-            )}
-          </div>
+          )}
 
           {error && (
             <div className="error-container">
@@ -262,7 +337,7 @@ export function CreateBoardModal({ projectId, isOpen, onClose, onCreated }: Prop
           <button
             className="button primary"
             onClick={handleCreate}
-            disabled={saving || !name.trim() || selectedIds.size === 0}
+            disabled={saving || !name.trim() || !hasScope}
           >
             {saving ? 'Creating…' : 'Create Board'}
           </button>

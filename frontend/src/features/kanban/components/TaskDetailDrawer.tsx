@@ -42,12 +42,20 @@ import type {
   ProjectMember,
 } from '../../../types/api';
 
+/** How often to re-poll the task while an AI run is in flight, and when to give up. */
+const AI_POLL_INTERVAL_MS = 3000;
+const AI_POLL_TIMEOUT_MS = 5 * 60 * 1000;
+
 interface TaskDetailDrawerProps {
   task: Task | null;
   loading: boolean;
   projectId: string | undefined;
   /** Folder IDs the current board is scoped to — constrains the attach-document picker. */
   boardFolderIds?: string[];
+  /** Documents this board may attach (from the API). null = unscoped. */
+  allowedDocumentIds?: string[] | null;
+  /** Users who may be assigned here: the board's SME plus project admins. */
+  assignableUserIds?: string[] | null;
   currentUserId: string | undefined;
   isAdmin: boolean;
   isMember: boolean;
@@ -66,6 +74,8 @@ export function TaskDetailDrawer({
   loading,
   projectId,
   boardFolderIds,
+  allowedDocumentIds,
+  assignableUserIds,
   currentUserId,
   isAdmin,
   isMember,
@@ -88,6 +98,7 @@ export function TaskDetailDrawer({
   });
   const [savingDraft, setSavingDraft] = useState(false);
   const [runningAi, setRunningAi] = useState(false);
+  const [pendingRun, setPendingRun] = useState(false);
   const [approving, setApproving] = useState(false);
   const [requestingChanges, setRequestingChanges] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -169,6 +180,40 @@ export function TaskDetailDrawer({
     };
   }, [task, projectId, task?.aiStatus, task?.aiReportS3Key]);
 
+  // `onRefresh` is re-created by the parent on every render, so hold it in a
+  // ref and keep it out of the poll effect's deps — otherwise each refresh
+  // tears the interval down and restarts the deadline.
+  const onRefreshRef = useRef(onRefresh);
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
+
+  // Poll while a run is in flight. `POST /run-ai` acknowledges immediately and
+  // Claude answers 30s–2min later, so without this the drawer sits on the
+  // pre-run status until the user reloads the page.
+  useEffect(() => {
+    const status = task?.aiStatus ?? null;
+    const inFlight = pendingRun || status === 'RUNNING' || status === 'QUEUED';
+    if (!inFlight) return;
+    const deadline = Date.now() + AI_POLL_TIMEOUT_MS;
+    const id = setInterval(() => {
+      if (Date.now() > deadline) {
+        setPendingRun(false);
+        clearInterval(id);
+        return;
+      }
+      onRefreshRef.current();
+    }, AI_POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [pendingRun, task?.aiStatus]);
+
+  // Once the runner has stamped any status, that status drives the polling —
+  // drop the optimistic flag we set at dispatch time.
+  useEffect(() => {
+    const status = task?.aiStatus ?? null;
+    if (status && status !== 'IDLE') setPendingRun(false);
+  }, [task?.aiStatus]);
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -186,7 +231,7 @@ export function TaskDetailDrawer({
   const hasPrompt = hasAnyContent(prompt);
   const aiStatus = task?.aiStatus ?? null;
   const isLocked =
-    aiStatus === 'QUEUED' || aiStatus === 'RUNNING' || runningAi;
+    aiStatus === 'QUEUED' || aiStatus === 'RUNNING' || runningAi || pendingRun;
 
   if (!task) return null;
 
@@ -225,8 +270,10 @@ export function TaskDetailDrawer({
       setRunningAi(true);
       await persistDraft({ silent: true });
       await tasksService.runAi(projectId, task.id);
+      setPendingRun(true);
       onRefresh();
     } catch (err) {
+      setPendingRun(false);
       setErrorMessage(err instanceof Error ? err.message : 'Run failed.');
     } finally {
       setRunningAi(false);
@@ -333,13 +380,18 @@ export function TaskDetailDrawer({
       day: 'numeric',
     });
 
+  // A task can only be handed to someone who can open its board — for an AI
+  // task that person is the reviewer who approves the report, so offering
+  // anyone else would route work to a board they cannot see.
   const availableMembers = members.filter(
     (m) =>
-      m.user && !task.assignees?.some((a) => a.user?.id === m.user.id)
+      m.user &&
+      !task.assignees?.some((a) => a.user?.id === m.user.id) &&
+      (!assignableUserIds || assignableUserIds.includes(m.user.id))
   );
 
   const statusPill = () => {
-    if (aiStatus === 'RUNNING' || aiStatus === 'QUEUED') {
+    if (aiStatus === 'RUNNING' || aiStatus === 'QUEUED' || pendingRun) {
       return (
         <span className="ai-status-pill running">
           <Loader size={12} className="spinning" />
@@ -880,6 +932,7 @@ export function TaskDetailDrawer({
             projectId={projectId}
             alreadyLinkedDocumentIds={linkedDocuments.map((ld) => ld.documentId)}
             boardFolderIds={boardFolderIds}
+            allowedDocumentIds={allowedDocumentIds}
             onClose={() => setShowLinkDocumentModal(false)}
             onLink={handleLinkDocument}
           />

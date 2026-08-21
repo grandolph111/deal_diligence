@@ -160,12 +160,20 @@ export interface Subtask {
 export type TaskAiStatus = 'IDLE' | 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
 
 // Kanban board (multi-board per project)
+/** The specialist a board belongs to. Null = unassigned (the default board). */
+export interface BoardSme {
+  id: string;
+  name: string | null;
+  email: string;
+}
+
 export interface KanbanBoardSummary extends Timestamps {
   id: string;
   name: string;
   description: string | null;
   isDefault: boolean;
-  /** Checklist workstreams the board covers. Empty = the whole deal. */
+  sme: BoardSme | null;
+  /** Derived from the SME's grants — not chosen per board. Empty = the whole deal. */
   workstreams: Array<{ id: string; title: string }>;
   /** @deprecated dormant — folder scoping is retired from the UI. */
   folders: Array<{ id: string; name: string }>;
@@ -177,16 +185,34 @@ export interface KanbanBoardDetail extends Timestamps {
   name: string;
   description: string | null;
   isDefault: boolean;
-  /** Checklist workstreams the board covers. Empty = the whole deal. */
+  sme: BoardSme | null;
+  /** Derived from the SME's grants — not chosen per board. Empty = the whole deal. */
   workstreams: Array<{ id: string; title: string }>;
+  /**
+   * Exactly the documents tasks on this board may attach. `null` = unscoped
+   * (the default board), so every project document is eligible.
+   */
+  documentIds: string[] | null;
   /** @deprecated dormant — folder scoping is retired from the UI. */
   folders: Array<{ id: string; name: string; parentId?: string | null }>;
+}
+
+/** A member who can be named as a board's SME, with the scope they would bring. */
+export interface BoardSmeOption {
+  userId: string;
+  name: string | null;
+  email: string;
+  avatarUrl: string | null;
+  role: Role;
+  workstreams: Array<{ id: string; title: string }>;
 }
 
 export interface CreateBoardDto {
   name: string;
   description?: string | null;
-  /** Checklist workstream slugs. At least one scope is required. */
+  /** The specialist this board is for. Their grants become its scope. */
+  smeUserId?: string;
+  /** @deprecated superseded by smeUserId. */
   workstreamIds?: string[];
   /** @deprecated dormant — folder scoping is retired from the UI. */
   folderIds?: string[];
@@ -195,6 +221,8 @@ export interface CreateBoardDto {
 export interface UpdateBoardDto {
   name?: string;
   description?: string | null;
+  smeUserId?: string | null;
+  /** @deprecated superseded by smeUserId. */
   workstreamIds?: string[];
   /** @deprecated dormant. */
   folderIds?: string[];

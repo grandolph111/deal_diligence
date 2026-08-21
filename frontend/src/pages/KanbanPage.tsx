@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, UserPlus, FolderOpen } from 'lucide-react';
+import { ArrowLeft, UserPlus, FolderOpen, Layers, UserRound, UserX } from 'lucide-react';
 import { KanbanBoard, InviteMemberModal } from '../features/kanban';
 import { membersService, boardsService, apiClient } from '../api';
 import { useAuth } from '../auth';
@@ -21,9 +21,29 @@ export function KanbanPage() {
   // Get current user's membership info (match by email from Auth0)
   const currentUserMember = members.find((m) => m.user?.email === user?.email);
   const currentUserId = currentUserMember?.user?.id;
-  const isAdmin = currentUserMember?.role === 'OWNER' || currentUserMember?.role === 'ADMIN';
+  // Platform admins hold no ProjectMember row — the API gives them a synthetic
+  // OWNER membership, so gating on the members list alone stripped every admin
+  // control from the board for the people most likely to need it.
+  const isPlatformAdmin =
+    user?.platformRole === 'SUPER_ADMIN' || user?.platformRole === 'CUSTOMER_ADMIN';
+  const isAdmin =
+    isPlatformAdmin ||
+    currentUserMember?.role === 'OWNER' ||
+    currentUserMember?.role === 'ADMIN';
   const isMember = currentUserMember?.role === 'MEMBER' || isAdmin;
   const canInvite = isAdmin;
+
+  // Assignable = the board's SME + every project admin. The default board has
+  // no SME, so it stays open to the whole team.
+  const assignableUserIds = board?.sme
+    ? [
+        board.sme.id,
+        ...members
+          .filter((m) => m.role === 'OWNER' || m.role === 'ADMIN')
+          .map((m) => m.user?.id)
+          .filter((id): id is string => Boolean(id)),
+      ]
+    : null;
 
   // Handler for viewing a linked document in VDR
   const handleViewDocument = (documentId: string, folderId: string | null) => {
@@ -120,7 +140,26 @@ export function KanbanPage() {
         {board.description && (
           <p style={{ color: 'var(--text-secondary)', margin: 0 }}>{board.description}</p>
         )}
-        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'center' }}>
+          {board.sme ? (
+            <span className="chip" title={board.sme.email}>
+              <UserRound size={11} /> {board.sme.name ?? board.sme.email}
+            </span>
+          ) : (
+            !board.isDefault && (
+              <span
+                className="chip is-stale"
+                title="This board's specialist has left the project. Reassign it in Admin → Team."
+              >
+                <UserX size={11} /> Unassigned
+              </span>
+            )
+          )}
+          {board.workstreams.map((w) => (
+            <span key={w.id} className="chip">
+              <Layers size={11} /> {w.title}
+            </span>
+          ))}
           {board.folders.map((f) => (
             <span key={f.id} className="chip">
               <FolderOpen size={11} /> {f.name}
@@ -135,6 +174,8 @@ export function KanbanPage() {
         // Default "All Documents" board covers the full project — don't
         // scope-filter the attach-doc picker. Named boards pass their folder set.
         boardFolderIds={board.isDefault ? undefined : board.folders.map((f) => f.id)}
+        allowedDocumentIds={board.isDefault ? null : board.documentIds}
+        assignableUserIds={assignableUserIds}
         currentUserId={currentUserId}
         isAdmin={isAdmin}
         isMember={isMember}

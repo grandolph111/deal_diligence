@@ -6,7 +6,7 @@
  * report markdown file for specialist review.
  */
 
-import { TaskAiStatus } from '@prisma/client';
+import { ProjectRole, TaskAiStatus, type ProjectMember } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { config, isClaudeConfigured } from '../../config';
 import { s3Service } from '../../services/s3.service';
@@ -57,8 +57,63 @@ const logError = (taskId: string, msg: string, err?: unknown) => {
   );
 };
 
+/**
+ * Resolve the acting user's membership the same way `loadProjectMembership`
+ * does: a real ProjectMember row, or a synthetic OWNER for a platform admin
+ * who reaches the project through the platform-level bypass and therefore has
+ * no row at all. HTTP callers sit behind that middleware and should pass
+ * `req.projectMember` straight through; this is the fallback for jobs,
+ * scripts and tests that have only a user id.
+ */
+const resolveActingMembership = async (
+  projectId: string,
+  userId: string
+): Promise<ProjectMember | null> => {
+  const row = await prisma.projectMember.findUnique({
+    where: { projectId_userId: { projectId, userId } },
+  });
+  if (row) return row;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { platformRole: true, companyId: true },
+  });
+  if (!user) return null;
+
+  let bypass = user.platformRole === 'SUPER_ADMIN';
+  if (!bypass && user.platformRole === 'CUSTOMER_ADMIN' && user.companyId) {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { companyId: true },
+    });
+    bypass = project?.companyId === user.companyId;
+  }
+  if (!bypass) return null;
+
+  return {
+    id: `synthetic-${userId}-${projectId}`,
+    projectId,
+    userId,
+    role: ProjectRole.OWNER,
+    permissions: null,
+    invitedBy: null,
+    invitedAt: new Date(),
+    acceptedAt: new Date(),
+  };
+};
+
 export const taskAiService = {
-  async runAiTask(taskId: string, actingUserId: string): Promise<void> {
+  /**
+   * @param actingMembership the caller's membership, real or synthetic. HTTP
+   * callers pass `req.projectMember` — a platform admin has no ProjectMember
+   * row, so re-querying it here would abort the run for exactly the people
+   * with the broadest access. Omit it and we resolve it the same way.
+   */
+  async runAiTask(
+    taskId: string,
+    actingUserId: string,
+    actingMembership?: ProjectMember
+  ): Promise<void> {
     const wallStart = Date.now();
     log(taskId, `run requested by user=${actingUserId.slice(0, 8)}`);
 
@@ -84,72 +139,71 @@ export const taskAiService = {
       logError(taskId, `task not found — aborting`);
       throw new Error(`Task not found: ${taskId}`);
     }
-    if (!task.aiPrompt) {
-      logError(taskId, `task has no aiPrompt — aborting`);
-      throw new Error('Task has no AI prompt');
-    }
     if (task.aiStatus === 'RUNNING') {
       log(taskId, `already RUNNING — idempotent early-return`);
       return;
     }
-    log(
-      taskId,
-      `task="${task.title.slice(0, 60)}" prompt=${task.aiPrompt.length}ch ` +
-        `attachments=${task.attachments.length} project=${task.projectId.slice(0, 8)}`
-    );
 
-    // Folder-scope enforcement for the acting user
-    const membership = await prisma.projectMember.findUnique({
-      where: {
-        projectId_userId: { projectId: task.projectId, userId: actingUserId },
-      },
-    });
-    if (!membership) {
-      logError(taskId, `acting user is not a project member — aborting`);
-      throw new Error('Acting user is not a member of this project');
-    }
-    const isFullAccess =
-      membership.role === 'OWNER' || membership.role === 'ADMIN';
-    const permissions = membership.permissions as
-      | Record<string, unknown>
-      | null;
-    const restrictedFolders = permissions?.restrictedFolders as
-      | string[]
-      | undefined;
-    log(
-      taskId,
-      `member role=${membership.role} scope=${
-        isFullAccess
-          ? 'full'
-          : `restricted(${restrictedFolders?.length ?? 0} folders)`
-      }`
-    );
+    // Everything below runs inside the try so a pre-flight abort is recorded
+    // as FAILED with a readable `aiError`. Left outside, the task keeps a null
+    // aiStatus, the drawer shows the neutral "Draft" pill and the run looks
+    // like it silently hung.
+    try {
+      if (!task.aiPrompt) {
+        throw new Error('Task has no AI prompt');
+      }
+      log(
+        taskId,
+        `task="${task.title.slice(0, 60)}" prompt=${task.aiPrompt.length}ch ` +
+          `attachments=${task.attachments.length} project=${task.projectId.slice(0, 8)}`
+      );
 
-    if (!isFullAccess && restrictedFolders && restrictedFolders.length > 0) {
-      for (const a of task.attachments) {
-        if (!a.document.folderId) continue;
-        if (!restrictedFolders.includes(a.document.folderId)) {
-          logError(
-            taskId,
-            `attached doc ${a.document.id} outside folder scope — aborting`
-          );
-          throw new Error(
-            `Attached document ${a.document.id} is outside your folder scope`
-          );
+      // Folder-scope enforcement for the acting user
+      const membership =
+        actingMembership?.projectId === task.projectId
+          ? actingMembership
+          : await resolveActingMembership(task.projectId, actingUserId);
+      if (!membership) {
+        throw new Error('Acting user is not a member of this project');
+      }
+      const isFullAccess =
+        membership.role === 'OWNER' || membership.role === 'ADMIN';
+      const permissions = membership.permissions as
+        | Record<string, unknown>
+        | null;
+      const restrictedFolders = permissions?.restrictedFolders as
+        | string[]
+        | undefined;
+      log(
+        taskId,
+        `member role=${membership.role}${
+          membership.id.startsWith('synthetic-') ? ' (platform-admin bypass)' : ''
+        } scope=${
+          isFullAccess
+            ? 'full'
+            : `restricted(${restrictedFolders?.length ?? 0} folders)`
+        }`
+      );
+
+      if (!isFullAccess && restrictedFolders && restrictedFolders.length > 0) {
+        for (const a of task.attachments) {
+          if (!a.document.folderId) continue;
+          if (!restrictedFolders.includes(a.document.folderId)) {
+            throw new Error(
+              `Attached document "${a.document.name}" is outside your folder scope`
+            );
+          }
         }
       }
-    }
 
-    await prisma.task.update({
-      where: { id: taskId },
-      data: {
-        aiStatus: 'RUNNING' as TaskAiStatus,
-        aiStartedAt: new Date(),
-        aiError: null,
-      },
-    });
-
-    try {
+      await prisma.task.update({
+        where: { id: taskId },
+        data: {
+          aiStatus: 'RUNNING' as TaskAiStatus,
+          aiStartedAt: new Date(),
+          aiError: null,
+        },
+      });
       log(taskId, `status → RUNNING`);
 
       // Load fact sheets from S3 for attached docs.

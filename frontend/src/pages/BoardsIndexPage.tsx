@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Kanban, Layers, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Plus, Kanban, Layers, CheckCircle2, UserRound, UserX } from 'lucide-react';
 import { apiClient, boardsService, membersService } from '../api';
 import { useAuth } from '../auth';
 import { CreateBoardModal } from '../features/kanban/components/CreateBoardModal';
@@ -16,6 +16,7 @@ export function BoardsIndexPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState<Role>('VIEWER');
+  const [currentUserId, setCurrentUserId] = useState<string | undefined>();
 
   const fetchBoards = useCallback(async () => {
     if (!projectId) return;
@@ -37,7 +38,10 @@ export function BoardsIndexPage() {
     try {
       const members = await membersService.getMembers(projectId);
       const me = members.find((m) => m.user?.email === user.email);
-      if (me) setCurrentUserRole(me.role);
+      if (me) {
+        setCurrentUserRole(me.role);
+        setCurrentUserId(me.user?.id);
+      }
     } catch {
       // non-fatal
     }
@@ -55,8 +59,12 @@ export function BoardsIndexPage() {
   // `currentUserRole` hid the button from people the backend would have allowed.
   const isPlatformAdmin =
     user?.platformRole === 'SUPER_ADMIN' || user?.platformRole === 'CUSTOMER_ADMIN';
-  const canCreate =
+  // Naming someone else's board is an admin act. A plain MEMBER may still
+  // create one, but the API pins it to them — so it can only ever cover the
+  // workstreams they already hold.
+  const canAssignSme =
     isPlatformAdmin || currentUserRole === 'OWNER' || currentUserRole === 'ADMIN';
+  const canCreate = canAssignSme || currentUserRole === 'MEMBER';
 
   if (authLoading || loading) {
     return (
@@ -92,9 +100,10 @@ export function BoardsIndexPage() {
       <div>
         <h1 style={{ margin: 0 }}>Kanban Boards</h1>
         <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--space-2)', maxWidth: 720 }}>
-          Each board covers one or more diligence workstreams — the way a deal is split between
-          specialists. Members see only the boards whose workstreams are entirely within their
-          access, and tasks can attach any document with evidence in those workstreams.
+          Each board belongs to one specialist and covers exactly the workstreams they have been
+          granted — the way a deal is split between the people working it. Only its specialist and
+          project admins can open a board, and its tasks reach any document with evidence in those
+          workstreams.
         </p>
       </div>
 
@@ -111,7 +120,7 @@ export function BoardsIndexPage() {
           <p>
             {canCreate
               ? 'Create a board to hand a specialist their slice of the deal.'
-              : 'Ask an admin to create a board covering the workstreams you work on.'}
+              : 'Ask an admin to create a board for the workstreams you work on.'}
           </p>
           {canCreate && (
             <button className="button primary" onClick={() => setShowCreate(true)}>
@@ -168,14 +177,34 @@ export function BoardsIndexPage() {
                   >
                     {board.name}
                   </div>
-                  {board.isDefault && (
-                    <span
-                      className="chip primary"
-                      style={{ marginTop: 2, display: 'inline-flex', gap: 4 }}
-                    >
-                      <CheckCircle2 size={11} /> Default
-                    </span>
-                  )}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 'var(--space-2)',
+                      flexWrap: 'wrap',
+                      marginTop: 4,
+                    }}
+                  >
+                    {board.isDefault && (
+                      <span className="chip primary">
+                        <CheckCircle2 size={11} /> Default
+                      </span>
+                    )}
+                    {board.sme ? (
+                      <span className="chip" title={board.sme.email}>
+                        <UserRound size={11} /> {board.sme.name ?? board.sme.email}
+                      </span>
+                    ) : (
+                      !board.isDefault && (
+                        <span
+                          className="chip is-stale"
+                          title="This board's specialist has left the project. Reassign it to restore access."
+                        >
+                          <UserX size={11} /> Unassigned
+                        </span>
+                      )
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -215,6 +244,8 @@ export function BoardsIndexPage() {
         <CreateBoardModal
           projectId={projectId}
           isOpen={showCreate}
+          canAssignSme={canAssignSme}
+          currentUserId={currentUserId}
           onClose={() => setShowCreate(false)}
           onCreated={(board) => {
             navigate(`/projects/${projectId}/boards/${board.id}`);

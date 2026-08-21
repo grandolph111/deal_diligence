@@ -53,6 +53,7 @@ model User {
   assignedTasks    TaskAssignee[]
   createdTasks     Task[]          @relation("TaskCreator")
   createdBoards    KanbanBoard[]   @relation("BoardCreator")
+  smeBoards        KanbanBoard[]   @relation("BoardSme")
   comments         TaskComment[]   @relation("CommentAuthor")
   assignedSubtasks Subtask[]       @relation("SubtaskAssignee")
 
@@ -175,18 +176,27 @@ model KanbanBoard {
   description String?
   // Default board = auto-migrated "All Documents" board. Cannot be deleted.
   isDefault   Boolean  @default(false)
+  // The subject-matter expert this board belongs to. A board is a view of one
+  // person's slice of the deal, so its workstream scope is DERIVED from this
+  // member's grants at read time rather than stored — re-granting workstreams
+  // in Admin → Team re-scopes their boards immediately. Null = an unassigned
+  // board (the "All Documents" default, or one whose SME left the project),
+  // which falls back to the stored KanbanBoardWorkstream rows.
+  smeUserId   String?
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   project     Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy   User                    @relation("BoardCreator", fields: [createdById], references: [id])
+  sme         User?                   @relation("BoardSme", fields: [smeUserId], references: [id], onDelete: SetNull)
   folders     KanbanBoardFolder[]
   workstreams KanbanBoardWorkstream[]
   tasks       Task[]
 
   @@unique([projectId, name])
   @@index([projectId])
+  @@index([smeUserId])
 }
 
 // N:N join: which data-room folders a board covers.

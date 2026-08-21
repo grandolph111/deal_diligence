@@ -4,12 +4,14 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/ApiError';
 import { boardsService } from '../../services/boards.service';
 
-// Workstream ids are checklist slugs (e.g. 04-intellectual-property), not
-// UUIDs; boards.service validates them against the static checklist. Either
-// axis may be supplied — the service rejects a board with neither.
+// A board is created FOR a specialist — `smeUserId` is the scope, and the
+// workstreams follow from that member's grants. `workstreamIds` is kept only so
+// pre-SME clients keep working; new callers should not send it.
 const createBoardSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(1000).nullable().optional(),
+  smeUserId: z.string().uuid().optional(),
+  /** @deprecated superseded by smeUserId. */
   workstreamIds: z.array(z.string().min(1).max(64)).optional(),
   /** @deprecated dormant — folder scoping is retired from the UI. */
   folderIds: z.array(z.string().uuid()).optional(),
@@ -18,6 +20,8 @@ const createBoardSchema = z.object({
 const updateBoardSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(1000).nullable().optional(),
+  smeUserId: z.string().uuid().nullable().optional(),
+  /** @deprecated superseded by smeUserId. */
   workstreamIds: z.array(z.string().min(1).max(64)).optional(),
   /** @deprecated dormant. */
   folderIds: z.array(z.string().uuid()).optional(),
@@ -29,6 +33,13 @@ export const boardsController = {
     if (!req.projectMember) throw ApiError.forbidden('Not a member');
     const boards = await boardsService.listForMember(projectId, req.projectMember);
     res.json({ boards });
+  }),
+
+  /** Members who can be named as a board's SME, with the scope each would bring. */
+  listSmes: asyncHandler(async (req: Request, res: Response) => {
+    const { id: projectId } = req.params as Record<string, string>;
+    const smes = await boardsService.listEligibleSmes(projectId);
+    res.json({ smes });
   }),
 
   get: asyncHandler(async (req: Request, res: Response) => {
@@ -45,8 +56,14 @@ export const boardsController = {
   create: asyncHandler(async (req: Request, res: Response) => {
     const { id: projectId } = req.params as Record<string, string>;
     if (!req.user) throw ApiError.unauthorized('User not found');
+    if (!req.projectMember) throw ApiError.forbidden('Not a member');
     const data = createBoardSchema.parse(req.body);
-    const board = await boardsService.create(projectId, req.user.id, data);
+    const board = await boardsService.create(
+      projectId,
+      req.user.id,
+      data,
+      req.projectMember
+    );
     res.status(201).json(board);
   }),
 
