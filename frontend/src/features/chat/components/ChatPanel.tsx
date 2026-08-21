@@ -95,16 +95,12 @@ export function ChatPanel({
 
   // Handle sending a message
   const handleSendMessage = useCallback(async (content: string) => {
-    // If no current conversation, create one first
-    if (!currentConversation) {
-      const newConversation = await createConversation();
-      if (newConversation) {
-        // Wait a tick for state to update, then send
-        setTimeout(() => sendMessage(content), 0);
-      }
-    } else {
-      await sendMessage(content);
-    }
+    // A brand-new conversation is handed straight to sendMessage. Waiting a
+    // tick for state to catch up doesn't work — this closure keeps the
+    // sendMessage it was built with, which still sees no conversation.
+    const conversation = currentConversation ?? (await createConversation());
+    if (!conversation) return;
+    await sendMessage(content, undefined, conversation);
   }, [currentConversation, createConversation, sendMessage]);
 
   // Handle going back to conversation list

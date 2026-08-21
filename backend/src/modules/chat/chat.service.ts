@@ -317,6 +317,18 @@ export const chatService = {
       return { userMessage, assistantMessage: assistant, citations: [] };
     }
 
+    // Title the conversation from the first message. It needs nothing the
+    // answer produces, so it rides alongside the answer rather than adding a
+    // second Claude round-trip to the wait — this used to run after the answer
+    // was already in hand, despite calling itself non-blocking.
+    const titlePromise: Promise<string | null> =
+      priorTurns.length === 0
+        ? prisma.chatConversation
+            .findUnique({ where: { id: conversationId }, select: { title: true } })
+            .then((conv) => (conv?.title ? null : generateConversationTitle(data.content)))
+            .catch(() => null)
+        : Promise.resolve(null);
+
     let content: string;
     let citations: Citation[];
     const startedAt = Date.now();
@@ -339,6 +351,7 @@ export const chatService = {
         };
       });
     } catch (error) {
+      void titlePromise.catch(() => null);
       await this.saveMessage(
         conversationId,
         'ASSISTANT',
@@ -357,23 +370,15 @@ export const chatService = {
       citations
     );
 
-    // Auto-generate title on first exchange (fire-and-forget style, non-blocking)
+    // Already resolved by now in all but the fastest answers.
     let generatedTitle: string | undefined;
-    if (priorTurns.length === 0) {
-      const conv = await prisma.chatConversation.findUnique({
+    const title = await titlePromise;
+    if (title) {
+      await prisma.chatConversation.update({
         where: { id: conversationId },
-        select: { title: true },
+        data: { title },
       });
-      if (!conv?.title) {
-        const title = await generateConversationTitle(data.content);
-        if (title) {
-          await prisma.chatConversation.update({
-            where: { id: conversationId },
-            data: { title },
-          });
-          generatedTitle = title;
-        }
-      }
+      generatedTitle = title;
     }
 
     await prisma.auditLog.create({

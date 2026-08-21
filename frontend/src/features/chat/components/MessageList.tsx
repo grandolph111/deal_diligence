@@ -38,7 +38,10 @@ export function MessageList({
     );
   }
 
-  if (messages.length === 0) {
+  // Only when nothing is in flight: the first question of a conversation has an
+  // empty list behind it, and showing the invitation to ask instead of the
+  // question just asked reads as the message having been dropped.
+  if (messages.length === 0 && !sendingMessage) {
     return (
       <div className="message-list-empty">
         <div className="empty-icon">

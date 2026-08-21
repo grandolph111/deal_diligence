@@ -28,7 +28,11 @@ interface UseChatResult {
   createConversation: (title?: string) => Promise<ChatConversation | null>;
   updateConversationTitle: (conversationId: string, title: string) => Promise<void>;
   deleteConversation: (conversationId: string) => Promise<void>;
-  sendMessage: (content: string, documentIds?: string[]) => Promise<{ citations: Citation[] } | null>;
+  sendMessage: (
+    content: string,
+    documentIds?: string[],
+    conversation?: ChatConversation
+  ) => Promise<{ citations: Citation[] } | null>;
   clearCurrentConversation: () => void;
   addSelectedDocument: (doc: SelectedDocument) => void;
   removeSelectedDocument: (docId: string) => void;
@@ -133,33 +137,57 @@ export function useChat({ projectId }: UseChatOptions): UseChatResult {
     }
   }, [projectId, currentConversation?.id]);
 
-  // Send a message
-  const sendMessage = useCallback(async (content: string, documentIds?: string[]) => {
-    if (!projectId || !currentConversation) return null;
+  // Send a message.
+  //
+  // `conversation` is for the first message of a brand-new conversation, whose
+  // caller holds it before this hook's state has caught up.
+  const sendMessage = useCallback(async (
+    content: string,
+    documentIds?: string[],
+    conversation?: ChatConversation
+  ) => {
+    const target = conversation ?? currentConversation;
+    if (!projectId || !target) return null;
+
+    // An answer takes tens of seconds. Show the question straight away —
+    // waiting for the round-trip to echo it back reads as a dropped message.
+    const pending: ChatMessage = {
+      id: `pending-${target.id}-${content.length}`,
+      conversationId: target.id,
+      role: 'USER',
+      content,
+      citations: null,
+      createdAt: new Date().toISOString(),
+    };
 
     try {
       setSendingMessage(true);
       setError(null);
+      setMessages((prev) => [...prev, pending]);
 
       // Use provided documentIds or fall back to selected documents
       const docsToUse = documentIds || selectedDocuments.map((d) => d.id);
 
       const response = await chatService.sendMessage(
         projectId,
-        currentConversation.id,
+        target.id,
         {
           content,
           documentIds: docsToUse.length > 0 ? docsToUse : undefined,
         }
       );
 
-      // Add both messages to the list
-      setMessages((prev) => [...prev, response.userMessage, response.assistantMessage]);
+      // Swap the placeholder for the saved pair.
+      setMessages((prev) => [
+        ...prev.filter((m) => m.id !== pending.id),
+        response.userMessage,
+        response.assistantMessage,
+      ]);
 
       // Update conversation in the list (for updated timestamp)
       setConversations((prev) =>
         prev.map((c) =>
-          c.id === currentConversation.id
+          c.id === target.id
             ? { ...c, messageCount: c.messageCount + 2, updatedAt: new Date().toISOString() }
             : c
         )
@@ -169,7 +197,7 @@ export function useChat({ projectId }: UseChatOptions): UseChatResult {
       if (response.generatedTitle) {
         setConversations((prev) =>
           prev.map((c) =>
-            c.id === currentConversation.id ? { ...c, title: response.generatedTitle ?? null } : c
+            c.id === target.id ? { ...c, title: response.generatedTitle ?? null } : c
           )
         );
         setCurrentConversation((prev) =>
@@ -179,6 +207,7 @@ export function useChat({ projectId }: UseChatOptions): UseChatResult {
 
       return { citations: response.citations };
     } catch (err) {
+      setMessages((prev) => prev.filter((m) => m.id !== pending.id));
       setError(err instanceof Error ? err.message : 'Failed to send message');
       return null;
     } finally {
