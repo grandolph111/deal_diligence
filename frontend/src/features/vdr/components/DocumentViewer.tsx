@@ -52,9 +52,6 @@ const SEARCH_HIGHLIGHT = 'rgba(250, 204, 21, 0.55)';
 const CLAUSE_FALLBACK_COLOR = '#64748B';
 const ENTITY_FALLBACK_COLOR = '#7C3AED';
 
-/** Runs shorter than this are too generic to attribute to a clause. */
-const MIN_CLAUSE_RUN = 6;
-
 /** #RRGGBB plus an alpha, for tints that let the page show through. */
 function withAlpha(hex: string, alpha: number): string {
   const value = hex.replace('#', '');
@@ -100,6 +97,106 @@ function needlePattern(text: string): RegExp {
     .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     .replace(/\s+/g, '\\s*');
   return new RegExp(escaped, 'gi');
+}
+
+/**
+ * Where a clause sits in one page of text.
+ *
+ * A clause is a paragraph, and the extracted copy of it is never quite the
+ * rendered one — leaders like "(a)", a page number mid-paragraph, a hyphen the
+ * extractor dropped. So anchor on the ends rather than demanding the whole
+ * thing match: find the opening words, find the closing words, band what lies
+ * between. A clause that runs onto the next page finds no closing anchor, and
+ * a clause continued from the previous one finds no opening anchor; both are
+ * banded to the edge of the page instead.
+ */
+function locateClause(haystack: string, content: string): { start: number; end: number } | null {
+  const words = content.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return null;
+
+  const anchorAt = (tokens: string[], from: number): { start: number; end: number } | null => {
+    let pattern: RegExp;
+    try {
+      pattern = needlePattern(tokens.join(' '));
+    } catch {
+      return null;
+    }
+    pattern.lastIndex = from;
+    const match = pattern.exec(haystack);
+    return match ? { start: match.index, end: match.index + match[0].length } : null;
+  };
+
+  // Longest anchor that still matches: enough words to be unique, few enough
+  // that one stray character doesn't sink it.
+  const tryAnchors = (pick: (n: number) => string[], from: number) => {
+    for (const size of [10, 6, 4]) {
+      if (words.length < size) continue;
+      const hit = anchorAt(pick(size), from);
+      if (hit) return hit;
+    }
+    return words.length < 4 ? anchorAt(words, from) : null;
+  };
+
+  const head = tryAnchors((n) => words.slice(0, n), 0);
+  const tail = tryAnchors((n) => words.slice(-n), head ? head.end : 0);
+
+  if (head && tail && tail.end > head.start) return { start: head.start, end: tail.end };
+  if (head) {
+    // No closing anchor: the clause runs off this page, or its tail was
+    // mangled. Its own length is the best bound available.
+    return { start: head.start, end: Math.min(head.start + content.length, haystack.length) };
+  }
+  if (tail) return { start: 0, end: tail.end };
+  return null;
+}
+
+/**
+ * Flatten ranges that may overlap each other into a sorted, disjoint list.
+ * Two clauses often quote the same paragraph; the earlier one keeps the shared
+ * stretch and the later one keeps whatever it adds.
+ */
+function flatten(ranges: Mark[]): Mark[] {
+  const out: Mark[] = [];
+  let covered = -1;
+
+  [...ranges]
+    .sort((a, b) => a.start - b.start || b.end - a.end)
+    .forEach((range) => {
+      const start = Math.max(range.start, covered);
+      if (range.end <= start) return;
+      out.push({ ...range, start });
+      covered = range.end;
+    });
+
+  return out;
+}
+
+/**
+ * Lay `over` on top of `under`, keeping only the parts of `under` that nothing
+ * covers. Both arrive sorted and free of self-overlap; the result is too.
+ */
+function mergeLayers(under: Mark[], over: Mark[]): Mark[] {
+  if (!over.length) return under;
+
+  const out: Mark[] = [];
+
+  under.forEach((band) => {
+    let at = band.start;
+    for (const cut of over) {
+      if (cut.end <= at) continue;
+      if (cut.start >= band.end) break;
+      if (cut.start > at) {
+        out.push({ start: at, end: cut.start, color: band.color });
+      }
+      at = cut.end;
+      if (at >= band.end) break;
+    }
+    if (at < band.end) {
+      out.push({ start: at, end: band.end, color: band.color });
+    }
+  });
+
+  return [...out, ...over].sort((a, b) => a.start - b.start || b.end - a.end);
 }
 
 /**
@@ -531,26 +628,6 @@ export function DocumentViewer({
 
     // An empty legend selection means "every type" — the clause set starts empty,
     // so a bare master toggle would otherwise light up nothing.
-    const allClauseTypes = clauseHighlightedTypes.size === 0;
-    const bands = clauseHighlightEnabled
-      ? clauses
-          .filter(
-            (clause) =>
-              !clause.isRejected &&
-              onThisPage(clause.pageNumber) &&
-              (allClauseTypes ||
-                (clause.clauseType != null && clauseHighlightedTypes.has(clause.clauseType)))
-          )
-          .map((clause) => ({
-            content: normalize(clause.content),
-            color: withAlpha(
-              (clause.clauseType && CLAUSE_TYPE_COLORS[clause.clauseType]) || CLAUSE_FALLBACK_COLOR,
-              selectedClause?.id === clause.id ? 0.42 : 0.18
-            ),
-          }))
-          .filter((band) => band.content.length > 0)
-      : [];
-
     // Match against the page as one string, not run by run: pdf.js splits a
     // line wherever the font or position shifts, so "Babcock & Wilcox" routinely
     // arrives as three runs and would never match on its own.
@@ -562,33 +639,59 @@ export function DocumentViewer({
     });
 
     // Fold both sides: the page renders curly quotes and en dashes where the
-    // extracted entity text has plain ones. fold() is character-for-character,
-    // so a match's offsets still address the original runs.
-    const marks = needles.length ? findMarks(fold(pageText), needles) : [];
+    // extracted text has plain ones. fold() is character-for-character, so a
+    // match's offsets still address the original runs.
+    const haystack = fold(pageText);
+
+    const allClauseTypes = clauseHighlightedTypes.size === 0;
+    const bands = clauseHighlightEnabled
+      ? clauses
+          .filter(
+            (clause) =>
+              !clause.isRejected &&
+              onThisPage(clause.pageNumber) &&
+              (allClauseTypes ||
+                (clause.clauseType != null && clauseHighlightedTypes.has(clause.clauseType)))
+          )
+          .flatMap((clause) => {
+            const content = normalize(clause.content);
+            if (!content) return [];
+            const at = locateClause(haystack, content);
+            if (!at) return [];
+            return [
+              {
+                ...at,
+                color: withAlpha(
+                  (clause.clauseType && CLAUSE_TYPE_COLORS[clause.clauseType]) ||
+                    CLAUSE_FALLBACK_COLOR,
+                  selectedClause?.id === clause.id ? 0.42 : 0.18
+                ),
+              },
+            ];
+          })
+      : [];
+
+    // A run can carry a clause band and an entity mark at once, and one text
+    // node can only have one background. The mark is the finer statement, so it
+    // wins the overlap and the band keeps what is left.
+    const marks = needles.length ? findMarks(haystack, needles) : [];
+    const painted = mergeLayers(flatten(bands), marks);
 
     let cursor = 0;
     spans.forEach((span) => {
       // Reset first: this pass owns the whole visual state of the run.
       span.el.textContent = span.str;
-      span.el.style.backgroundColor = '';
 
-      const run = normalize(span.str);
-      if (run.length >= MIN_CLAUSE_RUN) {
-        const band = bands.find((candidate) => candidate.content.includes(run));
-        if (band) {
-          span.el.style.backgroundColor = band.color;
-        }
-      }
-
-      // Marks are sorted, so walk them alongside the runs rather than rescanning.
-      while (cursor < marks.length && marks[cursor].end <= span.start) cursor += 1;
+      // Painted ranges are sorted, so walk them alongside the runs rather than
+      // rescanning the page for each one.
+      while (cursor < painted.length && painted[cursor].end <= span.start) cursor += 1;
 
       const local: Mark[] = [];
-      for (let i = cursor; i < marks.length && marks[i].start < span.end; i += 1) {
+      for (let i = cursor; i < painted.length && painted[i].start < span.end; i += 1) {
         local.push({
-          start: Math.max(marks[i].start, span.start) - span.start,
-          end: Math.min(marks[i].end, span.end) - span.start,
-          color: marks[i].color,
+          start: Math.max(painted[i].start, span.start) - span.start,
+          end: Math.min(painted[i].end, span.end) - span.start,
+          color: painted[i].color,
         });
       }
       if (!local.length) return;
