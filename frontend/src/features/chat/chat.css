@@ -9,7 +9,8 @@
   right: 0;
   bottom: 0;
   left: 0;
-  z-index: 1000;
+  /* Above the document viewer (2000): the viewer is what you ask questions from. */
+  z-index: 2600;
   display: flex;
   justify-content: flex-end;
   background: rgba(0, 0, 0, 0.3);

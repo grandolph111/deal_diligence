@@ -72,6 +72,14 @@ export function useEntities({
           { limit: 100, ...params }
         );
         setEntities(response.entities);
+        // The extractor emits richer types than the palette names (TRADEMARK,
+        // AGREEMENT, …). Highlight whatever actually came back, or those
+        // entities would list in the panel and light up nowhere.
+        setHighlightedTypes((prev) => {
+          const next = new Set(prev);
+          response.entities.forEach((entity) => next.add(entity.entityType));
+          return next;
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to load entities';
         setError(message);

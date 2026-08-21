@@ -116,6 +116,11 @@ export function useClauses({
       } else {
         next.add(type);
       }
+      // Picking a type is a request to see it: turning the master switch on here
+      // saves the user from a legend that toggles but paints nothing.
+      if (next.size > 0) {
+        setHighlightEnabled(true);
+      }
       return next;
     });
   }, []);

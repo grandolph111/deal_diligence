@@ -1491,12 +1491,13 @@
   top: 0;
   left: 0;
   overflow: hidden;
-  opacity: 0.2;
   line-height: 1;
   pointer-events: none;
 }
 
-.pdf-text-layer span {
+/* Direct children only — a highlight nested inside a run must stay in flow, or
+   it is pulled out of it and everything after it shifts left. */
+.pdf-text-layer > span {
   position: absolute;
   white-space: pre;
   transform-origin: 0% 0%;
@@ -3426,9 +3427,11 @@
    ============================================ */
 
 .pdf-text-layer .entity-highlight {
+  position: static;
   background-color: var(--entity-color, rgba(255, 255, 0, 0.4));
   border-radius: 2px;
   cursor: pointer;
+  pointer-events: auto;
   transition: background-color 0.15s ease;
 }
 

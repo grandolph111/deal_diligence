@@ -22,9 +22,10 @@ import {
   ChevronDown,
   Tags,
   Link2,
-  MessageSquare,
+  Sparkles,
 } from 'lucide-react';
 import type { Document, DocumentEntity, DocumentClause, DocumentType, RiskLevel } from '../../../types/api';
+import { ENTITY_TYPE_COLORS, CLAUSE_TYPE_COLORS } from '../../../types/api';
 import { EntitiesPanel } from './EntitiesPanel';
 import { EntityDetailsModal } from './EntityDetailsModal';
 import { ClausesPanel } from './ClausesPanel';
@@ -43,6 +44,99 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url
 ).toString();
+
+/** Search match tint — deliberately unlike any entity or clause colour. */
+const SEARCH_HIGHLIGHT = 'rgba(250, 204, 21, 0.55)';
+
+/** Fallbacks for types the extractor produced that the palette doesn't name. */
+const CLAUSE_FALLBACK_COLOR = '#64748B';
+const ENTITY_FALLBACK_COLOR = '#7C3AED';
+
+/** Runs shorter than this are too generic to attribute to a clause. */
+const MIN_CLAUSE_RUN = 6;
+
+/** #RRGGBB plus an alpha, for tints that let the page show through. */
+function withAlpha(hex: string, alpha: number): string {
+  const value = hex.replace('#', '');
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/**
+ * Fold the typography a PDF renders but an extractor flattens — curly quotes,
+ * dashes, non-breaking spaces. Strictly one character for one, so offsets into
+ * the folded string still index the original.
+ */
+function fold(text: string): string {
+  return text
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2010-\u2015]/g, '-')
+    .replace(/[\u00A0\u2007\u202F]/g, ' ');
+}
+
+/** Whitespace in a PDF text run never matches whitespace in extracted prose. */
+function normalize(text: string): string {
+  return fold(text).replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+interface Needle {
+  text: string;
+  color: string;
+}
+
+interface Mark {
+  start: number;
+  end: number;
+  color: string;
+}
+
+/** Regex-escape, then let any whitespace in the needle match any (or no) gap. */
+function needlePattern(text: string): RegExp {
+  const escaped = fold(text)
+    .trim()
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\s+/g, '\\s*');
+  return new RegExp(escaped, 'gi');
+}
+
+/**
+ * Where each needle lands in one page of text, left to right and without
+ * overlaps — the first (and on a tie, the longest) match owns the span.
+ */
+function findMarks(haystack: string, needles: Needle[]): Mark[] {
+  const hits: Mark[] = [];
+
+  needles.forEach(({ text, color }) => {
+    let pattern: RegExp;
+    try {
+      pattern = needlePattern(text);
+    } catch {
+      return;
+    }
+    let match = pattern.exec(haystack);
+    while (match) {
+      if (match[0].length > 0) {
+        hits.push({ start: match.index, end: match.index + match[0].length, color });
+      } else {
+        pattern.lastIndex += 1;
+      }
+      match = pattern.exec(haystack);
+    }
+  });
+
+  hits.sort((a, b) => a.start - b.start || b.end - a.end);
+
+  const merged: Mark[] = [];
+  hits.forEach((hit) => {
+    const last = merged[merged.length - 1];
+    if (last && hit.start < last.end) return;
+    merged.push(hit);
+  });
+  return merged;
+}
 
 interface DocumentViewerProps {
   document: Document;
@@ -181,6 +275,9 @@ export function DocumentViewer({
   // Refs
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
+  /** The spans of the current text layer, with the string each one started as. */
+  const textItemsRef = useRef<{ el: HTMLSpanElement; str: string }[]>([]);
+  const [textLayerVersion, setTextLayerVersion] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -318,7 +415,15 @@ export function DocumentViewer({
 
           if (cancelled) return;
 
-          // Create text layer elements
+          // Create text layer elements.
+          //
+          // viewport.transform already flips the PDF's bottom-up axis, so tx[5]
+          // is the baseline measured from the top; the box starts one font
+          // height above it. Getting this wrong is invisible while the layer is
+          // only there to be selected, and glaring the moment it carries a
+          // highlight.
+          textItemsRef.current = [];
+          const placed: { el: HTMLSpanElement; width: number }[] = [];
           textContent.items.forEach((item) => {
             if ('str' in item && item.str) {
               const div = window.document.createElement('span');
@@ -329,22 +434,45 @@ export function DocumentViewer({
                 viewport.transform,
                 item.transform
               );
+              const fontHeight = Math.hypot(tx[2], tx[3]) || Math.abs(tx[3]);
 
               div.style.left = `${tx[4]}px`;
-              div.style.top = `${viewport.height - tx[5]}px`;
-              div.style.fontSize = `${Math.abs(tx[3])}px`;
-              div.style.fontFamily = 'sans-serif';
+              div.style.top = `${tx[5] - fontHeight}px`;
+              div.style.fontSize = `${fontHeight}px`;
+              // Contracts are set in a serif face; a serif substitute keeps the
+              // per-character widths — and so the highlights inside a run —
+              // closer to what the canvas drew.
+              div.style.fontFamily = "'Times New Roman', Times, serif";
               div.style.color = 'transparent';
               div.style.userSelect = 'text';
 
-              // Highlight search matches
-              if (searchQuery && item.str.toLowerCase().includes(searchQuery.toLowerCase())) {
-                div.style.backgroundColor = 'rgba(255, 255, 0, 0.4)';
-              }
-
               textLayerRef.current?.appendChild(div);
+              textItemsRef.current.push({ el: div, str: item.str });
+              placed.push({ el: div, width: item.width * scale });
             }
           });
+
+          // Fit each run to the width the canvas actually drew — the layer uses
+          // a substitute font, so its natural width differs.
+          //
+          // Absorb the difference into the word gaps rather than scaling the
+          // glyphs. Justified PDF text stretches the spaces alone, so scaleX
+          // makes the run's ends line up while everything in between slides —
+          // which is exactly where a highlight sits.
+          placed.forEach(({ el, width }) => {
+            const natural = el.offsetWidth;
+            if (!(natural > 0) || !(width > 0)) return;
+            const gaps = (el.textContent?.match(/ /g) ?? []).length;
+            const delta = width - natural;
+            if (gaps > 0 && Math.abs(delta) < natural * 0.5) {
+              el.style.wordSpacing = `${delta / gaps}px`;
+            } else {
+              el.style.transform = `scaleX(${width / natural})`;
+            }
+          });
+
+          // Highlights are painted separately, off this version stamp.
+          setTextLayerVersion((version) => version + 1);
         }
       } catch (err) {
         if (!cancelled) {
@@ -358,7 +486,143 @@ export function DocumentViewer({
     return () => {
       cancelled = true;
     };
-  }, [pdfDoc, currentPage, zoom, rotation, searchQuery]);
+  }, [pdfDoc, currentPage, zoom, rotation]);
+
+  /**
+   * Paint search, entity, and clause highlights onto the text layer.
+   *
+   * Deliberately separate from page rendering: highlights change far more often
+   * than the raster does — every search keystroke, every legend toggle — and
+   * re-rasterising a page to tint a word is slow for no gain.
+   *
+   * Entities and the search term are short strings that sit *inside* a text
+   * run, so they highlight the matched substring. A clause is a paragraph, so
+   * the containment runs the other way: the run sits inside the clause, and the
+   * whole run gets the band.
+   */
+  useEffect(() => {
+    const items = textItemsRef.current;
+    if (!items.length) return;
+
+    const onThisPage = (pageNumber: number | null) =>
+      pageNumber == null || pageNumber === currentPage;
+
+    const needles: Needle[] = [];
+    const query = searchQuery.trim();
+    if (query) {
+      needles.push({ text: query, color: SEARCH_HIGHLIGHT });
+    }
+
+    if (highlightEnabled) {
+      entities.forEach((entity) => {
+        const text = entity.text.trim();
+        if (text.length < 2) return;
+        if (!onThisPage(entity.pageNumber)) return;
+        if (!highlightedTypes.has(entity.entityType)) return;
+        needles.push({
+          text,
+          color: withAlpha(
+            ENTITY_TYPE_COLORS[entity.entityType] ?? ENTITY_FALLBACK_COLOR,
+            selectedEntity?.id === entity.id ? 0.55 : 0.3
+          ),
+        });
+      });
+    }
+
+    // An empty legend selection means "every type" — the clause set starts empty,
+    // so a bare master toggle would otherwise light up nothing.
+    const allClauseTypes = clauseHighlightedTypes.size === 0;
+    const bands = clauseHighlightEnabled
+      ? clauses
+          .filter(
+            (clause) =>
+              !clause.isRejected &&
+              onThisPage(clause.pageNumber) &&
+              (allClauseTypes ||
+                (clause.clauseType != null && clauseHighlightedTypes.has(clause.clauseType)))
+          )
+          .map((clause) => ({
+            content: normalize(clause.content),
+            color: withAlpha(
+              (clause.clauseType && CLAUSE_TYPE_COLORS[clause.clauseType]) || CLAUSE_FALLBACK_COLOR,
+              selectedClause?.id === clause.id ? 0.42 : 0.18
+            ),
+          }))
+          .filter((band) => band.content.length > 0)
+      : [];
+
+    // Match against the page as one string, not run by run: pdf.js splits a
+    // line wherever the font or position shifts, so "Babcock & Wilcox" routinely
+    // arrives as three runs and would never match on its own.
+    let pageText = '';
+    const spans = items.map(({ el, str }) => {
+      const span = { el, str, start: pageText.length, end: pageText.length + str.length };
+      pageText += str;
+      return span;
+    });
+
+    // Fold both sides: the page renders curly quotes and en dashes where the
+    // extracted entity text has plain ones. fold() is character-for-character,
+    // so a match's offsets still address the original runs.
+    const marks = needles.length ? findMarks(fold(pageText), needles) : [];
+
+    let cursor = 0;
+    spans.forEach((span) => {
+      // Reset first: this pass owns the whole visual state of the run.
+      span.el.textContent = span.str;
+      span.el.style.backgroundColor = '';
+
+      const run = normalize(span.str);
+      if (run.length >= MIN_CLAUSE_RUN) {
+        const band = bands.find((candidate) => candidate.content.includes(run));
+        if (band) {
+          span.el.style.backgroundColor = band.color;
+        }
+      }
+
+      // Marks are sorted, so walk them alongside the runs rather than rescanning.
+      while (cursor < marks.length && marks[cursor].end <= span.start) cursor += 1;
+
+      const local: Mark[] = [];
+      for (let i = cursor; i < marks.length && marks[i].start < span.end; i += 1) {
+        local.push({
+          start: Math.max(marks[i].start, span.start) - span.start,
+          end: Math.min(marks[i].end, span.end) - span.start,
+          color: marks[i].color,
+        });
+      }
+      if (!local.length) return;
+
+      span.el.textContent = '';
+      let at = 0;
+      local.forEach(({ start: from, end: to, color }) => {
+        if (from > at) {
+          span.el.appendChild(window.document.createTextNode(span.str.slice(at, from)));
+        }
+        const mark = window.document.createElement('span');
+        mark.className = 'entity-highlight';
+        mark.style.backgroundColor = color;
+        mark.textContent = span.str.slice(from, to);
+        span.el.appendChild(mark);
+        at = to;
+      });
+      if (at < span.str.length) {
+        span.el.appendChild(window.document.createTextNode(span.str.slice(at)));
+      }
+    });
+  }, [
+    textLayerVersion,
+    currentPage,
+    searchQuery,
+    entities,
+    highlightEnabled,
+    highlightedTypes,
+    selectedEntity,
+    clauses,
+    clauseHighlightEnabled,
+    clauseHighlightedTypes,
+    selectedClause,
+  ]);
 
   // Poll for document status updates when processing
   useEffect(() => {
@@ -798,7 +1062,7 @@ export function DocumentViewer({
                 disabled={loading}
                 title="Ask AI about this document"
               >
-                <MessageSquare size={18} />
+                <Sparkles size={18} />
               </button>
             )}
 
