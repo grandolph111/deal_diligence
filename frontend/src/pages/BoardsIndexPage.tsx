@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Kanban, Layers, CheckCircle2, UserRound, UserX } from 'lucide-react';
+import { ArrowLeft, Plus, Kanban, Layers, CheckCircle2, UserRound, UserX, Trash2 } from 'lucide-react';
 import { apiClient, boardsService, membersService } from '../api';
 import { useAuth } from '../auth';
 import { CreateBoardModal } from '../features/kanban/components/CreateBoardModal';
+import { DeleteBoardModal } from '../features/kanban/components/DeleteBoardModal';
 import type { KanbanBoardSummary, Role } from '../types/api';
 
 export function BoardsIndexPage() {
@@ -17,6 +18,9 @@ export function BoardsIndexPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState<Role>('VIEWER');
   const [currentUserId, setCurrentUserId] = useState<string | undefined>();
+  const [pendingDelete, setPendingDelete] = useState<KanbanBoardSummary | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const fetchBoards = useCallback(async () => {
     if (!projectId) return;
@@ -65,6 +69,24 @@ export function BoardsIndexPage() {
   const canAssignSme =
     isPlatformAdmin || currentUserRole === 'OWNER' || currentUserRole === 'ADMIN';
   const canCreate = canAssignSme || currentUserRole === 'MEMBER';
+  // Deleting a board is an admin act: it re-homes someone else's tasks. The API
+  // enforces this too, so the button matches what the server would allow.
+  const canDelete = canAssignSme;
+
+  const handleDelete = async () => {
+    if (!projectId || !pendingDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await boardsService.remove(projectId, pendingDelete.id);
+      setPendingDelete(null);
+      await fetchBoards();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Could not delete this board');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   if (authLoading || loading) {
     return (
@@ -223,8 +245,8 @@ export function BoardsIndexPage() {
               <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'center' }}>
                 {board.riskCategories && board.riskCategories.length > 0 ? (
                   <span className="chip" title={board.riskCategories.map((w) => w.title).join(', ')}>
-                    <Layers size={11} /> {board.riskCategories.length} riskCategory
-                    {board.riskCategories.length === 1 ? '' : 's'}
+                    <Layers size={11} /> {board.riskCategories.length} risk categor
+                    {board.riskCategories.length === 1 ? 'y' : 'ies'}
                   </span>
                 ) : (
                   <span className="chip" title="Covers every document in the deal">
@@ -234,11 +256,43 @@ export function BoardsIndexPage() {
                 <span className="chip">
                   {board.taskCount} task{board.taskCount === 1 ? '' : 's'}
                 </span>
+                {/* The default board holds tasks that belong to no other board,
+                    so it has nowhere to hand them on to and cannot be deleted. */}
+                {canDelete && !board.isDefault && (
+                  <button
+                    type="button"
+                    className="board-card__delete"
+                    title={`Delete ${board.name}`}
+                    aria-label={`Delete ${board.name}`}
+                    onClick={(e) => {
+                      // The card is a link; deleting must not also navigate.
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDeleteError(null);
+                      setPendingDelete(board);
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
               </div>
             </Link>
           ))}
         </div>
       )}
+
+      <DeleteBoardModal
+        boardName={pendingDelete?.name ?? ''}
+        taskCount={pendingDelete?.taskCount ?? 0}
+        isOpen={pendingDelete !== null}
+        deleting={deleting}
+        error={deleteError}
+        onConfirm={handleDelete}
+        onCancel={() => {
+          setPendingDelete(null);
+          setDeleteError(null);
+        }}
+      />
 
       {projectId && (
         <CreateBoardModal

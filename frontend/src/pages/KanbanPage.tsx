@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, UserPlus, FolderOpen, Layers, UserRound, UserX } from 'lucide-react';
+import { ArrowLeft, UserPlus, FolderOpen, Layers, UserRound, UserX, Trash2 } from 'lucide-react';
 import { KanbanBoard, InviteMemberModal } from '../features/kanban';
+import { DeleteBoardModal } from '../features/kanban/components/DeleteBoardModal';
 import { membersService, boardsService, apiClient } from '../api';
 import { useAuth } from '../auth';
 import type { ProjectMember, KanbanBoardDetail } from '../types/api';
@@ -17,6 +18,9 @@ export function KanbanPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Get current user's membership info (match by email from Auth0)
   const currentUserMember = members.find((m) => m.user?.email === user?.email);
@@ -120,12 +124,28 @@ export function KanbanPage() {
           <ArrowLeft size={16} />
           All Boards
         </Link>
-        {canInvite && (
-          <button className="button secondary" onClick={() => setShowInviteModal(true)}>
-            <UserPlus size={16} />
-            Invite Member
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+          {canInvite && (
+            <button className="button secondary" onClick={() => setShowInviteModal(true)}>
+              <UserPlus size={16} />
+              Invite Member
+            </button>
+          )}
+          {/* The default board is where deleted boards send their tasks, so it
+              has nowhere to hand its own on to and cannot be deleted. */}
+          {isAdmin && !board.isDefault && (
+            <button
+              className="button ghost"
+              onClick={() => {
+                setDeleteError(null);
+                setConfirmingDelete(true);
+              }}
+            >
+              <Trash2 size={16} />
+              Delete Board
+            </button>
+          )}
+        </div>
       </div>
 
       <div
@@ -167,6 +187,32 @@ export function KanbanPage() {
           ))}
         </div>
       </div>
+
+      <DeleteBoardModal
+        boardName={board.name}
+        taskCount={board.taskCount ?? 0}
+        isOpen={confirmingDelete}
+        deleting={deleting}
+        error={deleteError}
+        onCancel={() => {
+          setConfirmingDelete(false);
+          setDeleteError(null);
+        }}
+        onConfirm={async () => {
+          if (!projectId || !boardId) return;
+          setDeleting(true);
+          setDeleteError(null);
+          try {
+            await boardsService.remove(projectId, boardId);
+            // The board this page is showing no longer exists, so go back to
+            // the index rather than leaving a dead route behind.
+            navigate(`/projects/${projectId}/boards`, { replace: true });
+          } catch (err) {
+            setDeleteError(err instanceof Error ? err.message : 'Could not delete this board');
+            setDeleting(false);
+          }
+        }}
+      />
 
       <KanbanBoard
         projectId={projectId}

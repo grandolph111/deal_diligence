@@ -195,6 +195,8 @@ export interface KanbanBoardDetail extends Timestamps {
   documentIds: string[] | null;
   /** @deprecated dormant — folder scoping is retired from the UI. */
   folders: Array<{ id: string; name: string; parentId?: string | null }>;
+  /** Tasks currently on this board. Deleting it moves them to the default board. */
+  taskCount: number;
 }
 
 /** A member who can be named as a board's SME, with the scope they would bring. */

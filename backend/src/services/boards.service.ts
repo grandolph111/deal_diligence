@@ -347,6 +347,9 @@ export const boardsService = {
         },
         riskCategories: { select: { riskCategoryId: true } },
         sme: { select: { id: true, name: true, email: true } },
+        // Deleting a board re-homes its tasks rather than destroying them, so
+        // the confirm dialog needs to say how many are moving.
+        _count: { select: { tasks: true } },
       },
     });
     if (!board) throw ApiError.notFound('Board not found');
@@ -396,6 +399,7 @@ export const boardsService = {
       folders: board.folders.map((bf) => bf.folder),
       riskCategories: riskCategoryIds.map(describeRiskCategory),
       documentIds,
+      taskCount: board._count.tasks,
     };
   },
 
